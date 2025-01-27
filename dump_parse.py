@@ -19,13 +19,13 @@ def parse_compiled_config(file_path):
     generic_rule_pattern = re.compile(r'\s*(?P<name>\w+)\s+(?P<args>.*)')
     virtual_host_pattern = re.compile(r'<VirtualHost\s+(.*?)>')
     virtual_host_end_pattern = re.compile(r'</VirtualHost>')
-    location_pattern = re.compile(r'[ \t]*<Location\s+(.*?)>')
+    location_pattern = re.compile(r'[ \t]*<Location\s+(.*?)>') #gérer locationMatch & directory
     location_end_pattern = re.compile(r'[ \t]*</Location>')
     if_pattern = re.compile(r'[ \t]*<If\s+(.*?)>')
     if_pattern_end = re.compile(r'[ \t]*</If>')
     file_flag = re.compile(r'# In file:\s+(.*)')
-    context_regex = re.compile(r'(?:macro \'(.*?)\' \(defined on line (\d+) of "(.*?)\) used on line (\d+) of "(?P<recursion>.*)")|(?:"?(?P<file_path>\/.*)"?)')
-    instruction_number_pattern = re.compile(r'#\s+(\d+):')
+    context_regex = re.compile(r'(?:macro \'(.*?)\' \(defined on line (\d+) of "(.*?)"\) used on line (\d+) of "(?P<recursion>.*)")|(?:"?(?P<file_path>\/.*)"?)')
+    instruction_number_pattern = re.compile(r'\s*#\s+(\d+):')
 
     with open(file_path, 'r') as file:
         lines = file.readlines()
@@ -140,10 +140,12 @@ directives = parse_compiled_config(file_path)
 print(f"Parsing complete. {len(directives)} directives found.")
 db = Neo4jDB(dbUrl, dbUser, dbPass)
 step = len(directives) // 100
+step = 1 if step == 0 else step
 db.query("MATCH (n) DETACH DELETE n")
 
 for i, directive in enumerate(directives):
     consts = recover_used_constants(directive)
+    directive.add_constant(consts)
     db.add(directive)
     if (i+1) % step == 0:
         print(f"\rProgression: {math.ceil(100*(i+1)/len(directives))}% done.", end="")
@@ -151,7 +153,8 @@ for i, directive in enumerate(directives):
 print()
 db.close()
 end_time = time.time()
-print(f"Time taken: {end_time-starting_time}s")
+time_taken = end_time-starting_time
+print(f"Time taken: {f"{time_taken//60:.0f}m" if time_taken >= 60 else ""}{f"{time_taken%60:.0f}s"}")
 
 
 

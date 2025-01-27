@@ -12,15 +12,28 @@ class Directive:
         self.type = type
         self.conditions = conditions
         self.args = args
+        self.constants = []
         self.id = None
         self.tags = None
         self.phase = None
+        self.msg = None
         self.processs_args(args)
+
+    def add_constant(self, constant):
+        if isinstance(constant, list):
+            self.constants.extend(constant)
+        elif isinstance(constant, set):
+            self.constants.extend(list(constant))
+        elif isinstance(constant, str):
+            self.constants.append(constant)
+        else:
+            raise Exception(f"Invalid constant type {type(constant)} (must be list, set or str)")
 
     def processs_args(self, args):
         id_pattern = re.compile(r'id\s*:\s*(?P<id>\d+)')
         tags_pattern = re.compile(r'tag\s*:\s*(?P<tag>.*?)[,$]')
         phase_pattern = re.compile(r'phase\s*:\s*(?P<phase>\d+)')
+        msg_pattern = re.compile(r'msg\s*:\s*(?P<msg>.*?)[,$]')
         match_id = id_pattern.search(args)
         if match_id:
             self.id = int(match_id.group('id'))
@@ -31,6 +44,9 @@ class Directive:
         match_phase = phase_pattern.search(args)
         if match_phase:
             self.phase = int(match_phase.group('phase'))
+        match_msg = msg_pattern.search(args)
+        if match_msg:
+            self.msg = match_msg.group('msg')
 
     def properties(self):
         return {
@@ -39,9 +55,12 @@ class Directive:
             'VirtualHost': self.VirtualHost,
             'IfLevel': self.IfLevel,
             'Context': self.Context,
+            'PrettyContext': self.Context.pretty(),
             'ordering_num': self.ordering_num,
             'conditions': self.conditions,
             'args': self.args,
+            'msg': self.msg,
+            'constants': self.constants,
             'id': self.id,
             'tags': self.tags,
             'phase': self.phase
@@ -49,7 +68,7 @@ class Directive:
 
     def __repr__(self):
         return f"Directive(Type={self.type}, Location={self.Location}, VirtualHost={self.VirtualHost}, IfLevel={self.IfLevel}, " \
-               f"Context={self.Context}, OrderingNum={self.ordering_num}, Conditions={self.conditions}, Args={self.args})"
+               f"Context={self.Context}, OrderingNum={self.ordering_num}, Conditions={self.conditions}, Args={self.args}), Constants={self.constants}, id={self.id}, tags={self.tags}, phase={self.phase}"
 
     def __eq__(self, other):
         return (self.IfLevel, self.VirtualHost, self.Location, self.ordering_num) == (other.IfLevel, other.VirtualHost, other.Location,other.ordering_num)

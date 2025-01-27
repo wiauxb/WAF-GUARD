@@ -14,6 +14,9 @@ class Context:
     def clone(self):
         return deepcopy(self)
 
+    def pretty(self):
+        return self.__str__()
+
 
 class FileContext(Context):
     def __init__(self, line_num : int, file_path : str):
@@ -32,3 +35,6 @@ class MacroContext(Context):
 
     def __str__(self):
         return f"[{self.macro_name}]({self.definition}) used in {self.use}"
+    
+    def pretty(self):
+        return f"\"{self.macro_name}\" : {self.definition.pretty()}\n{self.use.pretty()}"

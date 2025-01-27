@@ -72,6 +72,9 @@ class Neo4jDB:
         if properties.get("conditions") is not None:
             for i, _ in enumerate(properties['conditions']):
                 query += f" MERGE (n)-[:Has]->(c{i})"
+        if directive.constants:
+            for i, constant in enumerate(directive.constants):
+                query += f" MERGE (const_{i}:Constant {{name: '{constant}'}}) MERGE (n)-[:Uses]->(const_{i})"
 
         self.query(query)
 
@@ -84,6 +87,9 @@ class Neo4jDB:
             query = f"CREATE (n:{label} {{{self.format_properties(properties)}}})"
         else:
             query = f"MERGE (c:Constant {{{self.format_properties(dict(name=match_definestr.group('name'), value=match_definestr.group('value')))}}}) CREATE (n:{label} {{{self.format_properties(properties)}}}) CREATE (n)-[:Define]->(c)"
+        if directive.constants:
+            for i, constant in enumerate(directive.constants):
+                query += f" MERGE (c{i}:Constant {{name: '{constant}'}}) MERGE (n)-[:Uses]->(c{i})"
         self.query(query)
 
     def add_secruleremovebyid(self, directive:Directive, step=500, max_interval=50_000):
@@ -119,6 +125,9 @@ class Neo4jDB:
         query += f" CREATE (n:{label} {{{self.format_properties(properties)}}})"
         for l, _ in enumerate(ids):
             query += f" CREATE (n)-[:DoesRemove]->(i{l})"
+        if directive.constants:
+            for i, constant in enumerate(directive.constants):
+                query += f" MERGE (c{i}:Constant {{name: '{constant}'}}) MERGE (n)-[:Uses]->(c{i})"
         self.query(query)
         query = ""
         for i, (begin, end) in enumerate(ranges):
@@ -144,6 +153,9 @@ class Neo4jDB:
         for l, _ in enumerate(tags):
             query += f" AND t.value =~ r{l}.value"
             query += f" MERGE (r{l})-[:Match]->(t) MERGE (n)-[:DoesRemove]->(r{l})"
+        if directive.constants:
+            for i, constant in enumerate(directive.constants):
+                query += f" MERGE (c{i}:Constant {{name: '{constant}'}}) MERGE (n)-[:Uses]->(c{i})"
         self.query(query)
 
     def add(self, directive:Directive):
