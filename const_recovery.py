@@ -88,14 +88,7 @@ def recover_used_constants(directive: Directive):
         # heuristic to counter the calling of macros trough other macros
         if target_line == "":
             target_line = find_line(def_path, def_line, "@macro")
-        vars_to_tint =  re.findall(r"[\$\@]\w+", target_line)
-        for var in vars_to_tint:
-            # This skip the @operators from modsecurity rules
-            if var in macro_def[ctx_ptr.macro_name]:
-                macro_tint[ctx_ptr.macro_name] = macro_tint.get(ctx_ptr.macro_name, []) + [macro_def[ctx_ptr.macro_name].index(var)]
-            # else:
-            #     print(f"Variable {var} not found in {ctx_ptr.macro_name} definition from {def_path}:{def_line}", file=sys.stderr)
-        # print(target_line)
+
         args_from_target = []
         seen_target = False
         for match in re.finditer(rule_elem_pattern, target_line):
@@ -105,12 +98,24 @@ def recover_used_constants(directive: Directive):
                         args_from_target.append(group)
                     if group.lower() == target.lower():
                         seen_target = True
+
         for i, arg in enumerate(args_from_target):
-            if i in macro_tint.get(target, []):
+            if i in macro_tint.get(target, [i]):
+                # Tint the constants for the context macro
+                vars_to_tint =  re.findall(r"[\$\@]\w+", arg)
+                for var in vars_to_tint:
+                    # This skip the @operators from modsecurity rules
+                    if var in macro_def[ctx_ptr.macro_name]:
+                        macro_tint[ctx_ptr.macro_name] = macro_tint.get(ctx_ptr.macro_name, []) + [macro_def[ctx_ptr.macro_name].index(var)]
+                    # else:
+                    #     print(f"Variable {var} not found in {ctx_ptr.macro_name} definition from {def_path}:{def_line}", file=sys.stderr)
+                
+                # Extract constants from the arguments
                 constants_from_line = re.findall(r"[\~\$]\{(?P<name>.*?)\}", arg)
                 envvar_from_line = re.findall(r"\%\{(?P<name>.*?)\}", arg)
                 constants.update(constants_from_line)
                 constants.update(envvar_from_line)
+
         target = ctx_ptr.macro_name
         ctx_ptr = ctx_ptr.use
     if isinstance(ctx_ptr, FileContext):
@@ -130,7 +135,8 @@ def recover_used_constants(directive: Directive):
                 envvar_from_line = re.findall(r"\%\{(?P<name>.*?)\}", arg)
                 constants.update(constants_from_line)
                 constants.update(envvar_from_line)
-    return constants
     # print(macro_def)
     # print(macro_tint)
+    # print(constants)
+    return constants
     # print("="*20)
