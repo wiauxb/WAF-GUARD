@@ -34,7 +34,7 @@ class MacroContext(Context):
         self.use = used_in
 
     def __str__(self):
-        return f"[{self.macro_name}]({self.definition}) used in {self.use}"
+        return f"{f"line {self.line_num} of " if self.line_num else ""}[{self.macro_name}]({self.definition}) used on line {self.use.line_num} of {self.use}"
     
     def pretty(self):
         return f"\"{self.macro_name}\" : {self.definition.pretty()}\n{self.use.pretty()}"

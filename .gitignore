@@ -3,3 +3,4 @@
 venv/*
 **pycache**
 conf*
+db_dump/*

@@ -4,7 +4,7 @@ import re
 from const_recovery import recover_used_constants
 from context import *
 from db_interface import Neo4jDB
-from prototype import Directive
+from prototype import Directive, DirectiveFactory
 from dotenv import load_dotenv
 import os
 
@@ -103,21 +103,21 @@ def parse_compiled_config(file_path):
 
         # Extract instruction number
         match_instruction_number = instruction_number_pattern.match(line)
-        if match_instruction_number and isinstance(current_context, FileContext):
+        if match_instruction_number:
             line_num = int(match_instruction_number.group(1))    
             current_context.line_num = line_num
 
         match_modsecrule = modsecrule_pattern.match(line)
         if match_modsecrule:
             current_ordering_number = current_ordering_number+1
-            new_directive = Directive(current_location, current_virtualhost, current_if_level, current_context, current_ordering_number,"SecRule", current_if_conditions)
+            new_directive = DirectiveFactory.create(current_location, current_virtualhost, current_if_level, current_context, current_ordering_number,"SecRule", current_if_conditions, match_modsecrule.group(1))
             # print(new_directive)
             directives.append(new_directive)
         else:
             match_generic_rule = generic_rule_pattern.match(line)
             if match_generic_rule:
                 current_ordering_number = current_ordering_number+1
-                new_directive = Directive(current_location, current_virtualhost, current_if_level, current_context, current_ordering_number, match_generic_rule.group('name'), current_if_conditions, match_generic_rule.group('args'))
+                new_directive = DirectiveFactory.create(current_location, current_virtualhost, current_if_level, current_context, current_ordering_number, match_generic_rule.group('name'), current_if_conditions, match_generic_rule.group('args'))
                 directives.append(new_directive)
         # match_server_name = server_name_pattern.match(line)
         # if match_server_name:
@@ -131,6 +131,11 @@ def parse_compiled_config(file_path):
     # print(directives)
     return directives
 
+def estimate_time_left(progress, starting_time, current_time):
+    time_taken = current_time - starting_time
+    time_left = (time_taken / progress) - time_taken
+    return f"{time_left//60:02.0f}m{time_left%60:02.0f}s"
+
 starting_time = time.time()
 file_path = "dump.txt"
 dbUrl = os.getenv("NEO4J_URL")
@@ -143,18 +148,21 @@ step = len(directives) // 100
 step = 1 if step == 0 else step
 db.query("MATCH (n) DETACH DELETE n")
 
+loop_starting_time = time.time()
 for i, directive in enumerate(directives):
     consts = recover_used_constants(directive)
     directive.add_constant(consts)
     db.add(directive)
     if (i+1) % step == 0:
-        print(f"\rProgression: {math.ceil(100*(i+1)/len(directives))}% done.", end="")
+        current_time = time.time()
+        elapsed = current_time - loop_starting_time
+        print(f"\rProgression: {math.ceil(100*(i+1)/len(directives))}% done. Time elapsed: {f"{elapsed//60:.0f}m" if elapsed >= 60 else ""}{elapsed%60:02.0f}s Time left: {estimate_time_left((i+1)/len(directives), loop_starting_time, current_time)}", end="")
 
 print()
 db.close()
 end_time = time.time()
-time_taken = end_time-starting_time
-print(f"Time taken: {f"{time_taken//60:.0f}m" if time_taken >= 60 else ""}{f"{time_taken%60:.0f}s"}")
+time_taken = end_time-starting_time 
+print(f"Total time taken: {f"{time_taken//60:.0f}m" if time_taken >= 60 else ""}{f"{time_taken%60:.0f}s" if time_taken%60 > 3 else f"{time_taken}s"}")
 
 
 
