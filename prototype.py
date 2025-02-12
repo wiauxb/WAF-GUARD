@@ -50,7 +50,7 @@ class Directive:
 
     def processs_args(self, args):
         id_pattern = re.compile(r'id\s*:\s*(?P<id>\d+)')
-        tags_pattern = re.compile(r'tag\s*:\s*(?P<tag>.*?)[,$]')
+        tags_pattern = re.compile(r'tag\s*:\s*(?P<tag>.*?)(?:,|$)')
         phase_pattern = re.compile(r'phase\s*:\s*(?P<phase>\d+)')
         msg_pattern = re.compile(r'msg\s*:\s*(?P<msg>.*?)[,$]')
         match_id = id_pattern.search(args)
