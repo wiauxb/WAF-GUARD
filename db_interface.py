@@ -67,6 +67,7 @@ class Neo4jDB:
             self.flush_batch(self.removebytag_batch, "removebytag")
         if self.generic_batch:
             print(f"Flushing {len(self.generic_batch)} generic directives to database")
+            self.flush_batch(self.generic_batch, "generic")
 
     def flush_batch(self, batch, type:str):
         """Executes a batch insert using UNWIND"""
