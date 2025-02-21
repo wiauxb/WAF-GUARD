@@ -4,7 +4,7 @@ import time
 from neo4j import GraphDatabase
 
 from context import Context
-from prototype import DefineStr, Directive, SecRuleRemoveById, SecRuleRemoveByTag
+from directives import DefineStr, Directive, SecRule, SecRuleRemoveById, SecRuleRemoveByTag
 from query_factory import QueryFactory
 
 BATCH_SIZE_GENERIC = 5000
@@ -22,6 +22,7 @@ class Neo4jDB:
         self.definestr_batch = []
         self.removebyid_batch = []
         self.removebytag_batch = []
+        self.secrule_batch = []
 
     def close(self):
         self.flush_all_batch()
@@ -35,6 +36,8 @@ class Neo4jDB:
         """Collects directives instead of executing immediately"""
         if isinstance(directive, DefineStr):
             self.definestr_batch.append(directive)
+        if isinstance(directive, SecRule):
+            self.secrule_batch.append(directive)
         elif isinstance(directive, SecRuleRemoveById):
             self.removebyid_batch.append(directive)
         elif isinstance(directive, SecRuleRemoveByTag):
@@ -51,6 +54,9 @@ class Neo4jDB:
         if len(self.removebytag_batch) >= BATCH_SIZE_GENERIC:
             self.flush_batch(self.definestr_batch, "definestr")
             self.flush_batch(self.removebytag_batch, "removebytag")
+        if len(self.secrule_batch) >= BATCH_SIZE_GENERIC:
+            self.flush_batch(self.definestr_batch, "definestr")
+            self.flush_batch(self.secrule_batch, "secrule")
         if len(self.generic_batch) >= BATCH_SIZE_GENERIC:
             self.flush_batch(self.definestr_batch, "definestr")
             self.flush_batch(self.generic_batch, "generic")
@@ -65,6 +71,9 @@ class Neo4jDB:
         if self.removebytag_batch:
             print(f"Flushing {len(self.removebytag_batch)} SecRuleRemoveByTag directives to database")
             self.flush_batch(self.removebytag_batch, "removebytag")
+        if self.secrule_batch:
+            print(f"Flushing {len(self.secrule_batch)} SecRule directives to database")
+            self.flush_batch(self.secrule_batch, "secrule")
         if self.generic_batch:
             print(f"Flushing {len(self.generic_batch)} generic directives to database")
             self.flush_batch(self.generic_batch, "generic")
@@ -81,6 +90,8 @@ class Neo4jDB:
         
         if type == "definestr":
             query += QueryFactory.definestr_module()
+        elif type == "secrule":
+            query += QueryFactory.secrule_module()
         elif type == "removebyid":
             query += QueryFactory.removebyid_module()
         elif type == "removebytag":

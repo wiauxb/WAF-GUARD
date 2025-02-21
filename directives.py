@@ -1,6 +1,9 @@
 import re
 import sys
 
+from context import Context
+import rule_parsing
+
 class DirectiveFactory:
 
     @classmethod
@@ -11,6 +14,8 @@ class DirectiveFactory:
             return SecRuleRemoveById(location, virtual_host, if_level, context, ordering_num, type, conditions, args)
         elif type.lower() in ["definestr", "setenv"]:
             return DefineStr(location, virtual_host, if_level, context, ordering_num, type, conditions, args)
+        elif type.lower() in ["secrule"]:
+            return SecRule(location, virtual_host, if_level, context, ordering_num, type, conditions, args)
         else:
             return Directive(location, virtual_host, if_level, context, ordering_num, type, conditions, args)
 
@@ -26,6 +31,7 @@ class Directive:
         self.conditions = conditions
         self.args = args
         self.constants = []
+        self.variables = []
         self.tags_to_remove = []
         self.ids_to_remove = []
         self.ranges_to_remove = []
@@ -48,6 +54,17 @@ class Directive:
         else:
             raise Exception(f"Invalid constant type {type(constant)} (must be list, set or str)")
 
+    def add_variable(self, variable):
+        if isinstance(variable, list):
+            self.variables.extend(variable)
+        elif isinstance(variable, set):
+            self.variables.extend(list(variable))
+        elif isinstance(variable, str):
+            self.variables.append(variable)
+        else:
+            raise Exception(f"Invalid constant type {type(variable)} (must be list, set or str)")
+
+
     def processs_args(self, args):
         id_pattern = re.compile(r'id\s*:\s*(?P<id>\d+)')
         tags_pattern = re.compile(r'tag\s*:\s*(?P<tag>.*?)(?:,|$)')
@@ -69,28 +86,18 @@ class Directive:
             self.msg = msg if msg else None
 
     def properties(self):
-        return {
-            'type': self.type,
-            'Location': self.Location,
-            'VirtualHost': self.VirtualHost,
-            'IfLevel': self.IfLevel,
-            'Context': str(self.Context),
-            'PrettyContext': self.Context.pretty(),
-            'ordering_num': self.ordering_num,
-            'conditions': self.conditions,
-            'args': self.args,
-            'msg': self.msg,
-            'constants': self.constants,
-            'id': self.id,
-            'tags': list(self.tags),
-            'phase': self.phase,
-            'tags_to_remove': self.tags_to_remove,
-            'ids_to_remove': self.ids_to_remove,
-            'ranges_to_remove': self.ranges_to_remove,
-            'num_of_ranges': self.num_of_ranges,
-            'cst_name': self.cst_name,
-            'cst_value': self.cst_value
-        }
+        rep = {}
+        for key, value in self.__dict__.items():
+            if key.startswith('_'):
+                continue
+            if isinstance(value, set):
+                rep[key] = list(value)
+            elif isinstance(value, Context):
+                rep[key] = str(value)
+            else:    
+                rep[key] = value
+        return rep
+
 
     def __repr__(self):
         return f"Directive(Type={self.type}, Location={self.Location}, VirtualHost={self.VirtualHost}, IfLevel={self.IfLevel}, " \
@@ -172,3 +179,20 @@ class DefineStr(Directive):
             'cst_name': self.cst_name,
             'cst_value': self.cst_value
         }
+
+class SecRule(Directive):
+
+    def __init__(self, location, virtual_host, if_level, context, ordering_num, type, conditions, args=''):
+        super().__init__(location, virtual_host, if_level, context, ordering_num, type, conditions, args)
+        parsed = rule_parsing.parse_arguments(self.args)
+        if len(parsed) != 2 and len(parsed) != 3:
+            raise Exception(f"Invalid SecRule directive: {self.args}")
+
+        # var_pattern = re.compile(r"\|?[!&]{0,2}([^:\s|]+)(?::((?:(?:[\"'])?\/.*\/(?:[\"'])?)|(?:[^|]*)))?")
+        var_pattern = re.compile(r"\|?[!&]{0,2}([^:\s|]+)(?::((?:\'.*?\')|(?:\".*?\")|(?:\/.+?\/)|(?:[^|]*)))?")
+        self.secrule_vars = re.findall(var_pattern, rule_parsing.strip_quotes(parsed[0]))
+        self.secrule_vars = [var[0].upper() for var in self.secrule_vars]
+
+        self.secrule_op = parsed[1]
+        if len(parsed) == 3:
+            self.secrule_actions = parsed[2].split()

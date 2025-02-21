@@ -4,9 +4,11 @@ import re
 from const_recovery import recover_used_constants
 from context import *
 from db_interface import Neo4jDB
-from prototype import Directive, DirectiveFactory
+from directives import Directive, DirectiveFactory
 from dotenv import load_dotenv
 import os
+
+import modsec
 
 load_dotenv()
 
@@ -150,8 +152,17 @@ db.query("MATCH (n) DETACH DELETE n")
 
 loop_starting_time = time.time()
 for i, directive in enumerate(directives):
-    consts = recover_used_constants(directive)
+    names = recover_used_constants(directive)
+    consts = []
+    variables = []
+    for const in names:
+        parsed = const.split(".")
+        if parsed[0].upper() in modsec.VARIABLES:
+            variables.append(parsed[0].upper())
+        else:
+            consts.append(const)
     directive.add_constant(consts)
+    directive.add_variable(variables)
     db.add(directive)
     if (i+1) % step == 0:
         current_time = time.time()

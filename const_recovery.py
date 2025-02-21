@@ -2,7 +2,7 @@
 
 import sys
 from context import FileContext, MacroContext
-from prototype import Directive
+from directives import Directive
 import re
 
 CONF_PATH = "conf/"

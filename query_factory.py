@@ -29,6 +29,11 @@ class QueryFactory:
             MERGE (co:Constant {name: constant})
             MERGE (node)-[:Uses]->(co)
         )
+
+        FOREACH (variable IN properties.variables |
+            MERGE (v:Variable {name: variable})
+            MERGE (node)-[:Uses]->(v)
+        )
         """
 
     @classmethod
@@ -87,5 +92,29 @@ class QueryFactory:
         FOREACH (tag IN properties.tags |
             MERGE (t:Tag {value: tag})
             MERGE (node)-[:Has]->(t)
+        )
+        """
+
+    @classmethod
+    def secrule_module(cls):
+        return """
+        FOREACH (_ IN CASE WHEN properties.phase IS NOT NULL THEN [1] ELSE [] END |
+            MERGE (p:Phase {value: properties.phase})
+            MERGE (node)-[:InPhase]->(p)
+        )
+
+        FOREACH (_ IN CASE WHEN properties.id IS NOT NULL THEN [1] ELSE [] END |
+            MERGE (i:Id {value: properties.id})
+            MERGE (node)-[:Has]->(i)
+        )
+
+        FOREACH (tag IN properties.tags |
+            MERGE (t:Tag {value: tag})
+            MERGE (node)-[:Has]->(t)
+        )
+
+        FOREACH (var IN properties.secrule_vars |
+            MERGE (v:Variable {name: var})
+            MERGE (node)-[:Uses]->(v)
         )
         """
