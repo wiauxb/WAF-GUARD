@@ -29,19 +29,10 @@ class Directive:
         self.ordering_num = ordering_num
         self.type = type.lower()
         self.conditions = conditions
-        self.args = args
+        self.phase = None
         self.constants = []
         self.variables = []
-        self.tags_to_remove = []
-        self.ids_to_remove = []
-        self.ranges_to_remove = []
-        self.num_of_ranges = 0
-        self.cst_name = None
-        self.cst_value = None
-        self.id = None
-        self.tags = None
-        self.phase = None
-        self.msg = None
+        self.args = args
         self.processs_args(args)
 
     def add_constant(self, constant):
@@ -74,9 +65,7 @@ class Directive:
         if match_id:
             self.id = int(match_id.group('id'))
         self.tags = set([re.sub(r'(^[\"\'])|([\"\']$)', "", match_tag.group("tag")) for match_tag in tags_pattern.finditer(args)])
-        # match_tags = tags_pattern.findall(args)
-        # if match_tags:
-        #     self.tags = match_tags.group('tags')
+
         match_phase = phase_pattern.search(args)
         if match_phase:
             self.phase = int(match_phase.group('phase'))
@@ -100,16 +89,19 @@ class Directive:
 
 
     def __repr__(self):
-        return f"Directive(Type={self.type}, Location={self.Location}, VirtualHost={self.VirtualHost}, IfLevel={self.IfLevel}, " \
-               f"Context={self.Context}, OrderingNum={self.ordering_num}, Conditions={self.conditions}, Args={self.args}), Constants={self.constants}, id={self.id}, tags={self.tags}, phase={self.phase}"
+        rep = self.__class__.__name__ + "("
+        for key, value in self.properties().items():
+            rep += f"{key}={value}, "
+        return rep[:-2] + ")"
 
     def __eq__(self, other):
         return (self.IfLevel, self.VirtualHost, self.Location, self.ordering_num) == (other.IfLevel, other.VirtualHost, other.Location,other.ordering_num)
 
     def __lt__(self, other):
+        if self.phase != other.phase:
+            return self.phase < other.phase
         # Compare IfLevel first
-        #import pdb; pdb.set_trace()
-        if self.IfLevel != other.IfLevel:
+        elif self.IfLevel != other.IfLevel:
             return self.IfLevel < other.IfLevel
         # Check if one of the Location is empty and the other not
         elif self.Location != other.Location and self.Location and not other.Location:    
@@ -128,11 +120,11 @@ class SecRuleRemoveByTag(Directive):
         super().__init__(location, virtual_host, if_level, context, ordering_num, type, conditions, args)
         self.tags_to_remove = [re.sub(r"(^[\"\'])|([\"\']$)", "", tag) for tag in re.split(r"[ ,]", self.args)]
 
-    def properties(self):
-        return {
-            **super().properties(),
-            'tags_to_remove': self.tags_to_remove
-        }
+    # def properties(self):
+    #     return {
+    #         **super().properties(),
+    #         'tags_to_remove': self.tags_to_remove
+    #     }
 
 class SecRuleRemoveById(Directive):
 
@@ -157,12 +149,12 @@ class SecRuleRemoveById(Directive):
                 self.ranges_to_remove.append(int(r[1]))
                 self.num_of_ranges += 1
                 
-    def properties(self):
-        return {
-            **super().properties(),
-            'ids_to_remove': self.ids_to_remove,
-            'ranges_to_remove': self.ranges_to_remove
-        }
+    # def properties(self):
+    #     return {
+    #         **super().properties(),
+    #         'ids_to_remove': self.ids_to_remove,
+    #         'ranges_to_remove': self.ranges_to_remove
+    #     }
 
 class DefineStr(Directive):
 
@@ -173,12 +165,12 @@ class DefineStr(Directive):
             self.cst_name = match_definestr.group('name')
             self.cst_value = match_definestr.group('value')
 
-    def properties(self):
-        return {
-            **super().properties(),
-            'cst_name': self.cst_name,
-            'cst_value': self.cst_value
-        }
+    # def properties(self):
+    #     return {
+    #         **super().properties(),
+    #         'cst_name': self.cst_name,
+    #         'cst_value': self.cst_value
+    #     }
 
 class SecRule(Directive):
 
@@ -191,7 +183,10 @@ class SecRule(Directive):
         # var_pattern = re.compile(r"\|?[!&]{0,2}([^:\s|]+)(?::((?:(?:[\"'])?\/.*\/(?:[\"'])?)|(?:[^|]*)))?")
         var_pattern = re.compile(r"\|?[!&]{0,2}([^:\s|]+)(?::((?:\'.*?\')|(?:\".*?\")|(?:\/.+?\/)|(?:[^|]*)))?")
         self.secrule_vars = re.findall(var_pattern, rule_parsing.strip_quotes(parsed[0]))
-        self.secrule_vars = [var[0].upper() for var in self.secrule_vars]
+        self.num_of_vars = len(self.secrule_vars)
+        self.secrule_vars = [var for variables in self.secrule_vars for var in variables]
+        # self.secrule_vars = [var[0] if var[1] == '' else ":".join(var) for var in self.secrule_vars]
+        # print(self.secrule_vars)
 
         self.secrule_op = parsed[1]
         if len(parsed) == 3:

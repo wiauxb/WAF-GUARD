@@ -40,12 +40,12 @@ class QueryFactory:
     def definestr_module(cls):
         return """
         FOREACH (_ IN CASE WHEN properties.cst_value IS NOT NULL THEN [1] ELSE [] END |
-            MERGE (c:Constant {name: properties.cst_name, value: properties.cst_value})
-            MERGE (node)-[:Define]->(c)
+            MERGE (cst:Constant {name: properties.cst_name, value: properties.cst_value})
+            MERGE (node)-[:Define]->(cst)
         )
         FOREACH (_ IN CASE WHEN properties.cst_value IS NULL THEN [1] ELSE [] END |
-            MERGE (c:Constant {name: properties.cst_name})
-            MERGE (node)-[:Define]->(c)
+            MERGE (cst2:Constant {name: properties.cst_name})
+            MERGE (node)-[:Define]->(cst2)
         )
         """
 
@@ -113,7 +113,16 @@ class QueryFactory:
             MERGE (node)-[:Has]->(t)
         )
 
-        FOREACH (var IN properties.secrule_vars |
+        WITH node, properties
+        UNWIND range(0, properties.num_of_vars-1) as var_i
+        WITH node, properties, properties.secrule_vars[var_i*2] as var, properties.secrule_vars[(var_i*2)+1] as subvar
+        FOREACH (_ IN CASE WHEN subvar IS NOT NULL AND subvar <> "" THEN [1] ELSE [] END |
+            MERGE (v:Variable {name: var})
+            MERGE (sv:SubVariable {name: subvar})
+            MERGE (sv)-[:IsSubVariableOf]->(v)
+            MERGE (node)-[:Uses]->(sv)
+        )
+        FOREACH (_ IN CASE WHEN subvar IS NULL OR subvar = "" THEN [1] ELSE [] END |
             MERGE (v:Variable {name: var})
             MERGE (node)-[:Uses]->(v)
         )
