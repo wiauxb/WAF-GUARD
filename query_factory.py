@@ -30,9 +30,17 @@ class QueryFactory:
             MERGE (node)-[:Uses]->(co)
         )
 
-        FOREACH (variable IN properties.variables |
-            MERGE (v:Variable {name: variable})
-            MERGE (node)-[:Uses]->(v)
+        FOREACH (var_i IN range(0,properties.num_of_variables-1) |
+            FOREACH (_ IN CASE WHEN properties.secrule_vars[(var_i*2)+1] <> "" THEN [1] ELSE [] END |
+                MERGE (v:Variable {name: properties.secrule_vars[var_i*2]})
+                MERGE (sv:SubVariable {name: properties.secrule_vars[(var_i*2)+1]})
+                MERGE (sv)-[:IsSubVariableOf]->(v)
+                MERGE (node)-[:Uses]->(sv)
+            )
+            FOREACH (_ IN CASE WHEN properties.secrule_vars[(var_i*2)+1] = "" THEN [1] ELSE [] END |
+                MERGE (v:Variable {name: properties.secrule_vars[var_i*2]})
+                MERGE (node)-[:Uses]->(v)
+            )
         )
         """
 
@@ -116,13 +124,13 @@ class QueryFactory:
         WITH node, properties
         UNWIND range(0, properties.num_of_vars-1) as var_i
         WITH node, properties, properties.secrule_vars[var_i*2] as var, properties.secrule_vars[(var_i*2)+1] as subvar
-        FOREACH (_ IN CASE WHEN subvar IS NOT NULL AND subvar <> "" THEN [1] ELSE [] END |
+        FOREACH (_ IN CASE WHEN subvar <> "" THEN [1] ELSE [] END |
             MERGE (v:Variable {name: var})
             MERGE (sv:SubVariable {name: subvar})
             MERGE (sv)-[:IsSubVariableOf]->(v)
             MERGE (node)-[:Uses]->(sv)
         )
-        FOREACH (_ IN CASE WHEN subvar IS NULL OR subvar = "" THEN [1] ELSE [] END |
+        FOREACH (_ IN CASE WHEN subvar = "" THEN [1] ELSE [] END |
             MERGE (v:Variable {name: var})
             MERGE (node)-[:Uses]->(v)
         )

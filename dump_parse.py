@@ -158,7 +158,9 @@ for i, directive in enumerate(directives):
     for const in names:
         parsed = const.split(".")
         if parsed[0].upper() in modsec.VARIABLES:
-            variables.append(parsed[0].upper())
+            if len(parsed) == 1:
+                parsed.append("")
+            variables.extend(parsed)
         else:
             consts.append(const)
     directive.add_constant(consts)

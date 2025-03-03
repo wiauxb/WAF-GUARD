@@ -32,6 +32,7 @@ class Directive:
         self.phase = None
         self.constants = []
         self.variables = []
+        self.num_of_variables = 0
         self.args = args
         self.processs_args(args)
 
@@ -46,6 +47,7 @@ class Directive:
             raise Exception(f"Invalid constant type {type(constant)} (must be list, set or str)")
 
     def add_variable(self, variable):
+        self.num_of_variables += len(variable)
         if isinstance(variable, list):
             self.variables.extend(variable)
         elif isinstance(variable, set):
