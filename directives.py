@@ -7,26 +7,26 @@ import rule_parsing
 class DirectiveFactory:
 
     @classmethod
-    def create(cls, location, virtual_host, if_level, context, ordering_num, type, conditions, args):
+    def create(cls, location, virtual_host, if_level, context, node_id, type, conditions, args):
         if type.lower() == 'secruleremovebytag':
-            return SecRuleRemoveByTag(location, virtual_host, if_level, context, ordering_num, type, conditions, args)
+            return SecRuleRemoveByTag(location, virtual_host, if_level, context, node_id, type, conditions, args)
         elif type.lower() == 'secruleremovebyid':
-            return SecRuleRemoveById(location, virtual_host, if_level, context, ordering_num, type, conditions, args)
+            return SecRuleRemoveById(location, virtual_host, if_level, context, node_id, type, conditions, args)
         elif type.lower() in ["definestr", "setenv"]:
-            return DefineStr(location, virtual_host, if_level, context, ordering_num, type, conditions, args)
+            return DefineStr(location, virtual_host, if_level, context, node_id, type, conditions, args)
         elif type.lower() in ["secrule"]:
-            return SecRule(location, virtual_host, if_level, context, ordering_num, type, conditions, args)
+            return SecRule(location, virtual_host, if_level, context, node_id, type, conditions, args)
         else:
-            return Directive(location, virtual_host, if_level, context, ordering_num, type, conditions, args)
+            return Directive(location, virtual_host, if_level, context, node_id, type, conditions, args)
 
 class Directive:
 
-    def __init__(self, location, virtual_host, if_level, context, ordering_num, type, conditions, args = ''):
+    def __init__(self, location, virtual_host, if_level, context, node_id, type, conditions, args = ''):
         self.Location = location
         self.VirtualHost = virtual_host
         self.IfLevel = if_level
         self.Context = context.clone()
-        self.ordering_num = ordering_num
+        self.node_id = node_id
         self.type = type.lower()
         self.conditions = conditions
         self.phase = None
@@ -97,7 +97,7 @@ class Directive:
         return rep[:-2] + ")"
 
     def __eq__(self, other):
-        return (self.IfLevel, self.VirtualHost, self.Location, self.ordering_num) == (other.IfLevel, other.VirtualHost, other.Location,other.ordering_num)
+        return (self.IfLevel, self.VirtualHost, self.Location, self.node_id) == (other.IfLevel, other.VirtualHost, other.Location,other.node_id)
 
     def __lt__(self, other):
         if self.phase != other.phase:
@@ -115,11 +115,11 @@ class Directive:
         elif self.VirtualHost != other.VirtualHost and not self.VirtualHost and other.VirtualHost:
             return True
         else:
-            return self.ordering_num < other.ordering_num
+            return self.node_id < other.node_id
 
 class SecRuleRemoveByTag(Directive):
-    def __init__(self, location, virtual_host, if_level, context, ordering_num, type, conditions, args):
-        super().__init__(location, virtual_host, if_level, context, ordering_num, type, conditions, args)
+    def __init__(self, location, virtual_host, if_level, context, node_id, type, conditions, args):
+        super().__init__(location, virtual_host, if_level, context, node_id, type, conditions, args)
         self.tags_to_remove = [re.sub(r"(^[\"\'])|([\"\']$)", "", tag) for tag in re.split(r"[ ,]", self.args)]
 
     # def properties(self):
@@ -130,8 +130,8 @@ class SecRuleRemoveByTag(Directive):
 
 class SecRuleRemoveById(Directive):
 
-    def __init__(self, location, virtual_host, if_level, context, ordering_num, type, conditions, args):
-        super().__init__(location, virtual_host, if_level, context, ordering_num, type, conditions, args)
+    def __init__(self, location, virtual_host, if_level, context, node_id, type, conditions, args):
+        super().__init__(location, virtual_host, if_level, context, node_id, type, conditions, args)
         ids_strings = re.split(r"[ ,]", self.args)
         self.ids_to_remove= []
         self.ranges_to_remove = []
@@ -160,8 +160,8 @@ class SecRuleRemoveById(Directive):
 
 class DefineStr(Directive):
 
-    def __init__(self, location, virtual_host, if_level, context, ordering_num, type, conditions, args):
-        super().__init__(location, virtual_host, if_level, context, ordering_num, type, conditions, args)
+    def __init__(self, location, virtual_host, if_level, context, node_id, type, conditions, args):
+        super().__init__(location, virtual_host, if_level, context, node_id, type, conditions, args)
         match_definestr = re.match(r"^\s*(?P<name>.+?)(?:\s+(?P<value>.*))?$", self.args)
         if match_definestr:
             self.cst_name = match_definestr.group('name')
@@ -176,8 +176,8 @@ class DefineStr(Directive):
 
 class SecRule(Directive):
 
-    def __init__(self, location, virtual_host, if_level, context, ordering_num, type, conditions, args=''):
-        super().__init__(location, virtual_host, if_level, context, ordering_num, type, conditions, args)
+    def __init__(self, location, virtual_host, if_level, context, node_id, type, conditions, args=''):
+        super().__init__(location, virtual_host, if_level, context, node_id, type, conditions, args)
         parsed = rule_parsing.parse_arguments(self.args)
         if len(parsed) != 2 and len(parsed) != 3:
             raise Exception(f"Invalid SecRule directive: {self.args}")

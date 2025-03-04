@@ -3,12 +3,13 @@ import time
 import re
 from const_recovery import recover_used_constants
 from context import *
-from db_interface import Neo4jDB
+from neo4j_interface import Neo4jDB
 from directives import Directive, DirectiveFactory
 from dotenv import load_dotenv
 import os
 
 import modsec
+from sql_interface import PostgresDB
 
 load_dotenv()
 
@@ -35,11 +36,11 @@ def parse_compiled_config(file_path):
     current_virtualhost = ""
     current_location = ""
     current_if_level = 0
-    current_ordering_number = 0
+    current_node_id = 0
     current_context = None
     current_if_conditions = []
 
-    for line in lines:
+    for dump_line_num, line in enumerate(lines):
 
         # Extract VirtualHost
         match_virtual_host = virtual_host_pattern.match(line)
@@ -111,15 +112,15 @@ def parse_compiled_config(file_path):
 
         match_modsecrule = modsecrule_pattern.match(line)
         if match_modsecrule:
-            current_ordering_number = current_ordering_number+1
-            new_directive = DirectiveFactory.create(current_location, current_virtualhost, current_if_level, current_context, current_ordering_number,"SecRule", current_if_conditions, match_modsecrule.group(1))
+            current_node_id = current_node_id+1
+            new_directive = DirectiveFactory.create(current_location, current_virtualhost, current_if_level, current_context, current_node_id,"SecRule", current_if_conditions, match_modsecrule.group(1))
             # print(new_directive)
             directives.append(new_directive)
         else:
             match_generic_rule = generic_rule_pattern.match(line)
             if match_generic_rule:
-                current_ordering_number = current_ordering_number+1
-                new_directive = DirectiveFactory.create(current_location, current_virtualhost, current_if_level, current_context, current_ordering_number, match_generic_rule.group('name'), current_if_conditions, match_generic_rule.group('args'))
+                current_node_id = current_node_id+1
+                new_directive = DirectiveFactory.create(current_location, current_virtualhost, current_if_level, current_context, current_node_id, match_generic_rule.group('name'), current_if_conditions, match_generic_rule.group('args'))
                 directives.append(new_directive)
         # match_server_name = server_name_pattern.match(line)
         # if match_server_name:
@@ -140,16 +141,27 @@ def estimate_time_left(progress, starting_time, current_time):
 
 starting_time = time.time()
 file_path = "dump.txt"
-dbUrl = os.getenv("NEO4J_URL")
-dbUser = os.getenv("NEO4J_USER")
-dbPass = os.getenv("NEO4J_PASSWORD")
+neo4jDBUrl = os.getenv("NEO4J_URL")
+neo4jUser = os.getenv("NEO4J_USER")
+neo4jPass = os.getenv("NEO4J_PASSWORD")
+graph = Neo4jDB(neo4jDBUrl, neo4jUser, neo4jPass)
+postgresDBUrl = os.getenv("POSTGRES_URL")
+postgresUser = os.getenv("POSTGRES_USER")
+postgresPass = os.getenv("POSTGRES_PASSWORD")
+sqlDB = PostgresDB(postgresDBUrl, postgresUser, postgresPass, "cwaf")
+
 directives = parse_compiled_config(file_path)
 print(f"Parsing complete. {len(directives)} directives found.")
-db = Neo4jDB(dbUrl, dbUser, dbPass)
+
+print("Clearing databases...", end="", flush=True)
+graph.query("MATCH (n) DETACH DELETE n")
+sqlDB.execute("DROP SCHEMA public CASCADE")
+sqlDB.execute("CREATE SCHEMA public")
+sqlDB.init_tables()
+print("\rDatabases cleared.   ")
+
 step = len(directives) // 100
 step = 1 if step == 0 else step
-db.query("MATCH (n) DETACH DELETE n")
-
 loop_starting_time = time.time()
 for i, directive in enumerate(directives):
     names = recover_used_constants(directive)
@@ -165,14 +177,16 @@ for i, directive in enumerate(directives):
             consts.append(const)
     directive.add_constant(consts)
     directive.add_variable(variables)
-    db.add(directive)
+    graph.add(directive)
+    sqlDB.add(directive)
     if (i+1) % step == 0:
         current_time = time.time()
         elapsed = current_time - loop_starting_time
-        print(f"\rProgression: {math.ceil(100*(i+1)/len(directives))}% done. Time elapsed: {f"{elapsed//60:.0f}m" if elapsed >= 60 else ""}{elapsed%60:02.0f}s Time left: {estimate_time_left((i+1)/len(directives), loop_starting_time, current_time)}", end="")
+        print(f"\rProgression: {math.ceil(100*(i+1)/len(directives))}% done. Time elapsed: {f"{elapsed//60:.0f}m" if elapsed >= 60 else ""}{elapsed%60:02.0f}s Time left: {estimate_time_left((i+1)/len(directives), loop_starting_time, current_time)}", end="", flush=True)
 
 print()
-db.close()
+graph.close()
+sqlDB.close()
 end_time = time.time()
 time_taken = end_time-starting_time 
 print(f"Total time taken: {f"{time_taken//60:.0f}m" if time_taken >= 60 else ""}{f"{time_taken%60:.0f}s" if time_taken%60 > 3 else f"{time_taken}s"}")
