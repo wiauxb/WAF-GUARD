@@ -23,11 +23,17 @@ source ./venv/bin/activate
 pip install -r requirements.txt
 ```
 
-In a `.env` file, write the connection information for your Neo4j DB. It usually looks like this:
+In a `.env` file, write the connection information for your Neo4j and PostgreSQL DB. It should look like this:
 ```
 NEO4J_URL=bolt://localhost:7687
 NEO4J_USER=neo4j
 NEO4J_PASSWORD=<THEPASSWORD>
+
+POSTGRES_URL=localhost
+POSTGRES_USER=admin
+POSTGRES_PASSWORD=<THEPASSWORD>
+
+DOCKER_DATA_PATH=./docker_data
 ```
 
 ## Run

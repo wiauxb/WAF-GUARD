@@ -4,3 +4,4 @@ venv/*
 **pycache**
 conf*
 db_dump/*
+docker_data/*
