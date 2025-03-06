@@ -1,8 +1,9 @@
-
 services:
 
   neo4j:
+    container_name: neo4j
     image: neo4j:latest
+    restart: always
     volumes:
       - ${DOCKER_DATA_PATH}/neo4j/logs:/logs
       - ${DOCKER_DATA_PATH}/neo4j/config:/config
@@ -13,9 +14,9 @@ services:
     ports:
       - "7474:7474"
       - "7687:7687"
-    restart: always
 
   postgres:
+    container_name: postgres
     image: postgres:latest
     restart: always
     environment:
@@ -32,3 +33,34 @@ services:
     restart: always
     ports:
       - 8080:8080
+    depends_on:
+      - postgres
+
+  fastapi:
+    container_name: fastapi
+    build: 
+      dockerfile: fastapi_dockerfile
+      context: ./
+    volumes:
+      - .:/app
+    working_dir: /app
+    ports:
+      - "8000:8000"
+    command: "uvicorn api:app --reload --host 0.0.0.0 --port 8000"
+    depends_on:
+      - postgres
+      - neo4j
+
+  streamlit:
+    container_name: streamlit
+    build: 
+      dockerfile: streamlit_dockerfile
+      context: ./
+    volumes:
+      - .:/app
+    working_dir: /app
+    ports:
+      - "8501:8501"
+    entrypoint: "streamlit run frontend.py --server.port=8501 --server.address=0.0.0.0"
+    depends_on:
+      - fastapi

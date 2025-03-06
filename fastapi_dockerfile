@@ -1,0 +1,6 @@
+# app/Dockerfile
+
+FROM tiangolo/uvicorn-gunicorn-fastapi:python3.9
+
+RUN pip3 install neo4j python-dotenv pydantic psycopg2 dotenv pyvis requests pandas
+

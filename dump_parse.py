@@ -150,8 +150,9 @@ postgresUser = os.getenv("POSTGRES_USER")
 postgresPass = os.getenv("POSTGRES_PASSWORD")
 sqlDB = PostgresDB(postgresDBUrl, postgresUser, postgresPass, "cwaf")
 
+print(f"Parsing config ...", end="", flush=True)
 directives = parse_compiled_config(file_path)
-print(f"Parsing complete. {len(directives)} directives found.")
+print(f"\rParsing complete. {len(directives)} directives found.")
 
 print("Clearing databases...", end="", flush=True)
 graph.query("MATCH (n) DETACH DELETE n")

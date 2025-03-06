@@ -5,3 +5,4 @@ venv/*
 conf*
 db_dump/*
 docker_data/*
+lib/*
