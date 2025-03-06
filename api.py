@@ -50,6 +50,24 @@ async def run_cypher(query: CypherQuery):
                 title = "\n".join([f"{k}: {v if len(str(v)) < 50 else f'{str(v)[:47]}...'}" for k, v in node.items()]))
         for rel in graph.relationships:
             net.add_edge(rel.nodes[0].element_id, rel.nodes[1].element_id, label=rel.type)
+    net.set_options("""
+const options = {
+  "edges": {
+    "arrows": {
+      "to": {
+        "enabled": true
+      }
+    }
+  },
+  "physics": {
+    "barnesHut": {
+      "gravitationalConstant": -9950
+    },
+    "minVelocity": 0.75
+  }
+}
+                    """)
+    # net.show_buttons()
     net.show("tmp.html", notebook=False)
     with open("tmp.html", "r") as f:
         res = f.read()
