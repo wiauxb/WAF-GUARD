@@ -5,6 +5,7 @@ import pandas as pd
 import json
 
 API_URL = "http://fastapi:8000"
+COLUMNS_OF_INTEREST = ["node_id", "type", "args", "Location", "VirtualHost"]
 
 st.set_page_config(page_title="Graph Query Interface", page_icon=":bar_chart:", layout="wide")
 
@@ -67,12 +68,15 @@ with tab2:
             st.session_state.cypher_query = response.json()["cypher_query"]
             # Run the generated Cypher query and display the graph
             response = requests.post(f"{API_URL}/run_cypher_to_json", json={"query": st.session_state.cypher_query})
-            st.session_state.rules_table = pd.DataFrame(response.json()["df"])
             df = pd.DataFrame(response.json()["df"])
-            print(df.head())
-            sys.stdout.flush()
+            df = pd.concat([df[COLUMNS_OF_INTEREST], df.drop(COLUMNS_OF_INTEREST, axis=1)], axis=1)
+            st.session_state.rules_table = df
+            # df = pd.DataFrame(response.json()["df"])
+            # print(df.head())
+            # sys.stdout.flush()
 
     interm = st.popover("Cypher Query", use_container_width=True)
     interm.text_area("Generated Cypher Query", st.session_state.cypher_query)
 
-    st.table(st.session_state.rules_table)
+    # st.table(st.session_state.rules_table)
+    st.dataframe(st.session_state.rules_table, hide_index=True)

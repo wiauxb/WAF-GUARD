@@ -55,17 +55,6 @@ async def run_cypher(query: CypherQuery):
         res = f.read()
     return {"html": res}
 
-# @app.post("/run_cypher_to_json")
-# async def run_cypher_to_json(query: CypherQuery):
-#     with neo4j_driver.session() as session:
-#         result = session.run(query.query)
-#         res_col = result.keys()[0]
-#         df = pd.DataFrame(columns=result.peek()[res_col].keys())
-#         print(df.head())
-#         for record in result:
-#             df.add(record[res_col].values())
-#     return {"df": df.to_dict()}
-
 @app.post("/run_cypher_to_json")
 async def run_cypher_to_json(query: CypherQuery):
     with neo4j_driver.session() as session:
