@@ -5,7 +5,8 @@ import pandas as pd
 import json
 
 API_URL = "http://fastapi:8000"
-COLUMNS_OF_INTEREST = ["node_id", "type", "args", "Location", "VirtualHost"]
+COLUMNS_OF_INTEREST = ["node_id", "type", "args", "Location", "VirtualHost", "phase", "id", "tags", "msg"]
+COLUMNS_TO_REMOVE = ["Context"]
 
 st.set_page_config(page_title="Graph Query Interface", page_icon=":bar_chart:", layout="wide")
 
@@ -19,7 +20,7 @@ if "cypher_query" not in st.session_state:
 if "rules_table" not in st.session_state:
     st.session_state.rules_table = pd.DataFrame()
 
-tab1, tab2 = st.tabs(["Queries", "Request"])
+tab1, tab2, tab3 = st.tabs(["Queries", "Request", "Constant"])
 
 with tab1:
     header = st.container()
@@ -69,6 +70,7 @@ with tab2:
             # Run the generated Cypher query and display the graph
             response = requests.post(f"{API_URL}/run_cypher_to_json", json={"query": st.session_state.cypher_query})
             df = pd.DataFrame(response.json()["df"])
+            df = df.drop(COLUMNS_TO_REMOVE, axis=1)
             df = pd.concat([df[COLUMNS_OF_INTEREST], df.drop(COLUMNS_OF_INTEREST, axis=1)], axis=1)
             st.session_state.rules_table = df
             # df = pd.DataFrame(response.json()["df"])
@@ -76,7 +78,21 @@ with tab2:
             # sys.stdout.flush()
 
     interm = st.popover("Cypher Query", use_container_width=True)
-    interm.text_area("Generated Cypher Query", st.session_state.cypher_query)
+    query_field = interm.text_area("Generated Cypher Query", st.session_state.cypher_query)
+    if interm.button("Run Cypher Query", key="run_cypher_query"):
+        st.session_state.cypher_query = query_field
+        response = requests.post(f"{API_URL}/run_cypher_to_json", json={"query": st.session_state.cypher_query})
+        df = pd.DataFrame(response.json()["df"])
+        df = df.drop(COLUMNS_TO_REMOVE, axis=1)
+        df = pd.concat([df[COLUMNS_OF_INTEREST], df.drop(COLUMNS_OF_INTEREST, axis=1)], axis=1)
+        st.session_state.rules_table = df
 
     # st.table(st.session_state.rules_table)
     st.dataframe(st.session_state.rules_table, hide_index=True)
+    st.text(f"{len(st.session_state.rules_table)} rules found")
+
+with tab3:
+    # what is the constant: Constant, Variable, or SubVariable
+    # where is it defind, to which rule it belongs, to what value it is set
+    # list the rules that use this constant
+    pass
