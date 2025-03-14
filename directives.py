@@ -186,7 +186,7 @@ class SecRule(Directive):
         var_pattern = re.compile(r"\|?[!&]{0,2}([^:\s|]+)(?::((?:\'.*?\')|(?:\".*?\")|(?:\/.+?\/)|(?:[^|]*)))?")
         self.secrule_vars = re.findall(var_pattern, rule_parsing.strip_quotes(parsed[0]))
         self.num_of_vars = len(self.secrule_vars)
-        self.secrule_vars = [var for variables in self.secrule_vars for var in variables]
+        self.secrule_vars = [rule_parsing.strip_quotes(var) for variables in self.secrule_vars for var in variables]
         # self.secrule_vars = [var[0] if var[1] == '' else ":".join(var) for var in self.secrule_vars]
         # print(self.secrule_vars)
 
