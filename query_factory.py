@@ -31,14 +31,14 @@ class QueryFactory:
         )
 
         FOREACH (var_i IN range(0,properties.num_of_variables-1) |
-            FOREACH (_ IN CASE WHEN properties.secrule_vars[(var_i*2)+1] <> "" THEN [1] ELSE [] END |
-                MERGE (v:Variable {name: properties.secrule_vars[var_i*2]})
-                MERGE (sv:SubVariable {name: properties.secrule_vars[(var_i*2)+1]})
-                MERGE (sv)-[:IsSubVariableOf]->(v)
+            FOREACH (_ IN CASE WHEN properties.variables[(var_i*2)+1] <> "" THEN [1] ELSE [] END |
+                MERGE (v:Collection {name: properties.variables[var_i*2]})
+                MERGE (sv:Variable {name: properties.variables[(var_i*2)+1]})
+                MERGE (sv)-[:IsVariableOf]->(v)
                 MERGE (node)-[:Uses]->(sv)
             )
-            FOREACH (_ IN CASE WHEN properties.secrule_vars[(var_i*2)+1] = "" THEN [1] ELSE [] END |
-                MERGE (v:Variable {name: properties.secrule_vars[var_i*2]})
+            FOREACH (_ IN CASE WHEN properties.variables[(var_i*2)+1] = "" THEN [1] ELSE [] END |
+                MERGE (v:Collection {name: properties.variables[var_i*2]})
                 MERGE (node)-[:Uses]->(v)
             )
         )
@@ -123,15 +123,15 @@ class QueryFactory:
 
         WITH node, properties
         UNWIND range(0, properties.num_of_vars-1) as var_i
-        WITH node, properties, properties.secrule_vars[var_i*2] as var, properties.secrule_vars[(var_i*2)+1] as subvar
+        WITH node, properties, properties.secrule_vars[var_i*2] as coll, properties.secrule_vars[(var_i*2)+1] as subvar
         FOREACH (_ IN CASE WHEN subvar <> "" THEN [1] ELSE [] END |
-            MERGE (v:Variable {name: var})
-            MERGE (sv:SubVariable {name: subvar})
-            MERGE (sv)-[:IsSubVariableOf]->(v)
+            MERGE (v:Collection {name: coll})
+            MERGE (sv:Variable {name: subvar})
+            MERGE (sv)-[:IsVariableOf]->(v)
             MERGE (node)-[:Uses]->(sv)
         )
         FOREACH (_ IN CASE WHEN subvar = "" THEN [1] ELSE [] END |
-            MERGE (v:Variable {name: var})
+            MERGE (v:Collection {name: coll})
             MERGE (node)-[:Uses]->(v)
         )
         """

@@ -170,7 +170,7 @@ for i, directive in enumerate(directives):
     variables = []
     for const in names:
         parsed = const.split(".")
-        if parsed[0].upper() in modsec.VARIABLES:
+        if parsed[0].upper() in modsec.COLLECTIONS:
             if len(parsed) == 1:
                 parsed.append("")
             variables.extend(parsed)
