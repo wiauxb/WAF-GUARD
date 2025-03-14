@@ -11,6 +11,8 @@ def parse_arguments(args: str):
 
 # strip quotes from a string, only strip quotes if the string starts and ends with the same quote
 def strip_quotes(s: str):
+    if len(s) < 2:
+        return s
     if s[0] == s[-1] and s[0] in ['"', "'"]:
         return s[1:-1]
     return s
