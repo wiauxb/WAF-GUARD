@@ -122,17 +122,19 @@ class QueryFactory:
         )
 
         FOREACH (var_i IN range(0,properties.setenv_num_vars-1) |
-            MERGE (sv2:SubVariable {name: properties.setenv_vars[var_i*2], value: properties.setenv_vars[(var_i*2)+1]})
+            MERGE (env:Collection {name: "ENV"})
+            MERGE (sv2:Variable {name: properties.setenv_vars[var_i*2], value: properties.setenv_vars[(var_i*2)+1]})
+            MERGE (sv2)-[:IsVariableOf]->(env)
             MERGE (node)-[:Sets]->(sv2)
         )
 
         FOREACH (vnv IN properties.setenv_vars_no_value |
-            MERGE (v2:SubVariable {name: vnv})
+            MERGE (v2:Variable {name: vnv})
             MERGE (node)-[:Sets]->(v2)
         )
 
         FOREACH (unset_var IN properties.setenv_unset |
-            MERGE (uv:SubVariable {name: unset_var})
+            MERGE (uv:Variable {name: unset_var})
             MERGE (node)-[:Unsets]->(uv)
         )
 
