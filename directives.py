@@ -174,6 +174,17 @@ class DefineStr(Directive):
     #         'cst_value': self.cst_value
     #     }
 
+def parse_args_setenv(args):
+    pattern_setenv = re.compile(r"setenv:(?P<name>[^=!]+?)=(?P<value>.*?)(?:,|$)")
+    pattern_setenv_no_value = re.compile(r"setenv:(?P<name>[^=!]+?)(?:,|$)")
+    pattern_unsetenv = re.compile(r"setenv:!(?P<name>[^=]+?)(?:,|$)")
+    envs = {}
+    for match in pattern_setenv.finditer(args):
+        envs[match.group('name')] = match.group('value') #envs.get(match.group('name'), set()).union([match.group('value')])
+    envs_no_value = set(pattern_setenv_no_value.findall(args))
+    unset_envs = set(pattern_unsetenv.findall(args))
+    return envs, envs_no_value, unset_envs
+
 class SecRule(Directive):
 
     def __init__(self, location, virtual_host, if_level, context, node_id, type, conditions, args=''):
@@ -193,3 +204,16 @@ class SecRule(Directive):
         self.secrule_op = parsed[1]
         if len(parsed) == 3:
             self.secrule_actions = parsed[2].split()
+
+        envs, envs_no_value, unset = parse_args_setenv(self.args)
+        self.setenv_vars = [] 
+        # for key in envs:
+        #     self.setenv_vars.append(key)
+        #     for value in envs[key]:
+        #         if value:
+        #             self.setenv_vars.append(value)
+        self.setenv_num_vars = len(envs)
+        self.setenv_vars = [e for it in envs.items() for e in it]
+        self.setenv_vars_no_value = list(envs_no_value)
+        self.setenv_unset = list(unset)
+        

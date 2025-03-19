@@ -121,6 +121,21 @@ class QueryFactory:
             MERGE (node)-[:Has]->(t)
         )
 
+        FOREACH (var_i IN range(0,properties.setenv_num_vars-1) |
+            MERGE (sv2:SubVariable {name: properties.setenv_vars[var_i*2], value: properties.setenv_vars[(var_i*2)+1]})
+            MERGE (node)-[:Sets]->(sv2)
+        )
+
+        FOREACH (vnv IN properties.setenv_vars_no_value |
+            MERGE (v2:SubVariable {name: vnv})
+            MERGE (node)-[:Sets]->(v2)
+        )
+
+        FOREACH (unset_var IN properties.setenv_unset |
+            MERGE (uv:SubVariable {name: unset_var})
+            MERGE (node)-[:Unsets]->(uv)
+        )
+
         WITH node, properties
         UNWIND range(0, properties.num_of_vars-1) as var_i
         WITH node, properties, properties.secrule_vars[var_i*2] as coll, properties.secrule_vars[(var_i*2)+1] as subvar
