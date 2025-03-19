@@ -32,7 +32,7 @@ class Neo4jDB:
         with self.driver.session() as session:
             return session.run(query, **kwargs)
 
-    def add(self, directive:Directive):
+    def add_neo4j(self, directive:Directive):
         """Collects directives instead of executing immediately"""
         if isinstance(directive, DefineStr):
             self.definestr_batch.append(directive)

@@ -178,8 +178,8 @@ for i, directive in enumerate(directives):
             consts.append(const)
     directive.add_constant(consts)
     directive.add_variable(variables)
-    graph.add(directive)
-    sqlDB.add(directive)
+    graph.add_neo4j(directive)
+    sqlDB.add_sql(directive)
     if (i+1) % step == 0:
         current_time = time.time()
         elapsed = current_time - loop_starting_time
