@@ -144,7 +144,7 @@ file_path = "dump.txt"
 neo4jDBUrl = os.getenv("NEO4J_URL")
 neo4jUser = os.getenv("NEO4J_USER")
 neo4jPass = os.getenv("NEO4J_PASSWORD")
-graph = Neo4jDB(neo4jDBUrl, neo4jUser, neo4jPass)
+
 postgresDBUrl = os.getenv("POSTGRES_URL")
 postgresUser = os.getenv("POSTGRES_USER")
 postgresPass = os.getenv("POSTGRES_PASSWORD")
@@ -155,7 +155,9 @@ directives = parse_compiled_config(file_path)
 print(f"\rParsing complete. {len(directives)} directives found.")
 
 print("Clearing databases...", end="", flush=True)
-graph.query("MATCH (n) DETACH DELETE n")
+# graph.query("MATCH (n) DETACH DELETE n")  #FIXME: does not work for larger graphs
+os.system("./reset_neo4j_db.sh")
+graph = Neo4jDB(neo4jDBUrl, neo4jUser, neo4jPass)
 sqlDB.execute("DROP SCHEMA public CASCADE")
 sqlDB.execute("CREATE SCHEMA public")
 sqlDB.init_tables()
