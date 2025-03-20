@@ -174,16 +174,55 @@ class DefineStr(Directive):
     #         'cst_value': self.cst_value
     #     }
 
-def parse_args_setenv(args):
-    pattern_setenv = re.compile(r"setenv:(?P<name>[^=!]+?)=(?P<value>.*?)(?:,|$)")
-    pattern_setenv_no_value = re.compile(r"setenv:(?P<name>[^=!]+?)(?:,|$)")
-    pattern_unsetenv = re.compile(r"setenv:!(?P<name>[^=]+?)(?:,|$)")
+def parse_args(type: str, args):
+    pattern_expression = re.compile(fr"{type}:(?P<expression>(?:'(?P<quotes>[^']*?)')|(?:\"(?P<dquotes>[^\"]*?)\")|(?P<noquotes>.+?))(?:,|$|\"|')")
     envs = {}
-    for match in pattern_setenv.finditer(args):
-        envs[match.group('name')] = match.group('value') #envs.get(match.group('name'), set()).union([match.group('value')])
-    envs_no_value = set(pattern_setenv_no_value.findall(args))
-    unset_envs = set(pattern_unsetenv.findall(args))
+    envs_no_value = set()
+    unset_envs = set()
+    for match in pattern_expression.finditer(args):
+        expression = ""
+        if match.group('quotes'):
+            expression = match.group('quotes')
+        elif match.group('dquotes'):
+            expression = match.group('dquotes')
+        elif match.group('noquotes'):
+            expression = match.group('noquotes')
+        if expression.startswith('!'):
+            unset_envs.add(expression[1:])
+        elif '=' in expression:
+            splitted = expression.split('=')
+            envs[splitted[0]] = splitted[1] # envs.get(match.group('name'), set()).union([match.group('value')])
+        else:
+            envs_no_value.add(expression)
     return envs, envs_no_value, unset_envs
+
+def parse_args_setenv(args):
+    return parse_args('setenv', args)
+
+def parse_args_setvar(args):
+    separated_vars, vars_no_value, vars_unset = parse_args('setvar', args)
+    vars = {}
+    for key in separated_vars:
+        splitted = key.split('.')
+        if len(splitted) != 2:
+            vars[key] = separated_vars[key]
+        else:
+            vars[splitted[0].upper()] = vars.get(splitted[0].upper(), []) + [(splitted[1], separated_vars[key])]
+    collected_vars_no_value = {}
+    for var in vars_no_value:
+        splitted = var.split('.')
+        if len(splitted) != 2:
+            collected_vars_no_value[var] = None
+        else:
+            collected_vars_no_value[splitted[0].upper()] = collected_vars_no_value.get(splitted[0].upper(), set()).union([splitted[1]])
+    collected_vars_unset = {}
+    for var in vars_unset:
+        splitted = var.split('.')
+        if len(splitted) != 2:
+            collected_vars_unset[var] = None
+        else:
+            collected_vars_unset[splitted[0].upper()] = collected_vars_unset.get(splitted[0].upper(), set()).union([splitted[1]])
+    return vars, collected_vars_no_value, collected_vars_unset
 
 class SecRule(Directive):
 
@@ -216,4 +255,33 @@ class SecRule(Directive):
         self.setenv_vars = [e for it in envs.items() for e in it]
         self.setenv_vars_no_value = list(envs_no_value)
         self.setenv_unset = list(unset)
+
+        vars, vars_no_value, vars_unset = parse_args_setvar(self.args)
+        # self.setvar_vars = [e for it in vars.items() for e in it]
+        self.setvar_vars = []
+        for key in vars:
+            for value in vars[key]:
+                self.setvar_vars.append(key)
+                self.setvar_vars.extend(value)
+        self.setvar_num_vars = len(self.setvar_vars)//3
+        self.setvar_vars_no_value = []
+        for key in vars_no_value:
+            if vars_no_value[key] is None:
+                self.setvar_vars_no_value.append(key)
+                self.setvar_vars_no_value.append("")
+            else:
+                for value in vars_no_value[key]:
+                    self.setvar_vars_no_value.append(key)
+                    self.setvar_vars_no_value.extend(value)
+        self.setvar_num_vars_no_value = len(self.setvar_vars_no_value)//2
+        self.setvar_unset = []
+        for key in vars_unset:
+            if vars_unset[key] is None:
+                self.setvar_unset.append(key)
+                self.setvar_unset.append("")
+            else:
+                for value in vars_unset[key]:
+                    self.setvar_unset.append(key)
+                    self.setvar_unset.append(value)
+        self.setvar_num_unset = len(self.setvar_unset)//2
         
