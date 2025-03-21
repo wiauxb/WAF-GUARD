@@ -1,15 +1,13 @@
-
-
-import sys
-from context import FileContext, MacroContext
-from directives import Directive
+from src.parser.helper_classes.context import FileContext, MacroContext
+from src.parser.helper_classes.directives import Directive
 import re
+import os
 
-CONF_PATH = "conf/"
 
 def convert_context_path( path: str):
-    begin_pattern = re.compile(r"^.*conf/")
-    return re.sub(begin_pattern, CONF_PATH, path)
+    conf_path = os.path.join(os.environ["CONFIG_ROOT"], "conf", "")
+    begin_pattern = re.compile(r"^.*conf[/\\]")
+    return re.sub(begin_pattern, conf_path, path)
 
 def find_line_inside_macro(path:str, line_num:int, offset:int = 0, target:str = ""):
     starting_line = line_num

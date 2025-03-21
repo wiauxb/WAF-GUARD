@@ -56,7 +56,8 @@ services:
       dockerfile: fastapi_dockerfile
       context: ./
     volumes:
-      - .:/app
+      - ${PWD}/.env:/app/.env
+      - ${WEB_APP_PATH}:/app
     working_dir: /app
     ports:
       - "8000:8000"
@@ -75,7 +76,7 @@ services:
       dockerfile: streamlit_dockerfile
       context: ./
     volumes:
-      - .:/app
+      - ${WEB_APP_PATH}:/app
     working_dir: /app
     ports:
       - "8501:8501"

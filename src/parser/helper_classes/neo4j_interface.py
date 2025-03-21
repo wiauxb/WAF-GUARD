@@ -1,11 +1,7 @@
-
-import sys
-import time
 from neo4j import GraphDatabase
 
-from context import Context
-from directives import DefineStr, Directive, SecRule, SecRuleRemoveById, SecRuleRemoveByTag
-from query_factory import QueryFactory
+from src.parser.helper_classes.directives import DefineStr, Directive, SecRule, SecRuleRemoveById, SecRuleRemoveByTag
+from src.parser.helper_classes.query_factory import QueryFactory
 
 BATCH_SIZE_GENERIC = 5000
 BATCH_SIZE_SMALL = 1000

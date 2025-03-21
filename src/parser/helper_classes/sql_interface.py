@@ -1,7 +1,7 @@
 import psycopg2
 
-from context import *
-from directives import Directive
+from src.parser.helper_classes.context import *
+from src.parser.helper_classes.directives import Directive
 
 
 class PostgresDB:
@@ -12,7 +12,7 @@ class PostgresDB:
             password=password,
             database=database
         )
-        self.init_tables()
+        self.init_tables() #FIXME: should it be enabled by default?
         self.prepare_statements()
 
     def init_tables(self):

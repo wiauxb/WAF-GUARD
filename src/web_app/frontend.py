@@ -1,8 +1,6 @@
-import sys
 import streamlit as st
 import requests
 import pandas as pd
-import json
 
 API_URL = "http://fastapi:8000"
 COLUMNS_OF_INTEREST = ["node_id", "type", "args", "Location", "VirtualHost", "phase", "id", "tags", "msg"]

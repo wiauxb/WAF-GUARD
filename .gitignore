@@ -1,8 +1,10 @@
 .idea/*
+.vscode/*
+*.pyc
 .env
 venv/*
 **pycache**
 conf*
 db_dump/*
-docker_data/*
-lib/*
+docker/docker_data/*
+src/web_app/lib

@@ -1,17 +1,7 @@
-import math
-import time
 import re
-from const_recovery import recover_used_constants
-from context import *
-from neo4j_interface import Neo4jDB
-from directives import Directive, DirectiveFactory
-from dotenv import load_dotenv
-import os
+from src.parser.helper_classes.context import *
+from src.parser.helper_classes.directives import DirectiveFactory
 
-import modsec
-from sql_interface import PostgresDB
-
-load_dotenv()
 
 def parse_compiled_config(file_path):
     directives = []
@@ -122,87 +112,4 @@ def parse_compiled_config(file_path):
                 current_node_id = current_node_id+1
                 new_directive = DirectiveFactory.create(current_location, current_virtualhost, current_if_level, current_context, current_node_id, match_generic_rule.group('name'), current_if_conditions, match_generic_rule.group('args'))
                 directives.append(new_directive)
-        # match_server_name = server_name_pattern.match(line)
-        # if match_server_name:
-        #     server_name = server_name_pattern.findall(line)[0]
-        #     current_ordering_number = current_ordering_number+1
-        #     # print(current_macro_stack)
-        #     # print(current_instruction_number)
-        #     new_directive = Directive(current_location, current_virtualhost, current_if_level, current_context, current_ordering_number,server_name, current_if_conditions)
-        #     directives.append(new_directive)
-
-    # print(directives)
     return directives
-
-def estimate_time_left(progress, starting_time, current_time):
-    time_taken = current_time - starting_time
-    time_left = (time_taken / progress) - time_taken
-    return f"{time_left//60:02.0f}m{time_left%60:02.0f}s"
-
-starting_time = time.time()
-file_path = "dump.txt"
-neo4jDBUrl = os.getenv("NEO4J_URL")
-neo4jUser = os.getenv("NEO4J_USER")
-neo4jPass = os.getenv("NEO4J_PASSWORD")
-
-postgresDBUrl = os.getenv("POSTGRES_URL")
-postgresUser = os.getenv("POSTGRES_USER")
-postgresPass = os.getenv("POSTGRES_PASSWORD")
-sqlDB = PostgresDB(postgresDBUrl, postgresUser, postgresPass, "cwaf")
-
-print(f"Parsing config ...", end="", flush=True)
-directives = parse_compiled_config(file_path)
-print(f"\rParsing complete. {len(directives)} directives found.")
-
-print("Clearing databases...", end="", flush=True)
-# graph.query("MATCH (n) DETACH DELETE n")  #FIXME: does not work for larger graphs
-os.system("./reset_neo4j_db.sh")
-graph = Neo4jDB(neo4jDBUrl, neo4jUser, neo4jPass)
-sqlDB.execute("DROP SCHEMA public CASCADE")
-sqlDB.execute("CREATE SCHEMA public")
-sqlDB.init_tables()
-print("\rDatabases cleared.   ")
-
-step = len(directives) // 100
-step = 1 if step == 0 else step
-loop_starting_time = time.time()
-for i, directive in enumerate(directives):
-    names = recover_used_constants(directive)
-    consts = []
-    variables = []
-    for const in names:
-        parsed = const.split(".")
-        if parsed[0].upper() in modsec.COLLECTIONS:
-            if len(parsed) == 1:
-                parsed.append("")
-            variables.extend(parsed)
-        else:
-            consts.append(const)
-    directive.add_constant(consts)
-    directive.add_variable(variables)
-    graph.add_neo4j(directive)
-    sqlDB.add_sql(directive)
-    if (i+1) % step == 0:
-        current_time = time.time()
-        elapsed = current_time - loop_starting_time
-        print(f"\rProgression: {math.ceil(100*(i+1)/len(directives))}% done. Time elapsed: {f"{elapsed//60:.0f}m" if elapsed >= 60 else ""}{elapsed%60:02.0f}s Time left: {estimate_time_left((i+1)/len(directives), loop_starting_time, current_time)}", end="", flush=True)
-
-print()
-graph.close()
-sqlDB.close()
-end_time = time.time()
-time_taken = end_time-starting_time 
-print(f"Total time taken: {f"{time_taken//60:.0f}m" if time_taken >= 60 else ""}{f"{time_taken%60:.0f}s" if time_taken%60 > 3 else f"{time_taken}s"}")
-
-
-
-
-# =============================
-# sorted_directives = directives #sorted(directives)
-# with open("output.txt", "w") as file:
-#     for directive in sorted_directives:
-#         print(directive, file=file)
-# print(f"{len(sorted_directives)} dirs written to output.txt")
-
-# for directive in sorted_directives:
-#     print(directive)

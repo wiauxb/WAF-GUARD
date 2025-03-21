@@ -1,8 +1,8 @@
 import re
 import sys
 
-from context import Context
-import rule_parsing
+from src.parser.helper_classes.context import Context
+import src.parser.rule_parsing as rule_parsing
 
 class DirectiveFactory:
 
