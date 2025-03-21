@@ -11,11 +11,9 @@ load_dotenv()
 
 app = FastAPI()
 
-neo4jDBUrl = os.getenv("NEO4J_URL")
 neo4jUser = os.getenv("NEO4J_USER")
 neo4jPass = os.getenv("NEO4J_PASSWORD")
 
-postgresDBUrl = os.getenv("POSTGRES_URL")
 postgresUser = os.getenv("POSTGRES_USER")
 postgresPass = os.getenv("POSTGRES_PASSWORD")
 
