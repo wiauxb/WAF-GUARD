@@ -98,8 +98,16 @@ async def parse_http_request(request: HttpRequest):
 async def get_metadata(node_id: str):  #FIXME if node_id is not in a macro_call, it will return an empty list
     cursor = postgres_conn.cursor()
     cursor.execute(
-        "SELECT mc.macro_name, st.file_path, st.line_number FROM macrocall mc, symboltable st WHERE mc.nodeid = %s and mc.ruleid = st.id ORDER BY mc.id DESC",
-        (node_id,))
+        """
+        SELECT macro_name, file_path, line_number
+        FROM (
+        SELECT mc.id as id, mc.macro_name, st.file_path, st.line_number FROM macrocall mc, symboltable st WHERE mc.nodeid = %s and mc.ruleid = st.id
+        UNION
+        SELECT -1 as id,'/' as macro_name, file_path, line_number FROM symboltable WHERE node_id = %s
+        ORDER BY id DESC
+        )
+        """,
+        (node_id, node_id))
     metadata = cursor.fetchall()
     return {"metadata": metadata}
 
