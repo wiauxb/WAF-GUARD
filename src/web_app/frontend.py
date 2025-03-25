@@ -17,6 +17,8 @@ if "cypher_query" not in st.session_state:
     st.session_state.cypher_query = ""
 if "rules_table" not in st.session_state:
     st.session_state.rules_table = pd.DataFrame()
+if "cst_table" not in st.session_state:
+    st.session_state.cst_table = pd.DataFrame()
 
 tab1, tab2, tab3 = st.tabs(["Queries", "Request", "Constant"])
 
@@ -90,7 +92,58 @@ with tab2:
     st.text(f"{len(st.session_state.rules_table)} rules found")
 
 with tab3:
+    cst_name = st.text_input("Constant Name")
+    if st.button("Search"):
+        response = requests.get(f"{API_URL}/search_var/{cst_name}")
+        if response.status_code == 200:
+            # st.dataframe(response.json()["records"])
+            st.session_state.cst_table = pd.DataFrame(response.json()["records"])
+            st.session_state.cst_table["selected"] = False
+        else:
+            st.error(response.content.decode())
+    
     # what is the constant: Constant, Variable, or SubVariable
+    edited_cst_table = st.data_editor(
+        st.session_state.cst_table,
+        column_config={
+            "selected": st.column_config.CheckboxColumn(
+                default=False,
+                pinned=True,
+            )
+        },
+        # column_order=["selected", "name", "value", "labels"],
+        disabled=["name", "value", "labels"],
+        # hide_index=True,
+    )
+
+    if not edited_cst_table.empty:
+        # selected = edited_cst_table[edited_cst_table["selected"]]
+        # selected = selected.drop("selected", axis=1)
+        selected = list(edited_cst_table.index[edited_cst_table["selected"]].map(lambda x: str(x)))
+        if selected:
+            sub_tabs = st.tabs(selected)
+            for i, t in enumerate(sub_tabs):
+                with t:
+                    node = edited_cst_table.iloc[int(selected[i])]
+                    
+
+                    st.subheader("Created by")
+                    
+                    response = requests.get(f"{API_URL}/get_setnode/{node['name']}/{node['value']}")
+                    if response.status_code == 200:
+                        created_by = pd.DataFrame(response.json()["results"])
+                        st.write(created_by)
+                    else:
+                        st.error("Failed to fetch 'created by' information.")
+
+                    st.subheader("Used by")
+                    
+                    response = requests.get(f"{API_URL}/use_node/{node['name']}/{node['value']}")
+                    if response.status_code == 200:
+                        created_by = pd.DataFrame(response.json()["results"])
+                        st.write(created_by)
+                    else:
+                        st.error("Failed to fetch 'used by' information.")
+
     # where is it defind, to which rule it belongs, to what value it is set
     # list the rules that use this constant
-    pass

@@ -104,6 +104,50 @@ async def get_metadata(node_id: str):  #FIXME if node_id is not in a macro_call,
     return {"metadata": metadata}
 
 
+@app.get("/search_var/{var_name}")
+async def search_var(var_name: str):
+    with neo4j_driver.session() as session:
+        result = session.run(f"MATCH (c WHERE c.name = '{var_name}') WHERE (c:Variable) or (c:Constant) or (c:Collection) RETURN c")
+        records = [record["c"] for record in result]
+    formatted_records = []
+    for record in records:
+       tmp = dict(record)
+       tmp["labels"] = list(record.labels)
+       formatted_records.append(tmp)
+    return {"records": formatted_records}
+
+@app.get("/get_setnode/{var_name}")
+async def get_setnode_helper(var_name:str):
+    return await local_get_setnode(var_name, "")
+
+@app.get("/get_setnode/{var_name}/{var_value}")
+async def get_setnode(var_name: str, var_value: str):
+    return await local_get_setnode(var_name, var_value)
+
+async def local_get_setnode(var_name: str, var_value: str):
+    print(var_name, var_value)
+    with neo4j_driver.session() as session:
+        result = session.run(f"MATCH (c WHERE c.name = '{var_name}' AND c.value = '{var_value}')<-[:Sets]-(n) return n")
+        records = [r["n"] for r in result]
+        df = pd.DataFrame(records).fillna(-1)
+    return {"results" : df.to_dict(orient="records")}
+
+
+@app.get("/use_node/{var_name}")
+async def use_node_helper(var_name:str):
+    return await get_use_node(var_name, "")
+
+@app.get("/use_node/{var_name}/{var_value}")
+async def use_node(var_name: str, var_value: str):
+    return await get_use_node(var_name, var_value)
+
+async def get_use_node(var_name: str, var_value: str):
+    with neo4j_driver.session() as session:
+        result = session.run(f"MATCH (c WHERE c.name = '{var_name}' AND c.value = '{var_value}')<-[:Uses]-(n) return n")
+        records = [r["n"] for r in result]
+        df = pd.DataFrame(records).fillna(-1)
+    return {"results" : df.to_dict(orient="records")}
+
 @app.get("/health")
 async def health():
     return {"status": "ok"}
