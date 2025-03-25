@@ -53,9 +53,9 @@ def process_directives(directives, graph, sql_db):
         if (i + 1) % step == 0:
             elapsed = loop_timer.time()
             print(
-                f"\rProgression: {math.ceil(100 * (i + 1) / len(directives))}% done. \
-Time elapsed: {f"{elapsed//60:.0f}m" if elapsed >= 60 else ""}{elapsed%60:02.0f}s \
-Time left: {estimate_time_left((i+1)/len(directives), elapsed)}",
+                f"\rProgression: {math.ceil(100 * (i + 1) / len(directives))}% done. "
+                f"Time elapsed: {f"{elapsed//60:.0f}m" if elapsed >= 60 else ""}{elapsed%60:02.0f}s "
+                f"Time left: {estimate_time_left((i+1)/len(directives), elapsed)}",
                 end="", flush=True
             )
     print()
