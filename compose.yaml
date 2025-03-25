@@ -40,6 +40,7 @@ services:
       retries: 10
     
   adminer:
+    container_name: adminer
     image: adminer
     restart: always
     ports:
@@ -54,7 +55,7 @@ services:
     container_name: fastapi
     build: 
       dockerfile: fastapi_dockerfile
-      context: ./
+      context: ./docker
     volumes:
       - ${PWD}/.env:/app/.env
       - ${WEB_APP_PATH}:/app
@@ -74,7 +75,7 @@ services:
     container_name: streamlit
     build: 
       dockerfile: streamlit_dockerfile
-      context: ./
+      context: ./docker
     volumes:
       - ${WEB_APP_PATH}:/app
     working_dir: /app
