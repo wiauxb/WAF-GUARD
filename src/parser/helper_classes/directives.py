@@ -143,12 +143,6 @@ class SecRuleRemoveByTag(Directive):
         super().__init__(location, virtual_host, if_level, context, node_id, type, conditions, args)
         self.tags_to_remove = [re.sub(r"(^[\"\'])|([\"\']$)", "", tag) for tag in re.split(r"[ ,]", self.args)]
 
-    # def properties(self):
-    #     return {
-    #         **super().properties(),
-    #         'tags_to_remove': self.tags_to_remove
-    #     }
-
 class SecRuleRemoveById(Directive):
 
     def __init__(self, location, virtual_host, if_level, context, node_id, type, conditions, args):
@@ -171,13 +165,6 @@ class SecRuleRemoveById(Directive):
                 self.ranges_to_remove.append(int(r[0]))
                 self.ranges_to_remove.append(int(r[1]))
                 self.num_of_ranges += 1
-                
-    # def properties(self):
-    #     return {
-    #         **super().properties(),
-    #         'ids_to_remove': self.ids_to_remove,
-    #         'ranges_to_remove': self.ranges_to_remove
-    #     }
 
 class DefineStr(Directive):
 
@@ -188,14 +175,20 @@ class DefineStr(Directive):
             self.cst_name = match_definestr.group('name')
             self.cst_value = match_definestr.group('value')
 
-    # def properties(self):
-    #     return {
-    #         **super().properties(),
-    #         'cst_name': self.cst_name,
-    #         'cst_value': self.cst_value
-    #     }
-
 def parse_args(type: str, args):
+    """
+    Parses a string of arguments based on a specified type (either setenv or setvar) and extracts environment variables.
+
+    Args:
+        type (str): The type of argument to parse, either setenv or setvar.
+        args (str): The string containing the arguments to parse.
+
+    Returns:
+        - envs (dict): A dictionary of environment variables with their corresponding values.
+        - envs_no_value (set): A set of environment variables that are specified without values.
+        - unset_envs (set): A set of environment variables that are marked for unsetting (prefixed with '!').
+    """
+
     pattern_expression = re.compile(fr"{type}:(?P<expression>(?:'(?P<quotes>[^']*?)')|(?:\"(?P<dquotes>[^\"]*?)\")|(?P<noquotes>.+?))(?:,|$|\"|')")
     envs = {}
     envs_no_value = set()
@@ -221,26 +214,40 @@ def parse_args_setenv(args):
     return parse_args('setenv', args)
 
 def parse_args_setvar(args):
+    """
+    Parses the arguments for the 'setvar' directive and organizes them into structured dictionaries.
+    Pre-conditions:
+    -  args (str): The string containing the arguments to parse.
+    Post-conditions:
+    - Returns 3 dictionaries:
+        1. `vars`: A dictionary where keys are variable names (or uppercased prefixes for dotted keys),
+           and values are a list of tuples (suffix, value).
+        2. `collected_vars_no_value`: A dictionary where keys are variable names (or uppercased prefixes for dotted keys),
+           and values are a set of suffixes for keys that have no value.
+        3. `collected_vars_unset`: A dictionary where keys are variable names (or uppercased prefixes for dotted keys),
+           and values are a set of suffixes for keys that are marked as unset.
+    """
+
     separated_vars, vars_no_value, vars_unset = parse_args('setvar', args)
     vars = {}
     for key in separated_vars:
         splitted = key.split('.')
         if len(splitted) != 2:
-            vars[key] = separated_vars[key]
+            vars[None] = vars.get(None, []) + [(key, separated_vars[key])] #[separated_vars[key]] #FIXME this break the hypothesis of key -> tuple of lentgh 2
         else:
             vars[splitted[0].upper()] = vars.get(splitted[0].upper(), []) + [(splitted[1], separated_vars[key])]
     collected_vars_no_value = {}
     for var in vars_no_value:
         splitted = var.split('.')
         if len(splitted) != 2:
-            collected_vars_no_value[var] = None
+            collected_vars_no_value[None] = collected_vars_no_value.get(None, set()).union([var])
         else:
             collected_vars_no_value[splitted[0].upper()] = collected_vars_no_value.get(splitted[0].upper(), set()).union([splitted[1]])
     collected_vars_unset = {}
     for var in vars_unset:
         splitted = var.split('.')
         if len(splitted) != 2:
-            collected_vars_unset[var] = None
+            collected_vars_unset[None] = collected_vars_no_value.get(None, set()).union([var])
         else:
             collected_vars_unset[splitted[0].upper()] = collected_vars_unset.get(splitted[0].upper(), set()).union([splitted[1]])
     return vars, collected_vars_no_value, collected_vars_unset
@@ -253,13 +260,10 @@ class SecRule(Directive):
         if len(parsed) != 2 and len(parsed) != 3:
             raise Exception(f"Invalid SecRule directive: {self.args}")
 
-        # var_pattern = re.compile(r"\|?[!&]{0,2}([^:\s|]+)(?::((?:(?:[\"'])?\/.*\/(?:[\"'])?)|(?:[^|]*)))?")
         var_pattern = re.compile(r"\|?[!&]{0,2}([^:\s|]+)(?::((?:\'.*?\')|(?:\".*?\")|(?:\/.+?\/)|(?:[^|]*)))?")
         self.secrule_vars = re.findall(var_pattern, rule_parsing.strip_quotes(parsed[0]))
         self.num_of_vars = len(self.secrule_vars)
         self.secrule_vars = [rule_parsing.strip_quotes(var) for variables in self.secrule_vars for var in variables]
-        # self.secrule_vars = [var[0] if var[1] == '' else ":".join(var) for var in self.secrule_vars]
-        # print(self.secrule_vars)
 
         self.secrule_op = parsed[1]
         if len(parsed) == 3:
@@ -267,42 +271,31 @@ class SecRule(Directive):
 
         envs, envs_no_value, unset = parse_args_setenv(self.args)
         self.setenv_vars = [] 
-        # for key in envs:
-        #     self.setenv_vars.append(key)
-        #     for value in envs[key]:
-        #         if value:
-        #             self.setenv_vars.append(value)
         self.setenv_num_vars = len(envs)
         self.setenv_vars = [e for it in envs.items() for e in it]
         self.setenv_vars_no_value = list(envs_no_value)
         self.setenv_unset = list(unset)
 
         vars, vars_no_value, vars_unset = parse_args_setvar(self.args)
-        # self.setvar_vars = [e for it in vars.items() for e in it]
         self.setvar_vars = []
         for key in vars:
             for value in vars[key]:
+                if len(value) != 2:
+                    print(f"Error parsing {type} directive {node_id} from {context}: {value} is an invalid value", file=sys.stderr)
+                    continue
                 self.setvar_vars.append(key)
                 self.setvar_vars.extend(value)
         self.setvar_num_vars = len(self.setvar_vars)//3
         self.setvar_vars_no_value = []
         for key in vars_no_value:
-            if vars_no_value[key] is None:
+            for value in vars_no_value[key]:
                 self.setvar_vars_no_value.append(key)
-                self.setvar_vars_no_value.append("")
-            else:
-                for value in vars_no_value[key]:
-                    self.setvar_vars_no_value.append(key)
-                    self.setvar_vars_no_value.extend(value)
+                self.setvar_vars_no_value.append(value)
         self.setvar_num_vars_no_value = len(self.setvar_vars_no_value)//2
         self.setvar_unset = []
         for key in vars_unset:
-            if vars_unset[key] is None:
+            for value in vars_unset[key]:
                 self.setvar_unset.append(key)
-                self.setvar_unset.append("")
-            else:
-                for value in vars_unset[key]:
-                    self.setvar_unset.append(key)
-                    self.setvar_unset.append(value)
+                self.setvar_unset.append(value)
         self.setvar_num_unset = len(self.setvar_unset)//2
         

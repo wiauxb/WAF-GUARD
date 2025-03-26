@@ -139,27 +139,43 @@ class QueryFactory:
         )
 
         FOREACH (var_i IN range(0,properties.setvar_num_vars-1) |
-            MERGE (env:Collection {name: properties.setvar_vars[var_i*3]})
-            MERGE (sv2:Variable {name: properties.setvar_vars[(var_i*3)+1], value: properties.setvar_vars[(var_i*3)+2]})
-            MERGE (sv2)-[:IsVariableOf]->(env)
-            MERGE (node)-[:Sets]->(sv2)
+            FOREACH (_ IN CASE WHEN properties.setvar_vars[var_i*3] IS NOT NULL THEN [1] ELSE [] END |
+                MERGE (env:Collection {name: properties.setvar_vars[var_i*3]})
+                MERGE (sv2:Variable {name: properties.setvar_vars[(var_i*3)+1], value: properties.setvar_vars[(var_i*3)+2]})
+                MERGE (sv2)-[:IsVariableOf]->(env)
+                MERGE (node)-[:Sets]->(sv2)
+            )
+            FOREACH (_ IN CASE WHEN properties.setvar_vars[var_i*3] IS NULL THEN [1] ELSE [] END |
+                MERGE (v2:Variable {name: properties.setvar_vars[(var_i*3)+1], value: properties.setvar_vars[(var_i*3)+2]})
+                MERGE (node)-[:Sets]->(v2)
+            )
         )
 
         FOREACH (vnv_i IN range(0,properties.setvar_num_vars_no_value-1) |
-            MERGE (env2:Collection {name: properties.setvar_vars_no_value[vnv_i*2]})
-            MERGE (v2:Variable {name: properties.setvar_vars_no_value[(vnv_i*2)+1]})
-            MERGE (v2)-[:IsVariableOf]->(env2)
-            MERGE (node)-[:Sets]->(v2)
+            FOREACH (_ IN CASE WHEN properties.setvar_vars_no_value[vnv_i*2] IS NOT NULL THEN [1] ELSE [] END |
+                MERGE (env2:Collection {name: properties.setvar_vars_no_value[vnv_i*2]})
+                MERGE (v2:Variable {name: properties.setvar_vars_no_value[(vnv_i*2)+1]})
+                MERGE (v2)-[:IsVariableOf]->(env2)
+                MERGE (node)-[:Sets]->(v2)
+            )
+            FOREACH (_ IN CASE WHEN properties.setvar_vars_no_value[vnv_i*2] IS NULL THEN [1] ELSE [] END |
+                MERGE (v2:Variable {name: properties.setvar_vars_no_value[(vnv_i*2)+1]})
+                MERGE (node)-[:Sets]->(v2)
+            )
         )
 
         FOREACH (unset_i IN range(0,properties.setvar_num_unset-1) |
-            MERGE (env3:Collection {name: properties.setvar_unset[unset_i*2]})
-            MERGE (uv:Variable {name: properties.setvar_unset[(unset_i*2)+1]})
-            MERGE (uv)-[:IsVariableOf]->(env3)
-            MERGE (node)-[:Unsets]->(uv)
+            FOREACH (_ IN CASE WHEN properties.setvar_unset[unset_i*2] IS NOT NULL THEN [1] ELSE [] END |
+                MERGE (env3:Collection {name: properties.setvar_unset[unset_i*2]})
+                MERGE (uv:Variable {name: properties.setvar_unset[(unset_i*2)+1]})
+                MERGE (uv)-[:IsVariableOf]->(env3)
+                MERGE (node)-[:Unsets]->(uv)
+            )
+            FOREACH (_ IN CASE WHEN properties.setvar_unset[unset_i*2] IS NULL THEN [1] ELSE [] END |
+                MERGE (uv:Variable {name: properties.setvar_unset[(unset_i*2)+1]})
+                MERGE (node)-[:Unsets]->(uv)
+            )
         )
-        """
-    """
 
         FOREACH (var_i IN range(0,properties.num_of_vars-1) |
             FOREACH (_ IN CASE WHEN properties.secrule_vars[(var_i*2)+1] <> "" THEN [1] ELSE [] END |
