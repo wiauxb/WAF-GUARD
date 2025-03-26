@@ -15,6 +15,10 @@ def format_directive_table(directive_table: pd.DataFrame) -> pd.DataFrame:
     return directive_table
 
 def show_rules(directive_table: pd.DataFrame, container: st = st):
+    if directive_table.empty:
+        container.dataframe(directive_table)
+        container.text("No rules found")
+        return
     do_not_edit = directive_table.columns.to_list()
     do_not_edit.remove("selected")
     edited_dirs = container.data_editor(
