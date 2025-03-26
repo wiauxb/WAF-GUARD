@@ -7,7 +7,7 @@ class QueryFactory:
         return """
         UNWIND $batch AS properties
         CREATE (node:$(properties.type))
-        SET node = properties
+        SET node = properties.node_props
         WITH node, properties
         
         FOREACH (_ IN CASE WHEN properties.Location IS NOT NULL THEN [1] ELSE [] END |

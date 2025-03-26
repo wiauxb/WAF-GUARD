@@ -80,6 +80,8 @@ class Neo4jDB:
             return
         
         batch_prop = [d.properties() for d in batch]  # Convert to list of dictionaries
+        for i, b in enumerate(batch_prop):
+            b["node_props"] = batch[i].node_properties()
         batch.clear() # Reset batch list
 
         query = QueryFactory.base_module()

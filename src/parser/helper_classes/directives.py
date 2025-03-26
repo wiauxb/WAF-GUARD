@@ -89,6 +89,27 @@ class Directive:
                 rep[key] = value
         return rep
 
+    def node_properties(self):
+        prop = {
+            'node_id': self.node_id,
+            'type': self.type,
+            'args': self.args,
+            'Location': self.Location,
+            'VirtualHost': self.VirtualHost,
+            'IfLevel': self.IfLevel,
+            'conditions': self.conditions,
+            'Context': str(self.Context)
+        }
+        if hasattr(self, 'id'):
+            prop['id'] = self.id
+        if hasattr(self, 'tags'):
+            prop['tags'] = list(self.tags)
+        if hasattr(self, 'phase'):
+            prop['phase'] = self.phase
+        if hasattr(self, 'msg'):
+            prop['msg'] = self.msg
+        return prop
+
 
     def __repr__(self):
         rep = self.__class__.__name__ + "("
