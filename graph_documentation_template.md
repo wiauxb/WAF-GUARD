@@ -6,10 +6,9 @@
 3. [Node Classification](#node-classification)
 4. [Node Details](#node-details)
 5. [Relationships](#relationships)
-6. [Simplified Graph Schema](#simplified-graph-schema)
-7. [Query Examples](#query-examples)
-8. [Update History](#update-history)
-9. [Conclusion](#conclusion)
+6. [Query Examples](#query-examples)
+7. [Update History](#update-history)
+8. [Conclusion](#conclusion)
 
 ---
 
@@ -31,7 +30,7 @@ Briefly describe the purpose of this graph and its role in the chatbot.
 ## 3️⃣ Node Classification
 The graph contains **XXXX node types**, grouped into **XX categories**.
 
-| Catégorie | Description |
+| Category | Description |
 |-----------|------------|
 | `Cat1`    | Description Cat 1 |
 | `Cat2`    | Description Cat 2 |
@@ -39,29 +38,40 @@ The graph contains **XXXX node types**, grouped into **XX categories**.
 | `Cat4`    | Description Cat 4 |
 | `Cat5`    | Description Cat 5 |
 | `Cat6`    | Description Cat 6 |
+
 ---
 
 ## 4️⃣ Node Details
 Each node type has specific attributes.
 
-[comment]: # (Maybe here we can give these attributes by categories; the main attributes that are common to every node types in a category.)
+### Example : `Collection` Node
+Description
 
-### Example : `SecRule` Node
-Represents a reference to a SecRule call
-```json
-{
-  "property": "String",
-  "type": "String"
-}
+#### Use Case 1
+**Description**
+```cypher
+MATCH ...
+```
+
+#### Use Case 2
+**Description**
+```cypher
+MATCH ...
 ```
 
 ### Example : `Regex` Node
-Not really a node but more of a choice of construction...
-```json
-{
-  "property": "String",
-  "type": "List"
-}
+Description
+
+#### Use Case 1
+**Description**
+```cypher
+MATCH ...
+```
+
+#### Use Case 2
+**Description**
+```cypher
+MATCH ...
 ```
 
 ---
@@ -71,37 +81,22 @@ Relationships between nodes define interactions.
 
 | Relationship  | From Node | To Node | Description |
 |--------------|----------|---------|-------------|
-| `AtLocation`  | secdebuglog     | Location | This secdebuglog call was made at this location. |
-| `InVirtualHost`   | secdebuglog     | VirtualHost  | This  secdebuglog call is in this virtual host.|
-| `Uses` | secdebuglog    | Constant| This secdebulog uses this constant. |
-
-[comment]: # (If relationships contain attributes, mention them as well. Didn't see any relations with attributes in this graph but maybe I missed it.)
+| `AtLocation`  | All Rules Nodes     | Location | Node is defined at Location. |
+| `InVirtualHost`   | All Rules Nodes      | VirtualHost  | Node is used in Virtual Host. |
 
 ---
 
-## 6️⃣ Simplified Graph Schema
-Provide a simplified visual representation of the graph schema.
+## 6️⃣ Query Examples
+Refer to the `queries_dataset` file for example of basic questions and queries that fetch their answers.
 
 ---
 
-## 7️⃣ Query Examples
-Some basic Cypher queries.
-
-**Question 1**
-```cypher
-MATCH ...
-```
-
----
-
-## 8️⃣ Update History
+## 7️⃣ Update History
 | Version | Date       | Changes |
 |---------|-----------|-------------|
 | 1.0     | YYYY-MM-DD | Initial structure |
 
 ---
 
-## 9️⃣ Conclusion
+## 8️⃣ Conclusion
 Summarize key points and provide any future considerations.
-
-
