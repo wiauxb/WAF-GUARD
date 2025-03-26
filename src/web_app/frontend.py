@@ -1,4 +1,4 @@
-from frontend_functions import format_directive_table
+from frontend_functions import *
 import streamlit as st
 import requests
 import pandas as pd
@@ -19,40 +19,9 @@ if "rules_table" not in st.session_state:
 if "cst_table" not in st.session_state:
     st.session_state.cst_table = pd.DataFrame()
 
-tab1, tab2, tab3 = st.tabs(["Queries", "Request", "Constant"])
+tab_rqst, tab_cst = st.tabs(["Request", "Constant"])
 
-with tab1:
-    header = st.container()
-    col1, col2 = header.columns(2)
-    res1, res2 = st.columns(2, vertical_alignment="top")
-
-    with col1:
-        # Input for Cypher query
-        cypher_query = st.text_area("Enter Cypher Query")
-
-        # Button to submit Cypher query
-        if st.button("Run Cypher Query"):
-            response = requests.post(f"{API_URL}/run_cypher", json={"query": cypher_query})
-            st.session_state.graph_data = response.json()["html"]
-
-    with col2:
-        c = st.container()
-        c1, c2 = c.columns((.75, .25), vertical_alignment="bottom")
-        # Input for node ID to fetch metadata
-        node_id = c1.text_input("Enter Node ID")
-
-        # Button to fetch metadata
-        if c2.button("Fetch Metadata"):
-            response = requests.get(f"{API_URL}/get_metadata/{node_id}")
-            metadata = response.json()
-            st.session_state.metadata_array = metadata["metadata"]
-
-    with res1:
-        st.components.v1.html(st.session_state.graph_data, height=600)
-    with res2:
-        st.table(st.session_state.metadata_array)
-
-with tab2:
+with tab_rqst:
     col1, col2 = st.columns(2)
 
     # Input for HTTP request
@@ -82,11 +51,9 @@ with tab2:
         df = pd.DataFrame(response.json()["df"])
         st.session_state.rules_table = format_directive_table(df)
 
-    # st.table(st.session_state.rules_table)
-    st.dataframe(st.session_state.rules_table, hide_index=True)
-    st.text(f"{len(st.session_state.rules_table)} rules found")
+    show_rules(st.session_state.rules_table)
 
-with tab3:
+with tab_cst:
     cst_name = st.text_input("Constant Name")
     if st.button("Search"):
         response = requests.get(f"{API_URL}/search_var/{cst_name}")
@@ -128,7 +95,7 @@ with tab3:
                     if response.status_code == 200:
                         df = pd.DataFrame(response.json()["results"])
                         created_by = format_directive_table(df)
-                        st.write(created_by)
+                        show_rules(created_by)
                     else:
                         st.error("Failed to fetch 'created by' information.")
 
@@ -138,7 +105,7 @@ with tab3:
                     if response.status_code == 200:
                         df = pd.DataFrame(response.json()["results"])
                         used_by = format_directive_table(df)
-                        st.write(used_by)
+                        show_rules(used_by)
                     else:
                         st.error("Failed to fetch 'used by' information.")
 
