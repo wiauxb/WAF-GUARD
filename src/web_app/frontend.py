@@ -1,10 +1,9 @@
+from frontend_functions import format_directive_table
 import streamlit as st
 import requests
 import pandas as pd
 
 API_URL = "http://fastapi:8000"
-COLUMNS_OF_INTEREST = ["node_id", "type", "args", "Location", "VirtualHost", "phase", "id", "tags", "msg"]
-COLUMNS_TO_REMOVE = ["Context"]
 
 st.set_page_config(page_title="Graph Query Interface", page_icon=":bar_chart:", layout="wide")
 
@@ -70,9 +69,7 @@ with tab2:
             # Run the generated Cypher query and display the graph
             response = requests.post(f"{API_URL}/run_cypher_to_json", json={"query": st.session_state.cypher_query})
             df = pd.DataFrame(response.json()["df"])
-            df = df.drop(COLUMNS_TO_REMOVE, axis=1)
-            df = pd.concat([df[COLUMNS_OF_INTEREST], df.drop(COLUMNS_OF_INTEREST, axis=1)], axis=1)
-            st.session_state.rules_table = df
+            st.session_state.rules_table = format_directive_table(df)
             # df = pd.DataFrame(response.json()["df"])
             # print(df.head())
             # sys.stdout.flush()
@@ -83,9 +80,7 @@ with tab2:
         st.session_state.cypher_query = query_field
         response = requests.post(f"{API_URL}/run_cypher_to_json", json={"query": st.session_state.cypher_query})
         df = pd.DataFrame(response.json()["df"])
-        df = df.drop(COLUMNS_TO_REMOVE, axis=1)
-        df = pd.concat([df[COLUMNS_OF_INTEREST], df.drop(COLUMNS_OF_INTEREST, axis=1)], axis=1)
-        st.session_state.rules_table = df
+        st.session_state.rules_table = format_directive_table(df)
 
     # st.table(st.session_state.rules_table)
     st.dataframe(st.session_state.rules_table, hide_index=True)
@@ -131,7 +126,8 @@ with tab3:
                     
                     response = requests.get(f"{API_URL}/get_setnode/{node['name']}/{node['value']}")
                     if response.status_code == 200:
-                        created_by = pd.DataFrame(response.json()["results"])
+                        df = pd.DataFrame(response.json()["results"])
+                        created_by = format_directive_table(df)
                         st.write(created_by)
                     else:
                         st.error("Failed to fetch 'created by' information.")
@@ -140,8 +136,9 @@ with tab3:
                     
                     response = requests.get(f"{API_URL}/use_node/{node['name']}/{node['value']}")
                     if response.status_code == 200:
-                        created_by = pd.DataFrame(response.json()["results"])
-                        st.write(created_by)
+                        df = pd.DataFrame(response.json()["results"])
+                        used_by = format_directive_table(df)
+                        st.write(used_by)
                     else:
                         st.error("Failed to fetch 'used by' information.")
 
