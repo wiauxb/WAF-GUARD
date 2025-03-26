@@ -15,6 +15,8 @@ from src.parser.helper_classes.timer import Timer
 def initialize_databases(neo4j_url, neo4j_user, neo4j_pass, postgres_url, postgres_user, postgres_pass):
     """Initialize and clear Neo4j and PostgreSQL databases."""
     os.system("./reset_neo4j_db.sh")
+    # sleep for 5 seconds to allow Neo4j to restart
+    time.sleep(5)
     graph = Neo4jDB(neo4j_url, neo4j_user, neo4j_pass)
     sql_db = PostgresDB(postgres_url, postgres_user, postgres_pass, "cwaf")
     sql_db.execute("DROP SCHEMA public CASCADE")

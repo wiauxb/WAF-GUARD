@@ -28,7 +28,7 @@ class Directive:
         self.Context = context.clone()
         self.node_id = node_id
         self.type = type.lower()
-        self.conditions = conditions
+        self.conditions = conditions.copy()
         self.phase = None
         self.constants = []
         self.variables = []

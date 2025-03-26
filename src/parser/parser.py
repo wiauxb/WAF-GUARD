@@ -37,7 +37,8 @@ def parse_compiled_config(file_path):
         if match_virtual_host:
             current_virtualhost = match_virtual_host.group(1)
             current_location = ""
-            current_if_level = 0
+            current_if_level = 0 #FIXME: why do I reset the if level here?
+            current_if_conditions = []
             continue
 
         # End VirtualHost
