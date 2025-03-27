@@ -38,6 +38,10 @@ class HttpRequest(BaseModel):
     location: str
     host: str
 
+class FileContextQuery(BaseModel):
+    file_path: str
+    line_num: int
+
 
 @app.post("/run_cypher")
 async def run_cypher(query: CypherQuery):
@@ -152,6 +156,31 @@ async def use_node(var_name: str, var_value: str):
 async def get_use_node(var_name: str, var_value: str):
     with neo4j_driver.session() as session:
         result = session.run(f"MATCH (c WHERE c.name = '{var_name}' AND c.value = '{var_value}')<-[:Uses]-(n) return n")
+        records = [r["n"] for r in result]
+        df = pd.DataFrame(records).fillna(-1)
+    return {"results" : df.to_dict(orient="records")}
+
+
+#get node_ids from a file_path and line_number
+@app.post("/get_node_ids")
+async def get_node_ids(query: FileContextQuery):
+    file_path = query.file_path
+    line_number = query.line_num
+    cursor = postgres_conn.cursor()
+    cursor.execute("""
+SELECT mc.nodeid
+FROM symboltable as st, macrocall as mc
+WHERE st.file_path = %(fp)s AND st.line_number = %(ln)s AND st.id = mc.ruleid
+UNION
+SELECT node_id
+FROM symboltable
+WHERE file_path = %(fp)s AND line_number = %(ln)s AND node_id IS NOT NULL
+""", {"fp":file_path, "ln": line_number})
+    node_ids = cursor.fetchall()
+    node_ids = [node_id[0] for node_id in node_ids]
+    # get the neo4j nodes for the node_ids
+    with neo4j_driver.session() as session:
+        result = session.run(f"MATCH (n) WHERE n.node_id in {node_ids} RETURN n")
         records = [r["n"] for r in result]
         df = pd.DataFrame(records).fillna(-1)
     return {"results" : df.to_dict(orient="records")}

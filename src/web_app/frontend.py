@@ -18,8 +18,10 @@ if "rules_table" not in st.session_state:
     st.session_state.rules_table = pd.DataFrame()
 if "cst_table" not in st.session_state:
     st.session_state.cst_table = pd.DataFrame()
+if "from_file_table" not in st.session_state:
+    st.session_state.from_file_table = pd.DataFrame()
 
-tab_rqst, tab_cst = st.tabs(["Request", "Constant"])
+tab_rqst, tab_cst, tab_neighbours, tab_from_file = st.tabs(["Request", "Constant", "Neighbours", "From File"])
 
 with tab_rqst:
     col1, col2 = st.columns(2)
@@ -30,7 +32,7 @@ with tab_rqst:
 
     # Button to submit HTTP request
     if st.button("Submit HTTP Request"):
-        response = requests.post(f"{API_URL}/parse_http_request", json={"location": location, "host": host})
+        response = requests.post(f"{API_URL}/parse_http_request", json={"location": location+".*", "host": host+".*"})
         if response.status_code != 200:
             st.error(response.content.decode())
         else:
@@ -111,3 +113,25 @@ with tab_cst:
 
     # where is it defind, to which rule it belongs, to what value it is set
     # list the rules that use this constant
+
+with tab_neighbours:
+    node_id = st.text_input("Node ID")
+    if st.button("Get Neighbours"):
+        response = requests.post(f"{API_URL}/run_cypher", json={"query": f"MATCH (n {{node_id: {node_id}}})-[r]-(m) RETURN *"})
+        graph = response.json()["html"]
+        st.components.v1.html(graph, height=600)
+
+with tab_from_file:
+    # inputs for file name and line number
+    file_name = st.text_input("Enter File Name")
+    line_number = st.text_input("Enter Line Number")
+
+    # Button to submit file request
+    if st.button("Submit File Request"):
+        response = requests.post(f"{API_URL}/get_node_ids", json={"file_path": file_name, "line_num": line_number})
+        if response.status_code != 200:
+            st.error(response.content.decode())
+        else:
+            df = pd.DataFrame(response.json()["results"])
+            st.session_state.from_file_table = format_directive_table(df)
+    show_rules(st.session_state.from_file_table)
