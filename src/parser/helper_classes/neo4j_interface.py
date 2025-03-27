@@ -32,7 +32,7 @@ class Neo4jDB:
         """Collects directives instead of executing immediately"""
         if isinstance(directive, DefineStr):
             self.definestr_batch.append(directive)
-        if isinstance(directive, SecRule):
+        elif isinstance(directive, SecRule):
             self.secrule_batch.append(directive)
         elif isinstance(directive, SecRuleRemoveById):
             self.removebyid_batch.append(directive)
