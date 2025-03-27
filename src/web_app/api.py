@@ -118,9 +118,13 @@ async def get_metadata(node_id: str):  #FIXME if node_id is not in a macro_call,
 
 @app.get("/search_var/{var_name}")
 async def search_var(var_name: str):
+    terms = var_name.split()
+    name_query = "~ ".join(terms)+"~"
     with neo4j_driver.session() as session:
-        result = session.run(f"MATCH (c WHERE c.name = '{var_name}') WHERE (c:Variable) or (c:Constant) or (c:Collection) RETURN c")
-        records = [record["c"] for record in result]
+        result = session.run(f"""
+                            CALL db.index.fulltext.queryNodes('cstIndex', 'name: \\\\"{name_query}\\\\"')
+                            YIELD node RETURN node""")
+        records = [record["node"] for record in result]
     formatted_records = []
     for record in records:
        tmp = dict(record)

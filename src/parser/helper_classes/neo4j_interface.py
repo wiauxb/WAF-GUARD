@@ -99,3 +99,8 @@ class Neo4jDB:
 
         # Run batch query
         self.query(query, batch=batch_prop)
+
+
+    def create_indexes(self):
+        self.flush_all_batch()
+        self.query(QueryFactory.create_indexes())
