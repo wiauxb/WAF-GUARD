@@ -139,7 +139,7 @@ async def get_setnode(var_name: str, var_value: str):
 async def local_get_setnode(var_name: str, var_value: str):
     print(var_name, var_value)
     with neo4j_driver.session() as session:
-        result = session.run(f"MATCH (c WHERE c.name = '{var_name}' AND c.value = '{var_value}')<-[:Sets]-(n) return n")
+        result = session.run(f"MATCH (c WHERE c.name = '{var_name}' AND c.value = '{var_value}')<-[:Sets|:Define]-(n) return n")
         records = [r["n"] for r in result]
         df = pd.DataFrame(records).fillna(-1)
     return {"results" : df.to_dict(orient="records")}
