@@ -1,3 +1,4 @@
+import sys
 from frontend_functions import *
 import streamlit as st
 import requests
@@ -93,7 +94,11 @@ with tab_cst:
 
                     st.subheader("Created by")
                     
-                    response = requests.get(f"{API_URL}/get_setnode/{node['name']}/{node['value']}")
+                    if pd.isna(node["value"]):
+                        response = requests.post(f"{API_URL}/get_setnode", json={"var_name": node["name"]})
+                    else:
+                        response = requests.post(f"{API_URL}/get_setnode", json={"var_name": node["name"], "var_value": node["value"]})
+
                     if response.status_code == 200:
                         df = pd.DataFrame(response.json()["results"])
                         created_by = format_directive_table(df)
@@ -103,7 +108,10 @@ with tab_cst:
 
                     st.subheader("Used by")
                     
-                    response = requests.get(f"{API_URL}/use_node/{node['name']}/{node['value']}")
+                    if pd.isna(node["value"]):
+                        response = requests.post(f"{API_URL}/use_node", json={"var_name": node["name"]})
+                    else:
+                        response = requests.post(f"{API_URL}/use_node", json={"var_name": node["name"], "var_value": node["value"]})
                     if response.status_code == 200:
                         df = pd.DataFrame(response.json()["results"])
                         used_by = format_directive_table(df)

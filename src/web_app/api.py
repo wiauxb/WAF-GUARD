@@ -1,3 +1,4 @@
+import sys
 from fastapi import FastAPI, Request
 from pydantic import BaseModel
 from neo4j import GraphDatabase
@@ -41,6 +42,10 @@ class HttpRequest(BaseModel):
 class FileContextQuery(BaseModel):
     file_path: str
     line_num: int
+
+class ConstantQuery(BaseModel):
+    var_name: str
+    var_value: str = None
 
 
 @app.post("/run_cypher")
@@ -132,34 +137,32 @@ async def search_var(var_name: str):
        formatted_records.append(tmp)
     return {"records": formatted_records}
 
-@app.get("/get_setnode/{var_name}")
-async def get_setnode_helper(var_name:str):
-    return await local_get_setnode(var_name, "")
+@app.post("/get_setnode")
+async def get_setnode(query: ConstantQuery):
+    var_name = query.var_name
+    var_value = query.var_value
+    if var_value is None:
+        return await local_get_setnode(f"MATCH (c {{name: '{var_name}'}})<-[:Sets|Define]-(n) WHERE c.value IS NULL return n")
+    return await local_get_setnode(f"MATCH (c {{name: '{var_name}', value: '{var_value}'}})<-[:Sets|Define]-(n) return n")
 
-@app.get("/get_setnode/{var_name}/{var_value}")
-async def get_setnode(var_name: str, var_value: str):
-    return await local_get_setnode(var_name, var_value)
-
-async def local_get_setnode(var_name: str, var_value: str):
-    print(var_name, var_value)
+async def local_get_setnode(query: str):
     with neo4j_driver.session() as session:
-        result = session.run(f"MATCH (c WHERE c.name = '{var_name}' AND c.value = '{var_value}')<-[:Sets|:Define]-(n) return n")
+        result = session.run(query)
         records = [r["n"] for r in result]
         df = pd.DataFrame(records).fillna(-1)
     return {"results" : df.to_dict(orient="records")}
 
+@app.post("/use_node")
+async def use_node(query: ConstantQuery):
+    var_name = query.var_name
+    var_value = query.var_value
+    if var_value is None:
+        return await get_use_node(f"MATCH (c {{name: '{var_name}'}})<-[:Uses]-(n) WHERE c.value IS NULL return n")
+    return await get_use_node(f"MATCH (c {{name: '{var_name}', value: '{var_value}'}})<-[:Uses]-(n) return n")
 
-@app.get("/use_node/{var_name}")
-async def use_node_helper(var_name:str):
-    return await get_use_node(var_name, "")
-
-@app.get("/use_node/{var_name}/{var_value}")
-async def use_node(var_name: str, var_value: str):
-    return await get_use_node(var_name, var_value)
-
-async def get_use_node(var_name: str, var_value: str):
+async def get_use_node(query: str):
     with neo4j_driver.session() as session:
-        result = session.run(f"MATCH (c WHERE c.name = '{var_name}' AND c.value = '{var_value}')<-[:Uses]-(n) return n")
+        result = session.run(query)
         records = [r["n"] for r in result]
         df = pd.DataFrame(records).fillna(-1)
     return {"results" : df.to_dict(orient="records")}
