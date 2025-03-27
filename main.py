@@ -85,6 +85,9 @@ def main(file_path):
         with Timer("Processing Directives"):
             process_directives(directives, graph, sql_db)
 
+        with Timer("Create Indexes"):
+            graph.create_indexes()
+
         graph.close()
         sql_db.close()
 
