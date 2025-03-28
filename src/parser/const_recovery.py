@@ -1,5 +1,5 @@
 import sys
-from src.parser.helper_classes import modsec
+from src.parser import apache, modsec
 from src.parser.helper_classes.context import FileContext, MacroContext
 from src.parser.helper_classes.directives import Directive
 import re
@@ -38,7 +38,7 @@ def tint_macro_def(args_from_target, ctx_ptr, initial_line, macro_def, macro_tin
             vars_to_tint = re.findall(r"[\$\@]\w+", arg)
             for var in vars_to_tint:
                 # This skip the @operators from modsecurity rules
-                if var in modsec.OPERATORS:
+                if var in modsec.OPERATORS or var in apache.SPECIAL_VARIABLES:
                     continue
                 if var in macro_def[ctx_ptr.macro_name]:
                     macro_tint[ctx_ptr.macro_name] = macro_tint.get(ctx_ptr.macro_name, []) + [
