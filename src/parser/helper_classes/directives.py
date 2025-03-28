@@ -98,6 +98,8 @@ class Directive:
             'VirtualHost': self.VirtualHost,
             'IfLevel': self.IfLevel,
             'conditions': self.conditions,
+            'constants': self.constants,
+            'variables': self.variables,
             'Context': str(self.Context)
         }
         if hasattr(self, 'id'):
