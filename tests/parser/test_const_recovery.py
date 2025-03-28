@@ -105,7 +105,7 @@ class TestConstRecovery(unittest.TestCase):
         with self.assertRaises(ValueError):
             recover_used_constants(directive)
 
-
+    #TODO: multiline directives inside macro and file context
 
 if __name__ == "__main__":
     unittest.main()

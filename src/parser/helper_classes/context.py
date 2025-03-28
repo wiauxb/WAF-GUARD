@@ -34,10 +34,10 @@ class FileContext(Context):
     def __str__(self):
         return f"{self.file_path}:{self.line_num}"
     
-    def find_line(self, target:str = ""):
+    def find_line(self):
         path = self.to_real_path()
         line_num = self.line_num
-        return Macro.find_line_inside_macro(path, line_num, target=target)
+        return Macro.find_line_inside_macro(path, line_num)
 
 
 class MacroContext(Context):
@@ -55,8 +55,8 @@ class MacroContext(Context):
     def get_signature(self):
         return Macro.parse_macro_def(self.definition.to_real_path(), self.definition.line_num)
 
-    def find_line(self, target:str = ""):
+    def find_line(self):
         path = self.definition.to_real_path()
         line_num = self.definition.line_num
         offset = self.line_num
-        return Macro.find_line_inside_macro(path, line_num, offset, target)
+        return Macro.find_line_inside_macro(path, line_num, offset)

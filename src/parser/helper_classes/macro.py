@@ -1,4 +1,3 @@
-
 import re
 
 
@@ -17,27 +16,38 @@ class Macro:
             raise Exception(f"Macro definition not found in {path}:{line}")
 
     @classmethod
-    def find_line_inside_macro(cls, path, line_num, offset = 0, target:str = ""):
+    def find_line_inside_macro(cls, path, line_num, offset=0):
         with open(path, 'r') as f:
             lines = f.readlines()
             if len(lines) < line_num + offset:
                 raise ValueError(f"Line {line_num + offset} does not exist in {path}")
-            line= lines[line_num-1]
+
+            # Start with the last line of the multiline structure
+            line = lines[line_num - 1].strip()
+
+            # Handle offset: Traverse forward if needed
             while offset > 0:
                 line_num += 1
                 if line_num > len(lines):
-                    # raise Exception(f"Line not found in {path}:{starting_line}, for directive {target}")
                     return ""
-                line = lines[line_num - 1]
-                if line.strip().startswith("#"):
+                line = lines[line_num - 1].strip()
+                if line.startswith("#"):  # Skip comments
                     continue
                 offset -= 1
-            if target:
-                while not re.match(rf"(?i)\s*(Use)?\s*{target}\s*", line):
-                # while not line.strip().lower().startswith(target.lower()):
-                    line_num += 1
-                    if line_num > len(lines):
-                        # raise Exception(f"Line not found in {path}:{starting_line}, for directive {target}")
-                        return ""
-                    line = lines[line_num - 1]
-        return line
+
+            full_line = line
+
+            # Handle multiline: Traverse backward to reconstruct the full directive
+            # We suppose here that the upper line is not a comment
+            while (line_num > 1 and lines[line_num - 2].strip().endswith("\\")):
+                line_num -= 1
+                line = lines[line_num - 1].strip()
+                full_line = line[:-1] + " " + full_line  # Concatenate the current line with the previous part
+
+            # Handle multiline: Traverse forward to reconstruct the full directive
+            while (line_num < len(lines) and full_line.endswith("\\")):
+                line_num += 1
+                line = lines[line_num - 1].strip()
+                full_line += full_line[:-1] + " " + line # Concatenate the current line with the next part
+
+        return full_line
