@@ -15,3 +15,9 @@ COLLECTIONS = ["ARGS","ARGS_COMBINED_SIZE","ARGS_GET","ARGS_GET_NAMES","ARGS_NAM
              "SESSIONID","STATUS_LINE","STREAM_INPUT_BODY","STREAM_OUTPUT_BODY","TIME","TIME_DAY","TIME_EPOCH","TIME_HOUR",
              "TIME_MIN","TIME_MON","TIME_SEC","TIME_WDAY","TIME_YEAR","TX","UNIQUE_ID","URLENCODED_ERROR","USERID","USERAGENT_IP",
              "WEBAPPID","WEBSERVER_ERROR_LOG","XML"]
+
+OPERATORS = ["@beginsWith", "@contains", "@containsWord", "@detectSQLi", "@detectXSS", "@endsWith", "@fuzzyHash", "@eq", "@ge",
+             "@geoLookup", "@gsbLookup", "@gt", "@inspectFile", "@ipMatch", "@ipMatchF", "@ipMatchFromFile", "@le", "@lt", "@noMatch",
+             "@pm", "@pmf", "@pmFromFile", "@rbl", "@rsub", "@rx", "@streq", "@strmatch", "@unconditionalMatch", "@validateByteRange",
+             "@validateDTD", "@validateHash", "@validateSchema", "@validateUrlEncoding", "@validateUtf8Encoding", "@verifyCC",
+             "@verifyCPF", "@verifySSN", "@within"]

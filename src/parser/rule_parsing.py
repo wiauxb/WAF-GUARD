@@ -8,6 +8,14 @@ def parse_arguments(args: str):
     # e.g. 'a b "c d"' -> ['a', 'b', 'c d']
     return re.findall(r'(?:\"[^\"]*\"|\'[^\']*\'|\S)+', args)
 
+def get_args_from_line(line:str):
+    args = parse_arguments(line)
+    if args[0].lower() == "use":
+        args = args[2:]
+    else:
+        args = args[1:]
+    return args
+
 
 # strip quotes from a string, only strip quotes if the string starts and ends with the same quote
 def strip_quotes(s: str):

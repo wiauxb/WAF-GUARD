@@ -1,4 +1,8 @@
 from copy import deepcopy
+import os
+import re
+
+from src.parser.helper_classes.macro import Macro
 
 
 class Context:
@@ -17,14 +21,23 @@ class Context:
     def pretty(self):
         return self.__str__()
 
-
 class FileContext(Context):
     def __init__(self, line_num : int, file_path : str):
         super().__init__(line_num)
         self.file_path = file_path
 
+    def to_real_path(self):
+        conf_path = os.path.join(os.environ["CONFIG_ROOT"], "conf", "")
+        begin_pattern = re.compile(r"^.*conf[/\\]")
+        return re.sub(begin_pattern, conf_path, self.file_path)
+
     def __str__(self):
         return f"{self.file_path}:{self.line_num}"
+    
+    def find_line(self, target:str = ""):
+        path = self.to_real_path()
+        line_num = self.line_num
+        return Macro.find_line_inside_macro(path, line_num, target=target)
 
 
 class MacroContext(Context):
@@ -38,3 +51,12 @@ class MacroContext(Context):
     
     def pretty(self):
         return f"\"{self.macro_name}\" : {self.definition.pretty()}\n{self.use.pretty()}"
+
+    def get_signature(self):
+        return Macro.parse_macro_def(self.definition.to_real_path(), self.definition.line_num)
+
+    def find_line(self, target:str = ""):
+        path = self.definition.to_real_path()
+        line_num = self.definition.line_num
+        offset = self.line_num
+        return Macro.find_line_inside_macro(path, line_num, offset, target)
