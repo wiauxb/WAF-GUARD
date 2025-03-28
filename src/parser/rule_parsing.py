@@ -10,6 +10,9 @@ def parse_arguments(args: str):
 
 def get_args_from_line(line:str):
     args = parse_arguments(line)
+    if len(args) < 2:
+        print(f"WARN: Not enough arguments in line: {line}")
+        return []
     if args[0].lower() == "use":
         args = args[2:]
     else:
