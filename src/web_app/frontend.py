@@ -94,7 +94,7 @@ with tab_cst:
 
                     st.subheader("Created by")
                     
-                    if pd.isna(node["value"]):
+                    if pd.isna(node.get("value", None)):
                         response = requests.post(f"{API_URL}/get_setnode", json={"var_name": node["name"]})
                     else:
                         response = requests.post(f"{API_URL}/get_setnode", json={"var_name": node["name"], "var_value": node["value"]})
@@ -108,7 +108,7 @@ with tab_cst:
 
                     st.subheader("Used by")
                     
-                    if pd.isna(node["value"]):
+                    if pd.isna(node.get("value", None)):
                         response = requests.post(f"{API_URL}/use_node", json={"var_name": node["name"]})
                     else:
                         response = requests.post(f"{API_URL}/use_node", json={"var_name": node["name"], "var_value": node["value"]})
