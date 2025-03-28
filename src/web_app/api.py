@@ -1,3 +1,4 @@
+import re
 import sys
 from fastapi import FastAPI, Request
 from pydantic import BaseModel
@@ -125,10 +126,12 @@ async def get_metadata(node_id: str):  #FIXME if node_id is not in a macro_call,
 async def search_var(var_name: str):
     terms = var_name.split()
     name_query = "~ ".join(terms)+"~"
+    name_query = name_query.replace('"', '\\"')
+    property = f'name: \\"{name_query}\\"'
     with neo4j_driver.session() as session:
         result = session.run(f"""
-                            CALL db.index.fulltext.queryNodes('cstIndex', 'name: \\\\"{name_query}\\\\"')
-                            YIELD node RETURN node""")
+                            CALL db.index.fulltext.queryNodes('cstIndex', $name_query)
+                            YIELD node RETURN node""", {"name_query": property})
         records = [record["node"] for record in result]
     formatted_records = []
     for record in records:
@@ -187,7 +190,7 @@ WHERE file_path = %(fp)s AND line_number = %(ln)s AND node_id IS NOT NULL
     node_ids = [node_id[0] for node_id in node_ids]
     # get the neo4j nodes for the node_ids
     with neo4j_driver.session() as session:
-        result = session.run(f"MATCH (n) WHERE n.node_id in {node_ids} RETURN n")
+        result = session.run(f"MATCH (n) WHERE n.node_id in $ids RETURN n", {"ids": node_ids})
         records = [r["n"] for r in result]
         df = pd.DataFrame(records).fillna(-1)
     return {"results" : df.to_dict(orient="records")}
