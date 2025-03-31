@@ -58,7 +58,7 @@ with tab_rqst:
 
 with tab_cst:
     cst_name = st.text_input("Constant Name")
-    if st.button("Search"):
+    if cst_name:
         response = requests.get(f"{API_URL}/search_var/{cst_name}")
         if response.status_code == 200:
             # st.dataframe(response.json()["records"])
@@ -115,7 +115,7 @@ with tab_cst:
 
 with tab_neighbours:
     node_id = st.text_input("Node ID")
-    if st.button("Get Neighbours"):
+    if node_id:
         response = requests.post(f"{API_URL}/run_cypher", json={"query": f"MATCH (n {{node_id: {node_id}}})-[r]-(m) RETURN *"})
         graph = response.json()["html"]
         st.components.v1.html(graph, height=600)
