@@ -22,7 +22,7 @@ if "cst_table" not in st.session_state:
 if "from_file_table" not in st.session_state:
     st.session_state.from_file_table = pd.DataFrame()
 
-tab_rqst, tab_cst, tab_neighbours, tab_from_file = st.tabs(["Request", "Constant", "Neighbours", "From File"])
+tab_rqst, tab_cst, tab_zoom, tab_from_file = st.tabs(["Request", "Constant", "Zoom", "From File"])
 
 with tab_rqst:
     col1, col2 = st.columns(2)
@@ -113,7 +113,7 @@ with tab_cst:
     # where is it defind, to which rule it belongs, to what value it is set
     # list the rules that use this constant
 
-with tab_neighbours:
+with tab_zoom:
     node_id = st.text_input("Node ID")
     if node_id:
         response = requests.post(f"{API_URL}/run_cypher", json={"query": f"MATCH (n {{node_id: {node_id}}})-[r]-(m) RETURN *"})
