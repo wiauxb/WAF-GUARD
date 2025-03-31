@@ -28,9 +28,6 @@ def recover_used_constants(directive: Directive):
         target_line = ctx_ptr.find_line()
         args_from_target = get_args_from_line(target_line)
         constants.update(extract_constants(args_from_target, macro_tint, target, initial_line))
-
-    for i in len(constants):
-        constants[i][0] = constants[i][0].upper()
     return constants
 
 
