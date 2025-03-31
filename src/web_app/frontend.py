@@ -1,10 +1,32 @@
 import streamlit as st
 import requests
 import pandas as pd
+from langchain_core.messages import AIMessage, HumanMessage
+import websockets.sync.client
+import asyncio
+
 
 API_URL = "http://fastapi:8000"
 COLUMNS_OF_INTEREST = ["node_id", "type", "args", "Location", "VirtualHost", "phase", "id", "tags", "msg"]
 COLUMNS_TO_REMOVE = ["Context"]
+WS_URL = "ws://chatbot:8005/ws"
+CHAT_URL = "http://chatbot:8005/chat"
+
+
+
+
+# def websocket_chatbot(prompt):
+#     """Synchronous function to communicate with WebSocket."""
+#     with websockets.sync.client.connect(WS_URL) as websocket:
+#         websocket.send(prompt)  # Send user message
+#         while True:
+#             message = websocket.recv()  # Receive response
+#             if message is None:
+#                 break  # Stop if no more messages
+#             yield message  # Yield message for streaming
+
+
+
 
 st.set_page_config(page_title="Graph Query Interface", page_icon=":bar_chart:", layout="wide")
 
@@ -18,7 +40,7 @@ if "cypher_query" not in st.session_state:
 if "rules_table" not in st.session_state:
     st.session_state.rules_table = pd.DataFrame()
 
-tab1, tab2, tab3 = st.tabs(["Queries", "Request", "Constant"])
+tab1, tab2, tab3, tab4 = st.tabs(["Queries", "Request", "Constant", "Chatbot"])
 
 with tab1:
     header = st.container()
@@ -94,3 +116,50 @@ with tab3:
     # where is it defind, to which rule it belongs, to what value it is set
     # list the rules that use this constant
     pass
+
+with tab4:
+    c=st.container()
+    # Initialize messages in session state if not already
+    if "messages" not in st.session_state:
+        st.session_state["messages"] = [AIMessage(content="How can I help you?")]
+
+    # Render the chat messages
+    for msg in st.session_state.messages:
+        if isinstance(msg, AIMessage):
+            c.chat_message("assistant").write(msg.content)
+        if isinstance(msg, HumanMessage):
+            c.chat_message("user").write(msg.content)
+
+    # Take user input and process it through the selected graph
+    if prompt := st.chat_input():
+        st.session_state.messages.append(HumanMessage(content=prompt))
+        # st.chat_message("user").write(prompt)
+
+        with c.chat_message("user"):
+            st.markdown(prompt)
+
+
+        with c.chat_message("assistant"):
+
+        # Convert messages to the format expected by the API
+            messages = []
+            for message in st.session_state.messages:
+                if isinstance(message, HumanMessage):
+                    messages.append({"role": "user", "content": message.content})
+                elif isinstance(message, AIMessage):
+                    messages.append({"role": "assistant", "content": message.content})
+            messages.append({"role": "user", "content": prompt})
+            payload = {"messages": messages}
+
+            # print(payload)
+            response = requests.post(CHAT_URL, json=payload).json()
+            # print(response, flush=True)
+            last_msg = AIMessage(content=response["messages"][-1]["content"],kwargs=response["messages"][-1]["additional_kwargs"])
+            st.markdown(last_msg.content)
+        
+        st.session_state.messages.append(last_msg)
+
+
+
+
+

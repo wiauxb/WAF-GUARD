@@ -11,6 +11,11 @@ services:
       - ${DOCKER_DATA_PATH}/neo4j/plugins:/plugins
     environment:
       - NEO4J_AUTH=${NEO4J_USER}/${NEO4J_PASSWORD}
+      - NEO4J_apoc_export_file_enabled=true 
+      - NEO4J_apoc_import_file_enabled=true 
+      - NEO4J_apoc_import_file_use__neo4j__config=true 
+      - NEO4J_dbms_security_procedures_unrestricted=*
+      - NEO4J_PLUGINS=["apoc"]
     ports:
       - "7474:7474"
       - "7687:7687"
@@ -34,7 +39,7 @@ services:
     volumes:
       - ${DOCKER_DATA_PATH}/postgres:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready"]
+      test: [ "CMD-SHELL", "pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}"]
       interval: 1s
       timeout: 5s
       retries: 10
@@ -85,3 +90,32 @@ services:
     depends_on:
       fastapi:
         condition: service_started
+
+
+  chatbot:
+    container_name: chatbot
+    build: 
+      dockerfile: chatbot_dockerfile
+      context: ./docker
+    volumes:
+      - ${CHATBOT_PATH}:/app
+      - ${DOCKER_DATA_PATH}/chromadb:/chromadb
+    working_dir: /app
+    ports:
+      - "8005:8005"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2}
+      - LANGCHAIN_ENDPOINT=${LANGCHAIN_ENDPOINT}
+      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
+      - LANGCHAIN_PROJECT=${LANGCHAIN_PROJECT}
+    depends_on:
+      fastapi:
+        condition: service_started
+      neo4j:
+        condition: service_started
+      postgres:
+        condition: service_started
+      streamlit:
+        condition: service_started
+    entrypoint: "/start_chat.sh"
