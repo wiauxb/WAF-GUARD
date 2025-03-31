@@ -120,6 +120,14 @@ with tab_neighbours:
         graph = response.json()["html"]
         st.components.v1.html(graph, height=600)
 
+    # show metadata
+        response = requests.get(f"{API_URL}/get_metadata/{node_id}")
+        if response.status_code == 200:
+            metadata = pd.DataFrame(response.json()["metadata"], columns=["call_macro", "file_path", "line_number"])
+            st.dataframe(metadata, hide_index=True)
+        else:
+            st.error(response.content.decode())
+
 with tab_from_file:
     # inputs for file name and line number
     file_name = st.text_input("Enter File Name")
