@@ -24,6 +24,7 @@ class Macro:
 
             # Start with the last line of the multiline structure
             line = lines[line_num - 1].strip()
+            full_line = line
 
             # Handle offset: Traverse forward if needed
             while offset > 0:
@@ -31,11 +32,17 @@ class Macro:
                 if line_num > len(lines):
                     return ""
                 line = lines[line_num - 1].strip()
+                full_line = line
                 if line.startswith("#"):  # Skip comments
                     continue
-                offset -= 1
 
-            full_line = line
+                # Handle multiline: Traverse forward to reconstruct the full directive
+                while (line_num < len(lines) and full_line.endswith("\\")):
+                    line_num += 1
+                    line = lines[line_num - 1].strip()
+                    full_line += full_line[:-1] + " " + line # Concatenate the current line with the next part
+
+                offset -= 1
 
             # Handle multiline: Traverse backward to reconstruct the full directive
             # We suppose here that the upper line is not a comment
@@ -43,11 +50,5 @@ class Macro:
                 line_num -= 1
                 line = lines[line_num - 1].strip()
                 full_line = line[:-1] + " " + full_line  # Concatenate the current line with the previous part
-
-            # Handle multiline: Traverse forward to reconstruct the full directive
-            while (line_num < len(lines) and full_line.endswith("\\")):
-                line_num += 1
-                line = lines[line_num - 1].strip()
-                full_line += full_line[:-1] + " " + line # Concatenate the current line with the next part
 
         return full_line
