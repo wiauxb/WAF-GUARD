@@ -15,7 +15,7 @@ COLUMNS_OF_INTEREST = ["node_id", "type", "args", "Location", "VirtualHost", "ph
 COLUMNS_TO_REMOVE = ["Context"]
 
 # modified version of function from https://blog.streamlit.io/auto-generate-a-dataframe-filtering-ui-in-streamlit-with-filter_dataframe/
-def filter_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+def filter_dataframe(df: pd.DataFrame, key = None) -> pd.DataFrame:
     """
     Adds a UI on top of a dataframe to let viewers filter columns
 
@@ -25,7 +25,10 @@ def filter_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     Returns:
         pd.DataFrame: Filtered dataframe
     """
-    modify = st.checkbox("Add filters", key=f"add_filters_{hash(df.to_string())}")
+    if key:
+        modify = st.checkbox("Add filters", key=f"add_filters_{key}")
+    else:
+        modify = st.checkbox("Add filters", key=f"add_filters_{hash(df.to_string())}")
 
     if not modify:
         return df
@@ -46,7 +49,10 @@ def filter_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     modification_container = st.container()
 
     with modification_container:
-        to_filter_columns = st.multiselect("Filter dataframe on", df.columns, key=f"filter_columns_{hash(df.to_string())}")
+        if key:
+            to_filter_columns = st.multiselect("Filter dataframe on", df.columns, key=f"filter_columns_{key}")
+        else:
+            to_filter_columns = st.multiselect("Filter dataframe on", df.columns, key=f"filter_columns_{hash(df.to_string())}")
         for column in to_filter_columns:
             left, right = st.columns((1, 31))
             left.write("↳")
@@ -105,17 +111,18 @@ def format_directive_table(directive_table: pd.DataFrame) -> pd.DataFrame:
     directive_table = pd.concat([directive_table[existing_columns], directive_table.drop(existing_columns, axis=1)], axis=1)
     return directive_table
 
-def show_rules(directive_table: pd.DataFrame, container: st = st):
+def show_rules(directive_table: pd.DataFrame, container: st = st, key = None):
     if directive_table.empty:
         container.dataframe(directive_table)
         container.text("No rules found")
         return
-    filtered = filter_dataframe(directive_table)
+    filtered = filter_dataframe(directive_table, key=key)
     edited_dirs = container.dataframe(
         filtered,
         on_select="rerun",
         selection_mode="multi-row",
-        hide_index=True)
+        hide_index=True,
+        key=f"directives_dataframe_{key}")
     container.text(f"{len(filtered)} rules found")
 
     selected = filtered.iloc[edited_dirs.selection.rows]['node_id'].map(lambda x: str(x)).tolist()

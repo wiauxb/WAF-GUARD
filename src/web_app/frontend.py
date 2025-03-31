@@ -54,7 +54,7 @@ with tab_rqst:
         df = pd.DataFrame(response.json()["df"])
         st.session_state.rules_table = format_directive_table(df)
 
-    show_rules(st.session_state.rules_table)
+    show_rules(st.session_state.rules_table, key="rules_table")
 
 with tab_cst:
     cst_name = st.text_input("Constant Name")
@@ -93,7 +93,7 @@ with tab_cst:
                 if response.status_code == 200:
                     df = pd.DataFrame(response.json()["results"])
                     created_by = format_directive_table(df)
-                    show_rules(created_by)
+                    show_rules(created_by, key=f"created_by_{selected[i]}")
                 else:
                     st.error("Failed to fetch 'created by' information.")
 
@@ -106,7 +106,7 @@ with tab_cst:
                 if response.status_code == 200:
                     df = pd.DataFrame(response.json()["results"])
                     used_by = format_directive_table(df)
-                    show_rules(used_by)
+                    show_rules(used_by, key=f"used_by_{selected[i]}")
                 else:
                     st.error("Failed to fetch 'used by' information.")
 
@@ -141,4 +141,4 @@ with tab_from_file:
         else:
             df = pd.DataFrame(response.json()["results"])
             st.session_state.from_file_table = format_directive_table(df)
-    show_rules(st.session_state.from_file_table)
+    show_rules(st.session_state.from_file_table, key="from_file_table")
