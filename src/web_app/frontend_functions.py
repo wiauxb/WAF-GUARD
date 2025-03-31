@@ -118,7 +118,7 @@ def show_rules(directive_table: pd.DataFrame, container: st = st):
         hide_index=True)
     container.text(f"{len(filtered)} rules found")
 
-    selected = directive_table.iloc[edited_dirs.selection.rows]['node_id'].map(lambda x: str(x)).tolist()
+    selected = filtered.iloc[edited_dirs.selection.rows]['node_id'].map(lambda x: str(x)).tolist()
     if selected:
         sub_tabs = container.tabs(selected)
         for i, t in enumerate(sub_tabs):
