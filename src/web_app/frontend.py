@@ -3,8 +3,15 @@ from frontend_functions import *
 import streamlit as st
 import requests
 import pandas as pd
+from langchain_core.messages import AIMessage, HumanMessage
+import websockets.sync.client
+import asyncio
+
 
 API_URL = "http://fastapi:8000"
+WS_URL = "ws://chatbot:8005/ws"
+CHAT_URL = "http://chatbot:8005/chat"
+
 
 st.set_page_config(page_title="Graph Query Interface", page_icon=":bar_chart:", layout="wide")
 
@@ -22,7 +29,7 @@ if "cst_table" not in st.session_state:
 if "from_file_table" not in st.session_state:
     st.session_state.from_file_table = pd.DataFrame()
 
-tab_rqst, tab_cst, tab_neighbours, tab_from_file = st.tabs(["Request", "Constant", "Neighbours", "From File"])
+tab_rqst, tab_cst, tab_neighbours, tab_from_file, tab_chatbot = st.tabs(["Request", "Constant", "Neighbours", "From File", "Chatbot"])
 
 with tab_rqst:
     col1, col2 = st.columns(2)
@@ -143,3 +150,50 @@ with tab_from_file:
             df = pd.DataFrame(response.json()["results"])
             st.session_state.from_file_table = format_directive_table(df)
     show_rules(st.session_state.from_file_table)
+
+with tab_chatbot:
+    c=st.container()
+    # Initialize messages in session state if not already
+    if "messages" not in st.session_state:
+        st.session_state["messages"] = [AIMessage(content="How can I help you?")]
+
+    # Render the chat messages
+    for msg in st.session_state.messages:
+        if isinstance(msg, AIMessage):
+            c.chat_message("assistant").write(msg.content)
+        if isinstance(msg, HumanMessage):
+            c.chat_message("user").write(msg.content)
+
+    # Take user input and process it through the selected graph
+    if prompt := st.chat_input():
+        st.session_state.messages.append(HumanMessage(content=prompt))
+        # st.chat_message("user").write(prompt)
+
+        with c.chat_message("user"):
+            st.markdown(prompt)
+
+
+        with c.chat_message("assistant"):
+
+        # Convert messages to the format expected by the API
+            messages = []
+            for message in st.session_state.messages:
+                if isinstance(message, HumanMessage):
+                    messages.append({"role": "user", "content": message.content})
+                elif isinstance(message, AIMessage):
+                    messages.append({"role": "assistant", "content": message.content})
+            messages.append({"role": "user", "content": prompt})
+            payload = {"messages": messages}
+
+            # print(payload)
+            response = requests.post(CHAT_URL, json=payload).json()
+            # print(response, flush=True)
+            last_msg = AIMessage(content=response["messages"][-1]["content"],kwargs=response["messages"][-1]["additional_kwargs"])
+            st.markdown(last_msg.content)
+        
+        st.session_state.messages.append(last_msg)
+
+
+
+
+

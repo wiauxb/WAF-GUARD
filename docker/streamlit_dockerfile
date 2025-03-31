@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip3 install streamlit pandas
+RUN pip3 install streamlit pandas langchain websockets
 
 EXPOSE 8501
 
