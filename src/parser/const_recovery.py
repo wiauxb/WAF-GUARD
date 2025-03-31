@@ -28,6 +28,9 @@ def recover_used_constants(directive: Directive):
         target_line = ctx_ptr.find_line()
         args_from_target = get_args_from_line(target_line)
         constants.update(extract_constants(args_from_target, macro_tint, target, initial_line))
+
+    for i in len(constants):
+        constants[i][0] = constants[i][0].upper()
     return constants
 
 
@@ -53,8 +56,6 @@ def extract_constants(args_from_target, macro_tint, macro_called, initial_line =
     constants = set()
     for i, arg in enumerate(args_from_target):
         if i in macro_tint.get(macro_called, []) or initial_line:
-            constants_from_line = re.findall(r"[\~\$]\{(?P<name>.*?)\}", arg)
-            envvar_from_line = re.findall(r"\%\{(?P<name>.*?)\}", arg)
+            constants_from_line = re.findall(r"[\~\$\%]\{(?:(?P<collection>[^:.,{}]*?)[:.])?(?P<name>[^:.,{}]*?)\}", arg)
             constants.update(constants_from_line)
-            constants.update(envvar_from_line)
     return constants

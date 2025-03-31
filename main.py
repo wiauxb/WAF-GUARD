@@ -4,7 +4,7 @@ import time
 import math
 import argparse
 from dotenv import load_dotenv
-from src.parser.helper_classes import modsec
+from src.parser import modsec
 from src.parser.const_recovery import recover_used_constants
 from src.parser.parser import parse_compiled_config
 from src.parser.helper_classes.neo4j_interface import Neo4jDB
@@ -39,14 +39,15 @@ def process_directives(directives, graph, sql_db):
     for i, directive in enumerate(directives):
         names = recover_used_constants(directive)
         consts, variables = [], []
-        for const in names:
-            parsed = const.split(".")
-            if parsed[0].upper() in modsec.COLLECTIONS:
-                if len(parsed) == 1:
-                    parsed.append("")
-                variables.extend(parsed)
+        for collection, const in names:
+            # parsed = const.split(".")
+            if collection in modsec.COLLECTIONS:
+                variables.extend((collection, const))
+            elif collection != "":
+                consts.append(collection+"."+const)#TODO change the consts to be a dict with the collection and const
             else:
                 consts.append(const)
+
         directive.add_constant(consts)
         directive.add_variable(variables)
         graph.add_neo4j(directive)
