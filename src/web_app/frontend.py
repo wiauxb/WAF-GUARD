@@ -63,61 +63,52 @@ with tab_cst:
         if response.status_code == 200:
             # st.dataframe(response.json()["records"])
             st.session_state.cst_table = pd.DataFrame(response.json()["records"])
-            st.session_state.cst_table["selected"] = False
         else:
             st.error(response.content.decode())
     
     # what is the constant: Constant, Variable, or SubVariable
-    edited_cst_table = st.data_editor(
+    edited_cst_table = st.dataframe(
         st.session_state.cst_table,
-        column_config={
-            "selected": st.column_config.CheckboxColumn(
-                default=False,
-                pinned=True,
-            )
-        },
         # column_order=["selected", "name", "value", "labels"],
-        disabled=["name", "value", "labels"],
         # hide_index=True,
+        on_select="rerun",
+        # selection_mode="single-row",
     )
 
-    if not edited_cst_table.empty:
-        # selected = edited_cst_table[edited_cst_table["selected"]]
-        # selected = selected.drop("selected", axis=1)
-        selected = list(edited_cst_table.index[edited_cst_table["selected"]].map(lambda x: str(x)))
-        if selected:
-            sub_tabs = st.tabs(selected)
-            for i, t in enumerate(sub_tabs):
-                with t:
-                    node = edited_cst_table.iloc[int(selected[i])]
-                    
+    selected = [str(i) for i in edited_cst_table.selection.rows]
+    if selected:
+        sub_tabs = st.tabs(selected)
+        for i, t in enumerate(sub_tabs):
+            with t:
+                node = st.session_state.cst_table.iloc[int(selected[i])]
+                
 
-                    st.subheader("Created by")
-                    
-                    if pd.isna(node.get("value", None)):
-                        response = requests.post(f"{API_URL}/get_setnode", json={"var_name": node["name"]})
-                    else:
-                        response = requests.post(f"{API_URL}/get_setnode", json={"var_name": node["name"], "var_value": node["value"]})
+                st.subheader("Created by")
+                
+                if pd.isna(node.get("value", None)):
+                    response = requests.post(f"{API_URL}/get_setnode", json={"var_name": node["name"]})
+                else:
+                    response = requests.post(f"{API_URL}/get_setnode", json={"var_name": node["name"], "var_value": node["value"]})
 
-                    if response.status_code == 200:
-                        df = pd.DataFrame(response.json()["results"])
-                        created_by = format_directive_table(df)
-                        show_rules(created_by)
-                    else:
-                        st.error("Failed to fetch 'created by' information.")
+                if response.status_code == 200:
+                    df = pd.DataFrame(response.json()["results"])
+                    created_by = format_directive_table(df)
+                    show_rules(created_by)
+                else:
+                    st.error("Failed to fetch 'created by' information.")
 
-                    st.subheader("Used by")
-                    
-                    if pd.isna(node.get("value", None)):
-                        response = requests.post(f"{API_URL}/use_node", json={"var_name": node["name"]})
-                    else:
-                        response = requests.post(f"{API_URL}/use_node", json={"var_name": node["name"], "var_value": node["value"]})
-                    if response.status_code == 200:
-                        df = pd.DataFrame(response.json()["results"])
-                        used_by = format_directive_table(df)
-                        show_rules(used_by)
-                    else:
-                        st.error("Failed to fetch 'used by' information.")
+                st.subheader("Used by")
+                
+                if pd.isna(node.get("value", None)):
+                    response = requests.post(f"{API_URL}/use_node", json={"var_name": node["name"]})
+                else:
+                    response = requests.post(f"{API_URL}/use_node", json={"var_name": node["name"], "var_value": node["value"]})
+                if response.status_code == 200:
+                    df = pd.DataFrame(response.json()["results"])
+                    used_by = format_directive_table(df)
+                    show_rules(used_by)
+                else:
+                    st.error("Failed to fetch 'used by' information.")
 
     # where is it defind, to which rule it belongs, to what value it is set
     # list the rules that use this constant
