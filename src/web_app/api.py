@@ -145,12 +145,12 @@ async def get_setnode(query: ConstantQuery):
     var_name = query.var_name
     var_value = query.var_value
     if var_value is None:
-        return await local_get_setnode(f"MATCH (c {{name: '{var_name}'}})<-[:Sets|Define]-(n) WHERE c.value IS NULL return n")
-    return await local_get_setnode(f"MATCH (c {{name: '{var_name}', value: '{var_value}'}})<-[:Sets|Define]-(n) return n")
+        return await local_get_setnode(f"MATCH (c {{name: $name}})<-[:Sets|Define]-(n) WHERE c.value IS NULL return n", {'name': var_name})
+    return await local_get_setnode(f"MATCH (c {{name: $name, value: $value}})<-[:Sets|Define]-(n) return n", {'name': var_name, 'value': var_value})
 
-async def local_get_setnode(query: str):
+async def local_get_setnode(query: str, params):
     with neo4j_driver.session() as session:
-        result = session.run(query)
+        result = session.run(query, params)
         records = [r["n"] for r in result]
         df = pd.DataFrame(records).fillna(-1)
     return {"results" : df.to_dict(orient="records")}
