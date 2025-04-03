@@ -21,6 +21,7 @@ docker compose cp $1 neo4j:/tmp
 docker compose exec -it neo4j chown -R neo4j:neo4j /tmp/$1
 docker compose exec -it --user neo4j neo4j neo4j stop
 docker compose exec -it --user neo4j neo4j neo4j-admin database load neo4j --from-path=/tmp/$1 --overwrite-destination
+docker compose exec -it neo4j rm -rf /tmp/$1
 docker compose exec -it --user neo4j neo4j neo4j start
 
 docker compose exec -it postgres mkdir /tmp/$1
