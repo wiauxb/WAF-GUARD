@@ -248,8 +248,11 @@ class SecRule(Directive):
             raise Exception(f"Invalid SecRule directive: {self.args}")
 
         var_pattern = re.compile(r"\|?[!&]{0,2}([^:\s|]+)(?::((?:\'.*?\')|(?:\".*?\")|(?:\/.+?\/)|(?:[^|]*)))?")
-        self.secrule_vars = re.findall(var_pattern, rule_parsing.strip_quotes(parsed[0]))
-        self.num_of_vars = len(self.secrule_vars)
+        tmp = re.findall(var_pattern, rule_parsing.strip_quotes(parsed[0]))
+        self.num_of_vars = len(tmp)
+        self.secrule_vars = []
+        for coll, var in tmp:
+            self.secrule_vars.append((coll.upper(), var))
         self.secrule_vars = [rule_parsing.strip_quotes(var) for variables in self.secrule_vars for var in variables]
 
         self.secrule_op = parsed[1]

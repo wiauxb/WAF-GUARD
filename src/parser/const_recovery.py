@@ -54,5 +54,10 @@ def extract_constants(args_from_target, macro_tint, macro_called, initial_line =
     for i, arg in enumerate(args_from_target):
         if i in macro_tint.get(macro_called, []) or initial_line:
             constants_from_line = re.findall(r"[\~\$\%]\{(?:(?P<collection>[^:.,{}]*?)[:.])?(?P<name>[^:.,{}]*?)\}", arg)
-            constants.update(constants_from_line)
+            tmp = []
+            for i in range(len(constants_from_line)):
+                collection = constants_from_line[i][0]
+                name = constants_from_line[i][1]
+                tmp.append((collection.upper(), name))
+            constants.update(tmp)
     return constants
