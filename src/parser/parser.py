@@ -1,6 +1,6 @@
 import re
 from src.parser.helper_classes.context import *
-from src.parser.helper_classes.directives import DirectiveFactory
+from src.parser.helper_classes.directive_factory import DirectiveFactory
 
 
 def parse_compiled_config(file_path):

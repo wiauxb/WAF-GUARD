@@ -4,21 +4,6 @@ import sys
 from src.parser.helper_classes.context import Context
 import src.parser.rule_parsing as rule_parsing
 
-class DirectiveFactory:
-
-    @classmethod
-    def create(cls, location, virtual_host, if_level, context, node_id, type, conditions, args):
-        if type.lower() == 'secruleremovebytag':
-            return SecRuleRemoveByTag(location, virtual_host, if_level, context, node_id, type, conditions, args)
-        elif type.lower() == 'secruleremovebyid':
-            return SecRuleRemoveById(location, virtual_host, if_level, context, node_id, type, conditions, args)
-        elif type.lower() in ["definestr", "setenv"]:
-            return DefineStr(location, virtual_host, if_level, context, node_id, type, conditions, args)
-        elif type.lower() in ["secrule"]:
-            return SecRule(location, virtual_host, if_level, context, node_id, type, conditions, args)
-        else:
-            return Directive(location, virtual_host, if_level, context, node_id, type, conditions, args)
-
 class Directive:
 
     def __init__(self, location, virtual_host, if_level, context, node_id, type, conditions, args = ''):
