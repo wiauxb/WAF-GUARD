@@ -12,7 +12,6 @@ class PostgresDB:
             password=password,
             database=database
         )
-        self.init_tables() #FIXME: should it be enabled by default?
         self.prepare_statements()
 
     def init_tables(self):

@@ -34,7 +34,7 @@ def process_directives(directives, graph, sql_db):
     loop_timer = Timer("Process Dirs")
     loop_timer.start()
 
-    for i, directive in enumerate(directives):
+    for i, directive in enumerate(directives): #TODO add tqdm
         graph.add_neo4j(directive)
         sql_db.add_sql(directive)
 

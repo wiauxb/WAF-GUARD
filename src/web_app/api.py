@@ -105,7 +105,7 @@ async def parse_http_request(request: HttpRequest):
 
 
 @app.get("/get_metadata/{node_id}")
-async def get_metadata(node_id: str):  #FIXME if node_id is not in a macro_call, it will return an empty list
+async def get_metadata(node_id: str):
     cursor = postgres_conn.cursor()
     cursor.execute(
         """

@@ -220,7 +220,7 @@ def parse_args_setvar(args):
     for key in separated_vars:
         splitted = key.split('.')
         if len(splitted) != 2:
-            vars[None] = vars.get(None, []) + [(key, separated_vars[key])] #[separated_vars[key]] #FIXME this break the hypothesis of key -> tuple of lentgh 2
+            vars[None] = vars.get(None, []) + [(key, separated_vars[key])]
         else:
             vars[splitted[0].upper()] = vars.get(splitted[0].upper(), []) + [(splitted[1], separated_vars[key])]
     collected_vars_no_value = {}
