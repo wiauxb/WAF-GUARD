@@ -4,7 +4,7 @@ import time
 import math
 import argparse
 from dotenv import load_dotenv
-from src.parser.helper_classes import modsec
+from src.parser import modsec
 from src.parser.const_recovery import recover_used_constants
 from src.parser.parser import parse_compiled_config
 from src.parser.helper_classes.neo4j_interface import Neo4jDB
