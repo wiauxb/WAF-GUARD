@@ -85,3 +85,4 @@ services:
     depends_on:
       fastapi:
         condition: service_started
+        restart: true
