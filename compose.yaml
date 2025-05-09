@@ -59,6 +59,7 @@ services:
     volumes:
       - ${PWD}/.env:/app/.env
       - ${WEB_APP_PATH}:/app
+      - ${DOCKER_DATA_PATH}/shared:/shared
     working_dir: /app
     ports:
       - "8000:8000"
@@ -70,6 +71,9 @@ services:
       neo4j:
         condition: service_healthy
         restart: true
+      waf:
+        condition: service_started
+        restart: true
 
   streamlit:
     container_name: streamlit
@@ -78,6 +82,7 @@ services:
       context: ./docker
     volumes:
       - ${WEB_APP_PATH}:/app
+      - ${DOCKER_DATA_PATH}/shared:/shared
     working_dir: /app
     ports:
       - "8501:8501"
@@ -86,3 +91,16 @@ services:
       fastapi:
         condition: service_started
         restart: true
+
+  waf:
+    container_name: waf
+    build:
+      dockerfile: waf_dockerfile
+      context: ./docker
+    privileged: true
+    volumes:
+      - ${SRC_PATH}/waf_rest_api:/opt/api
+    ports:
+      - "9090:8000"
+    working_dir: /opt/api
+    command: "fastapi dev main.py --host 0.0.0.0 --port 8000"

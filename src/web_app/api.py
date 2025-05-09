@@ -1,6 +1,8 @@
 import re
 import sys
-from fastapi import FastAPI, Request
+
+import requests
+from fastapi import FastAPI, UploadFile, File, HTTPException
 from pydantic import BaseModel
 from neo4j import GraphDatabase
 from pyvis.network import Network
@@ -10,6 +12,8 @@ import os
 import psycopg2
 
 load_dotenv()
+
+WAF_URL = "http://waf:8000"
 
 app = FastAPI()
 
@@ -194,6 +198,85 @@ WHERE file_path = %(fp)s AND line_number = %(ln)s AND node_id IS NOT NULL
         records = [r["n"] for r in result]
         df = pd.DataFrame(records).fillna(-1)
     return {"results" : df.to_dict(orient="records")}
+
+# @app.post("/store_config")
+# async def store_config(request: Request):
+#     data = await request.json()
+#     config_name = data.get("name")
+#     config_nickname = data.get("nickname")
+#     config_path = data.get("path")
+#     if not config_name or not config_nickname or not config_path:
+#         return {"error": "Invalid input"}
+    
+#     # Store the config in PostgreSQL
+#     cursor = postgres_conn.cursor()
+#     cursor.execute("""
+#         INSERT INTO configs (name, nickname, path)
+#         VALUES (%s, %s, %s)
+#         RETURNING id
+#     """, (config_name, config_nickname, config_path))
+#     config_id = cursor.fetchone()[0]
+#     postgres_conn.commit()
+    
+#     return {"config_id": config_id}
+
+# @app.get("/configs")
+# async def get_configs():
+#     cursor = postgres_conn.cursor()
+#     cursor.execute("SELECT * FROM configs")
+#     configs = cursor.fetchall()
+#     return {"configs": configs}
+
+# @app.get("/configs/name/{config_name}")
+# async def get_config_by_nickname(config_name: str):
+#     cursor = postgres_conn.cursor()
+#     cursor.execute("SELECT * FROM configs WHERE name = %s", (config_name,))
+#     config = cursor.fetchone()
+#     if config:
+#         return {"config": config}
+# @app.post("/store_config")
+# async def store_config(request: Request):
+#     data = await request.json()
+#     config_name = data.get("name")
+#     config_nickname = data.get("nickname")
+#     config_path = data.get("path")
+#     if not config_name or not config_nickname or not config_path:
+#         return {"error": "Invalid input"}
+    
+#     # Store the config in PostgreSQL
+#     cursor = postgres_conn.cursor()
+#     cursor.execute("""
+#         INSERT INTO configs (name, nickname, path)
+#         VALUES (%s, %s, %s)
+#         RETURNING id
+#     """, (config_name, config_nickname, config_path))
+#     config_id = cursor.fetchone()[0]
+#     postgres_conn.commit()
+    
+#     return {"config_id": config_id}
+
+# @app.get("/configs")
+# async def get_configs():
+#     cursor = postgres_conn.cursor()
+#     cursor.execute("SELECT * FROM configs")
+#     configs = cursor.fetchall()
+#     return {"configs": configs}
+
+# @app.get("/configs/name/{config_name}")
+# async def get_config_by_nickname(config_name: str):
+#     cursor = postgres_conn.cursor()
+#     cursor.execute("SELECT * FROM configs WHERE name = %s", (config_name,))
+#     config = cursor.fetchone()
+#     if config:
+#         return {"config": config}
+
+@app.post("/get_dump")
+async def get_dump(file: UploadFile = File(...)):
+    response = requests.post(f"{WAF_URL}/get_dump", files={"file": (file.filename, file.file, file.content_type)})
+    if response.status_code != 200:
+        raise HTTPException(status_code=500, detail="Failed to get config dump" + response.text)
+    else:
+        return response.json()
 
 @app.get("/health")
 async def health():
