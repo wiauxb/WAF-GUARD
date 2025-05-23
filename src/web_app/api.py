@@ -1,8 +1,13 @@
+import hashlib
+from pathlib import Path
 import re
 import sys
+import time
+import uuid
+import zipfile
 
 import requests
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from pydantic import BaseModel
 from neo4j import GraphDatabase
 from pyvis.network import Network
@@ -28,11 +33,18 @@ neo4j_driver = GraphDatabase.driver("bolt://neo4j:7687", auth=(neo4jUser, neo4jP
 neo4j_driver.verify_connectivity()
 
 # PostgreSQL connection
-postgres_conn = psycopg2.connect(
+parsed_conn = psycopg2.connect(
     host="postgres",
     user=postgresUser,
     password=postgresPass,
     database="cwaf"
+)
+
+files_conn = psycopg2.connect(
+    host="postgres",
+    user=postgresUser,
+    password=postgresPass,
+    database="files"
 )
 
 
@@ -110,7 +122,7 @@ async def parse_http_request(request: HttpRequest):
 
 @app.get("/get_metadata/{node_id}")
 async def get_metadata(node_id: str):
-    cursor = postgres_conn.cursor()
+    cursor = parsed_conn.cursor()
     cursor.execute(
         """
         SELECT macro_name, file_path, line_number
@@ -180,7 +192,7 @@ async def get_use_node(query: str):
 async def get_node_ids(query: FileContextQuery):
     file_path = query.file_path
     line_number = query.line_num
-    cursor = postgres_conn.cursor()
+    cursor = parsed_conn.cursor()
     cursor.execute("""
 SELECT mc.nodeid
 FROM symboltable as st, macrocall as mc
@@ -220,55 +232,114 @@ WHERE file_path = %(fp)s AND line_number = %(ln)s AND node_id IS NOT NULL
     
 #     return {"config_id": config_id}
 
-# @app.get("/configs")
-# async def get_configs():
-#     cursor = postgres_conn.cursor()
-#     cursor.execute("SELECT * FROM configs")
-#     configs = cursor.fetchall()
-#     return {"configs": configs}
+@app.get("/configs")
+async def get_configs():
+    cursor = files_conn.cursor()
+    cursor.execute("SELECT * FROM configs")
+    configs = cursor.fetchall()
+    return {"configs": configs}
 
-# @app.get("/configs/name/{config_name}")
-# async def get_config_by_nickname(config_name: str):
-#     cursor = postgres_conn.cursor()
-#     cursor.execute("SELECT * FROM configs WHERE name = %s", (config_name,))
-#     config = cursor.fetchone()
-#     if config:
-#         return {"config": config}
-# @app.post("/store_config")
-# async def store_config(request: Request):
-#     data = await request.json()
-#     config_name = data.get("name")
-#     config_nickname = data.get("nickname")
-#     config_path = data.get("path")
-#     if not config_name or not config_nickname or not config_path:
-#         return {"error": "Invalid input"}
+@app.get("/configs/selected")
+async def get_selected_config():
+    """Get the currently selected configuration."""
+    cursor = files_conn.cursor()
+
+    # Get the currently selected config
+    cursor.execute("SELECT * FROM selected_config ORDER BY id DESC LIMIT 1")
+    selected = cursor.fetchone()
     
-#     # Store the config in PostgreSQL
-#     cursor = postgres_conn.cursor()
-#     cursor.execute("""
-#         INSERT INTO configs (name, nickname, path)
-#         VALUES (%s, %s, %s)
-#         RETURNING id
-#     """, (config_name, config_nickname, config_path))
-#     config_id = cursor.fetchone()[0]
-#     postgres_conn.commit()
+    if not selected:
+        return {"selected_config": None}
     
-#     return {"config_id": config_id}
+    return {"selected_config": selected}
 
-# @app.get("/configs")
-# async def get_configs():
-#     cursor = postgres_conn.cursor()
-#     cursor.execute("SELECT * FROM configs")
-#     configs = cursor.fetchall()
-#     return {"configs": configs}
+@app.post("/configs/select/{config_id}")
+async def select_config(config_id: int):
+    """Set the selected configuration."""
 
-# @app.get("/configs/name/{config_name}")
-# async def get_config_by_nickname(config_name: str):
-#     cursor = postgres_conn.cursor()
-#     cursor.execute("SELECT * FROM configs WHERE name = %s", (config_name,))
-#     config = cursor.fetchone()
-#     if config:
-#         return {"config": config}
+    # Validate config exists
+    cursor = files_conn.cursor()
+    cursor.execute("SELECT * FROM configs WHERE id = %s", (config_id,))
+    config = cursor.fetchone()
+    if not config:
+        raise HTTPException(status_code=404, detail="Config does not exist")
+    # Set the selected config
+    cursor.execute("INSERT INTO selected_config (config_id) VALUES (%s)", (config_id,))
+    files_conn.commit()
+    return {"message": "Config selected successfully"}
+
+def extract_config(file, name=None):
+    """
+    Process the uploaded config archive file.
+    This function should handle the extraction and parsing of the config files.
+    """
+    #save the uploaded file to a temporary location
+    
+    # Generate unique filename using timestamp and UUID
+    if name:
+        name_hash = hashlib.md5(name.encode()).hexdigest()[:8]
+        unique_filename = f"/tmp/config_{int(time.time())}_{name_hash}.zip"
+    else:
+        unique_filename = f"/tmp/config_{int(time.time())}_{uuid.uuid4().hex[:8]}.zip"
+    
+    # Save the uploaded file
+    with open(unique_filename, "wb") as f:
+        f.write(file.read())
+    
+    # Extract the zip file
+    extract_path = Path(f"/tmp/{Path(unique_filename).stem}")
+    with zipfile.ZipFile(unique_filename, "r") as zip_ref:
+        extract_path.mkdir(exist_ok=True)
+        zip_ref.extractall(extract_path)
+
+    # Delete the zip file after extraction
+    Path(unique_filename).unlink()
+    
+    return Path(extract_path).absolute().resolve()
+
+@app.post("/store_config")
+async def store_config(file: UploadFile = File(...), config_nickname: str = Form(...)):
+    print("Received file:", file.filename)
+    print("Received nickname:", config_nickname)
+
+    if not config_nickname:
+        return {"error": "Invalid input"}
+    
+    # Store the config in PostgreSQL
+    cursor = files_conn.cursor()
+    cursor.execute("""
+        INSERT INTO configs (nickname)
+        VALUES (%s)
+        RETURNING id
+    """, (config_nickname))
+    response = cursor.fetchone()
+    if response is None:
+        return {"error": "Failed to store config"}
+    config_id = response[0]
+    files_conn.commit()
+
+    config_path = extract_config(file.file, config_nickname)
+
+    # Process each file in the extracted directory
+    for file_path in config_path.glob('**/*'):
+        if file_path.is_file():
+            # Get the relative path from the config_path
+            relative_path = str(file_path.relative_to(config_path))
+            
+            # Read file content as binary
+            with open(file_path, 'rb') as f:
+                file_content = f.read()
+            
+            # Insert file info into the database
+            cursor.execute("""
+                INSERT INTO files (config_id, path, content)
+                VALUES (%s, %s, %s)
+            """, (config_id, relative_path, file_content))
+    
+    # Commit the transaction
+    files_conn.commit()
+    
+    return {"config_id": config_id}
 
 @app.post("/get_dump")
 async def get_dump(file: UploadFile = File(...)):
