@@ -1,7 +1,7 @@
 
-from src.parser import modsec
-from src.parser.const_recovery import recover_used_constants
-from src.parser.helper_classes.directives import *
+from .. import modsec
+from ..const_recovery import recover_used_constants
+from .directives import *
 
 
 class DirectiveFactory:

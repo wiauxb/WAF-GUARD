@@ -3,14 +3,19 @@ services:
   neo4j:
     container_name: neo4j
     image: neo4j:latest
-    restart: always
     volumes:
       - ${DOCKER_DATA_PATH}/neo4j/logs:/logs
       - ${DOCKER_DATA_PATH}/neo4j/config:/config
       - ${DOCKER_DATA_PATH}/neo4j/data:/data
       - ${DOCKER_DATA_PATH}/neo4j/plugins:/plugins
+      - ${DOCKER_DATA_PATH}/neo4j/import:/import
+      - ${EXPORT_DIR}:/import/exports
     environment:
       - NEO4J_AUTH=${NEO4J_USER}/${NEO4J_PASSWORD}
+      - NEO4J_dbms_security_procedures_unrestricted=apoc.*
+      - NEO4J_apoc_export_file_enabled=true
+      - NEO4J_apoc_import_file_enabled=true
+      - NEO4J_apoc_import_file_use__neo4j__config=true
     ports:
       - "7474:7474"
       - "7687:7687"
@@ -24,7 +29,6 @@ services:
   postgres:
     container_name: postgres
     image: postgres:latest
-    restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -33,6 +37,7 @@ services:
       - "5432:5432"
     volumes:
       - ${DOCKER_DATA_PATH}/postgres:/var/lib/postgresql/data
+      - ${EXPORT_DIR}:/exports
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}"]
       interval: 1s
@@ -42,7 +47,6 @@ services:
   adminer:
     container_name: adminer
     image: adminer
-    restart: always
     ports:
       - 8080:8080
     depends_on:
@@ -60,6 +64,7 @@ services:
       - ${PWD}/.env:/app/.env
       - ${WEB_APP_PATH}:/app
       - ${DOCKER_DATA_PATH}/shared:/shared
+      - ${EXPORT_DIR}:/exports
     working_dir: /app
     ports:
       - "8000:8000"
@@ -104,3 +109,25 @@ services:
       - "9090:8000"
     working_dir: /opt/api
     command: "fastapi dev main.py --host 0.0.0.0 --port 8000"
+
+  parser:
+    container_name: parser
+    build:
+      dockerfile: parser_dockerfile
+      context: ./docker
+    volumes:
+      - ${SRC_PATH}/parser:/app
+      - ${PWD}/.env:/app/.env
+    ports:
+      - "8001:8000" 
+    environment:
+      - RUNNING_IN_DOCKER=true
+    working_dir: /app
+    tty: true
+    command: "fastapi dev rest_api/api.py --host 0.0.0.0 --port 8000"
+    depends_on:
+      postgres:
+          condition: service_healthy
+          restart: true
+
+    

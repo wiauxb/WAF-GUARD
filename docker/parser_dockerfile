@@ -1,0 +1,4 @@
+FROM python:3.13-alpine
+
+RUN pip3 install fastapi[standard] neo4j python-dotenv pydantic psycopg2-binary dotenv requests tqdm
+#pyvis  pandas

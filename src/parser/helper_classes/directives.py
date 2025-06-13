@@ -1,8 +1,8 @@
 import re
 import sys
 
-from src.parser.helper_classes.context import Context
-import src.parser.rule_parsing as rule_parsing
+from .context import Context
+from .. import rule_parsing
 
 class Directive:
 

@@ -1,10 +1,10 @@
 import sys
-from src.parser import apache, modsec
-from src.parser.helper_classes.context import FileContext, MacroContext
-from src.parser.helper_classes.directives import Directive
 import re
 
-from src.parser.rule_parsing import get_args_from_line
+from . import apache, modsec
+from .helper_classes.context import FileContext, MacroContext
+from .helper_classes.directives import Directive
+from .rule_parsing import get_args_from_line
 
 def recover_used_constants(directive: Directive):
     constants = set()

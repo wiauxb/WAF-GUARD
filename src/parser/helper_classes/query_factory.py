@@ -194,7 +194,7 @@ class QueryFactory:
     @classmethod
     def create_indexes(cls):
         return """
-            CREATE FULLTEXT INDEX cstIndex
-            FOR (n:Constant|Variable|Collection)
-            ON EACH [n.name] 
-        """
+                    CREATE FULLTEXT INDEX cstIndex IF NOT EXISTS
+                    FOR (n:Constant|Variable|Collection)
+                    ON EACH [n.name] 
+                """

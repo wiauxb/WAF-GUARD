@@ -2,7 +2,7 @@ from copy import deepcopy
 import os
 import re
 
-from src.parser.helper_classes.macro import Macro
+from .macro import Macro
 
 
 class Context:
@@ -29,7 +29,11 @@ class FileContext(Context):
     def to_real_path(self):
         conf_path = os.path.join(os.environ["CONFIG_ROOT"], "conf", "")
         begin_pattern = re.compile(r"^.*conf[/\\]")
-        return re.sub(begin_pattern, conf_path, self.file_path)
+        # Handle both Unix and Windows paths by normalizing slashes
+        normalized_file_path = self.file_path.replace('\\', '/')
+        result = re.sub(begin_pattern, conf_path.replace('\\', '/'), normalized_file_path)
+        # Convert back to OS-specific path separators
+        return os.path.normpath(result)
 
     def __str__(self):
         return f"{self.file_path}:{self.line_num}"
@@ -47,7 +51,7 @@ class MacroContext(Context):
         self.use = used_in
 
     def __str__(self):
-        return f"{f"line {self.line_num} of " if self.line_num else ""}[{self.macro_name}]({self.definition}) used on line {self.use.line_num} of {self.use}"
+        return f"line {self.line_num} of " if self.line_num else "" + f"[{self.macro_name}]({self.definition}) used on line {self.use.line_num} of {self.use}"
     
     def pretty(self):
         return f"\"{self.macro_name}\" : {self.definition.pretty()}\n{self.use.pretty()}"

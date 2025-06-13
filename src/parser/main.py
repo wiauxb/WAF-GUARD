@@ -3,20 +3,37 @@ import sys
 import time
 import math
 import argparse
+from tqdm import tqdm
 from dotenv import load_dotenv
-from src.parser.parser import parse_compiled_config
-from src.parser.helper_classes.neo4j_interface import Neo4jDB
-from src.parser.helper_classes.sql_interface import PostgresDB
-from src.parser.helper_classes.timer import Timer
 
+from .parser import parse_compiled_config
+from .helper_classes.neo4j_interface import Neo4jDB
+from .helper_classes.sql_interface import PostgresDB
+from .helper_classes.timer import Timer
+
+DELETE_BATCH_SIZE = 10000
+
+def reset_neo4j(neo4j_url, neo4j_user, neo4j_pass):
+    graph = Neo4jDB(neo4j_url, neo4j_user, neo4j_pass)
+    while True:
+        result = graph.query(f"""
+            MATCH (n)
+            WITH n LIMIT {DELETE_BATCH_SIZE}
+            DETACH DELETE n
+            RETURN count(n) as deleted
+        """)
+        deleted = result[0]["deleted"]
+        print(f"\033[33mNeo4j | \033[0mDeleted {deleted} relationships")
+        if deleted == 0:
+            break
 
 def initialize_databases(neo4j_url, neo4j_user, neo4j_pass, postgres_url, postgres_user, postgres_pass):
     """Initialize and clear Neo4j and PostgreSQL databases."""
-    os.system("./reset_neo4j_db.sh")
+    reset_neo4j(neo4j_url, neo4j_user, neo4j_pass)
     # sleep for 5 seconds to allow Neo4j to restart
-    time.sleep(5)
+    # time.sleep(5) #FIXME remove ?
     graph = Neo4jDB(neo4j_url, neo4j_user, neo4j_pass)
-    sql_db = PostgresDB(postgres_url, postgres_user, postgres_pass, "cwaf")
+    sql_db = PostgresDB(postgres_url, postgres_user, postgres_pass, "cwaf") #FIXME: why not create a new schema for each config ?
     sql_db.execute("DROP SCHEMA public CASCADE")
     sql_db.execute("CREATE SCHEMA public")
     sql_db.init_tables()
@@ -29,33 +46,36 @@ def estimate_time_left(progress, time_taken):
 
 def process_directives(directives, graph, sql_db):
     """Process directives and populate databases."""
+    
     step = len(directives) // 100 or 1
-    # loop_starting_time = time.perf_counter()
-    loop_timer = Timer("Process Dirs")
-    loop_timer.start()
-
-    for i, directive in enumerate(directives): #TODO add tqdm
-        graph.add_neo4j(directive)
-        sql_db.add_sql(directive)
-
-        if (i + 1) % step == 0:
-            elapsed = loop_timer.time()
-            print(
-                f"\rProgression: {math.ceil(100 * (i + 1) / len(directives))}% done. "
-                f"Time elapsed: {f"{elapsed//60:.0f}m" if elapsed >= 60 else ""}{elapsed%60:02.0f}s "
-                f"Time left: {estimate_time_left((i+1)/len(directives), elapsed)}",
-                end="", flush=True
-            )
-    print()
-
+    
+    if os.getenv("RUNNING_IN_DOCKER"):
+        print("Running in Docker, using tqdm workaround.")
+        it = tqdm(total=len(directives), desc="Processing Directives", unit="directives")
+        print(it)
+        for i, directive in enumerate(directives):
+            graph.add_neo4j(directive)
+            sql_db.add_sql(directive)
+            it.update(1)
+            if i % step == 0:
+                print()
+    else:
+        print("Running outside Docker, using standard tqdm.")
+        for directive in tqdm(directives, desc="Processing Directives", unit="directives"):
+            graph.add_neo4j(directive)
+            sql_db.add_sql(directive)
 
 def main(file_path):
     """Main function to parse configuration and populate databases."""
     load_dotenv()
-    neo4j_url = os.getenv("NEO4J_URL")
+    if os.getenv("RUNNING_IN_DOCKER"):
+        neo4j_url = "bolt://neo4j:7687"
+        postgres_url = "postgres"
+    else:
+        neo4j_url = os.getenv("NEO4J_URL")
+        postgres_url = os.getenv("POSTGRES_URL")
     neo4j_user = os.getenv("NEO4J_USER")
     neo4j_pass = os.getenv("NEO4J_PASSWORD")
-    postgres_url = os.getenv("POSTGRES_URL")
     postgres_user = os.getenv("POSTGRES_USER")
     postgres_pass = os.getenv("POSTGRES_PASSWORD")
 
