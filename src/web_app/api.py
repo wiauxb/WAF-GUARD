@@ -21,7 +21,7 @@ load_dotenv()
 
 WAF_URL = "http://waf:8000"
 PARSER_URL = "http://parser:8000"
-DELETE_BATCH_SIZE = 10000
+DELETE_BATCH_SIZE = 1000
 
 app = FastAPI()
 
@@ -469,9 +469,26 @@ async def export_database(config_name: str):
             if not done:
                 raise HTTPException(status_code=500, detail="Failed to export Neo4j database")
 
-        # Export Postgres database
-        #TODO
+        # Export Postgres database using SQL COPY
+        # Create a directory for postgres exports
+        postgres_export_path = Path(f"{export_path}/postgres")
+        postgres_export_path.mkdir(exist_ok=True)
 
+        # Export data from the 'cwaf' database
+        cursor = parsed_conn.cursor()
+        
+        # Get all table names
+        cursor.execute("""
+            SELECT table_name FROM information_schema.tables 
+            WHERE table_schema = 'public'
+        """)
+        tables = [table[0] for table in cursor.fetchall()]
+        
+        # Export each table to CSV
+        for table in tables:
+            output_file = f"{postgres_export_path}/{table}.csv"
+            with open(output_file, 'w') as f:
+                cursor.copy_expert(f"COPY {table} TO STDOUT WITH CSV HEADER", f)
         return {"status": "success"}
     except Exception as e:
         # remove the export directory if it was created for atomicity
@@ -514,11 +531,44 @@ async def import_database(config_name: str):
             )
         
         # Import the PostgreSQL database
-        #TODO: Implement PostgreSQL import logic
-        # os.system(f"docker compose exec -T postgres sh -c 'psql -U {postgresUser} -c \"DROP DATABASE IF EXISTS cwaf\"'")
-        # os.system(f"docker compose exec -T postgres sh -c 'psql -U {postgresUser} -c \"CREATE DATABASE cwaf\"'")
-        # os.system(f"docker compose exec -T postgres sh -c 'psql -U {postgresUser} cwaf < /exports/{config_name}/cwaf.sql'")
-
+        postgres_import_path = Path(f"/exports/{config_name}/postgres")
+        if not postgres_import_path.exists():
+            raise HTTPException(status_code=404, detail=f"PostgreSQL export data not found at {postgres_import_path}")
+        
+        # Import to 'cwaf' database
+        cursor = parsed_conn.cursor()
+        
+        # First clear the tables
+        cursor.execute("""
+            SELECT table_name FROM information_schema.tables 
+            WHERE table_schema = 'public'
+        """)
+        tables = [table[0] for table in cursor.fetchall()]
+        
+        # Disable foreign key checks for clean import
+        cursor.execute("SET session_replication_role = 'replica'")
+        
+        # Truncate all tables
+        for table in tables:
+            try:
+                cursor.execute(f"TRUNCATE TABLE {table} CASCADE")
+            except Exception as e:
+                # Log issue but continue with other tables
+                print(f"Error truncating table {table}: {str(e)}")
+        
+        # Import each table from CSV
+        for csv_file in postgres_import_path.glob("*.csv"):
+            table_name = csv_file.stem
+            if "_files" not in table_name and table_name in tables:
+                try:
+                    with open(csv_file, 'r') as f:
+                        cursor.copy_expert(f"COPY {table_name} FROM STDIN WITH CSV HEADER", f)
+                except Exception as e:
+                    print(f"Error importing {table_name}: {str(e)}")
+        
+        # Re-enable foreign key checks
+        cursor.execute("SET session_replication_role = 'origin'")
+        parsed_conn.commit()
         return {"status": "success"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to import database: {str(e)}")

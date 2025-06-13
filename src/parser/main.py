@@ -11,7 +11,7 @@ from .helper_classes.neo4j_interface import Neo4jDB
 from .helper_classes.sql_interface import PostgresDB
 from .helper_classes.timer import Timer
 
-DELETE_BATCH_SIZE = 10000
+DELETE_BATCH_SIZE = 1000
 
 def reset_neo4j(neo4j_url, neo4j_user, neo4j_pass):
     graph = Neo4jDB(neo4j_url, neo4j_user, neo4j_pass)
