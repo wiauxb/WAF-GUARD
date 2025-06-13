@@ -76,7 +76,7 @@ Create a `.env` file with the following content:
 1. Access the interface at `http://localhost:8501/config_manager` under the **_Add New Config_** section, choose a name for your config, drag&drop a zip of your configuration and click on the `Submit` button. This will save all the files of your configuration and generate a dump of your config. It might take up to 1 minute.
 Your Zip file can eather contain the `conf` directory at its root, or directly the content of the `conf` directory.
 
-2. A new entry is now available in the **_Known Configs_** section, select it and press the `Parse & Load Config`. This will trigger the analysis process, and will take a long time. **No feedback mechanism are currently implemented, meaning that the page will freeze saying _"running"_ for adges.** If you want to examin the process, please consult the logs of the `parser` service.
+2. A new entry is now available in the **_Known Configs_** section, select it and press the `Parse & Load Config`. This will trigger the analysis process, and will take a long time. **No feedback mechanism are currently implemented, meaning that the page will freeze saying _"running"_ for ages.** If you want to examin the process, please consult the logs of the `parser` service.
    ```console
    docker compose logs parser -f
    ```
