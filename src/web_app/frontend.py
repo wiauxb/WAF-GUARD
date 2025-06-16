@@ -3,7 +3,7 @@ from frontend_functions import *
 import streamlit as st
 import requests
 import pandas as pd
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, messages_to_dict
 # from websockets.asyncio.client import connect
 import asyncio
 from websockets.sync.client import connect
@@ -207,7 +207,7 @@ with tab_chatbot:
                     elif isinstance(message, AIMessage):
                         messages.append({"role": "assistant", "content": message.content})
                 # messages.append({"role": "user", "content": prompt})
-                payload = {"messages": messages}
+                payload = {"messages": messages_to_dict(st.session_state.messages)}
                 print(payload, flush=True)
 
                 with st.spinner("Analyzing..."):

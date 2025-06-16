@@ -15,6 +15,7 @@ from langchain_chroma import Chroma
 import requests
 import re
 import pandas as pd
+from langgraph.prebuilt import InjectedState
 
 
 from langsmith import Client
@@ -30,7 +31,7 @@ class GraphsState(TypedDict):
 
 # tool 1: filtre règle sur base de location et host, ordonné dans l'ordre d'exécution
 @tool
-def filter_rule(location:str, host:str):
+def filter_rule(location:str, host:str,state: Annotated[dict, InjectedState]):
     """
     Tool used to filter rules of the configuration based on location and host. The arguments are used in cypher query with regex
 
@@ -47,8 +48,9 @@ def filter_rule(location:str, host:str):
         print(query, flush=True)
         # Run the generated Cypher query and display the graph
         response = requests.post(f"{API_URL}/run_cypher_to_json", json={"query": query})
-        # df=pd.DataFrame.from_dict(response.json()["df"])
-        # print(df, flush=True)
+        df=pd.DataFrame.from_dict(response.json()["df"])
+        state
+        print(df, flush=True)
         return response.json()["df"]
     
 

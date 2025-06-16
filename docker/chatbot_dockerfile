@@ -1,6 +1,6 @@
 FROM python:3.12
 
 
-RUN pip install uvicorn langgraph streamlit langchain-openai langchain-community python-dotenv fastapi langchain-neo4j langchain-chroma
+RUN pip install uvicorn langgraph streamlit langchain-openai langchain-community python-dotenv fastapi langchain-neo4j langchain-chroma psycopg psycopg-pool langgraph-checkpoint-postgres psycopg2-binary
 COPY /scripts/start_chat.sh .
 RUN chmod +x start_chat.sh
