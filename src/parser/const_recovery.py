@@ -1,10 +1,10 @@
 import sys
-from src.parser import apache, modsec
-from src.parser.helper_classes.context import FileContext, MacroContext
-from src.parser.helper_classes.directives import Directive
 import re
 
-from src.parser.rule_parsing import get_args_from_line
+from . import apache, modsec
+from .helper_classes.context import FileContext, MacroContext
+from .helper_classes.directives import Directive
+from .rule_parsing import get_args_from_line
 
 def recover_used_constants(directive: Directive):
     constants = set()
@@ -53,8 +53,11 @@ def extract_constants(args_from_target, macro_tint, macro_called, initial_line =
     constants = set()
     for i, arg in enumerate(args_from_target):
         if i in macro_tint.get(macro_called, []) or initial_line:
-            constants_from_line = re.findall(r"[\~\$]\{(?P<name>.*?)\}", arg)
-            envvar_from_line = re.findall(r"\%\{(?P<name>.*?)\}", arg)
-            constants.update(constants_from_line)
-            constants.update(envvar_from_line)
+            constants_from_line = re.findall(r"[\~\$\%]\{(?:(?P<collection>[^:.,{}]*?)[:.])?(?P<name>[^:.,{}]*?)\}", arg)
+            tmp = []
+            for i in range(len(constants_from_line)):
+                collection = constants_from_line[i][0]
+                name = constants_from_line[i][1]
+                tmp.append((collection.upper(), name))
+            constants.update(tmp)
     return constants

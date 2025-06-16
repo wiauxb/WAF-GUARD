@@ -31,6 +31,7 @@ if "from_file_table" not in st.session_state:
 
 tab_rqst, tab_cst, tab_neighbours, tab_from_file, tab_chatbot = st.tabs(["Request", "Constant", "Neighbours", "From File", "Chatbot"])
 
+
 with tab_rqst:
     col1, col2 = st.columns(2)
 
@@ -61,80 +62,79 @@ with tab_rqst:
         df = pd.DataFrame(response.json()["df"])
         st.session_state.rules_table = format_directive_table(df)
 
-    show_rules(st.session_state.rules_table)
+    show_rules(st.session_state.rules_table, key="rules_table")
 
 with tab_cst:
     cst_name = st.text_input("Constant Name")
-    if st.button("Search"):
+    if cst_name:
         response = requests.get(f"{API_URL}/search_var/{cst_name}")
         if response.status_code == 200:
             # st.dataframe(response.json()["records"])
             st.session_state.cst_table = pd.DataFrame(response.json()["records"])
-            st.session_state.cst_table["selected"] = False
         else:
             st.error(response.content.decode())
     
     # what is the constant: Constant, Variable, or SubVariable
-    edited_cst_table = st.data_editor(
+    edited_cst_table = st.dataframe(
         st.session_state.cst_table,
-        column_config={
-            "selected": st.column_config.CheckboxColumn(
-                default=False,
-                pinned=True,
-            )
-        },
         # column_order=["selected", "name", "value", "labels"],
-        disabled=["name", "value", "labels"],
         # hide_index=True,
+        on_select="rerun",
+        # selection_mode="single-row",
     )
 
-    if not edited_cst_table.empty:
-        # selected = edited_cst_table[edited_cst_table["selected"]]
-        # selected = selected.drop("selected", axis=1)
-        selected = list(edited_cst_table.index[edited_cst_table["selected"]].map(lambda x: str(x)))
-        if selected:
-            sub_tabs = st.tabs(selected)
-            for i, t in enumerate(sub_tabs):
-                with t:
-                    node = edited_cst_table.iloc[int(selected[i])]
-                    
+    selected = [str(i) for i in edited_cst_table.selection.rows]
+    if selected:
+        sub_tabs = st.tabs(selected)
+        for i, t in enumerate(sub_tabs):
+            with t:
+                node = st.session_state.cst_table.iloc[int(selected[i])]
+                
 
-                    st.subheader("Created by")
-                    
-                    if pd.isna(node.get("value", None)):
-                        response = requests.post(f"{API_URL}/get_setnode", json={"var_name": node["name"]})
-                    else:
-                        response = requests.post(f"{API_URL}/get_setnode", json={"var_name": node["name"], "var_value": node["value"]})
+                st.subheader("Created by")
+                
+                if pd.isna(node.get("value", None)):
+                    response = requests.post(f"{API_URL}/get_setnode", json={"var_name": node["name"]})
+                else:
+                    response = requests.post(f"{API_URL}/get_setnode", json={"var_name": node["name"], "var_value": node["value"]})
 
-                    if response.status_code == 200:
-                        df = pd.DataFrame(response.json()["results"])
-                        created_by = format_directive_table(df)
-                        show_rules(created_by)
-                    else:
-                        st.error("Failed to fetch 'created by' information.")
+                if response.status_code == 200:
+                    df = pd.DataFrame(response.json()["results"])
+                    created_by = format_directive_table(df)
+                    show_rules(created_by, key=f"created_by_{selected[i]}")
+                else:
+                    st.error("Failed to fetch 'created by' information.")
 
-                    st.subheader("Used by")
-                    
-                    if pd.isna(node.get("value", None)):
-                        response = requests.post(f"{API_URL}/use_node", json={"var_name": node["name"]})
-                    else:
-                        response = requests.post(f"{API_URL}/use_node", json={"var_name": node["name"], "var_value": node["value"]})
-                    if response.status_code == 200:
-                        df = pd.DataFrame(response.json()["results"])
-                        used_by = format_directive_table(df)
-                        show_rules(used_by)
-                    else:
-                        st.error("Failed to fetch 'used by' information.")
+                st.subheader("Used by")
+                
+                if pd.isna(node.get("value", None)):
+                    response = requests.post(f"{API_URL}/use_node", json={"var_name": node["name"]})
+                else:
+                    response = requests.post(f"{API_URL}/use_node", json={"var_name": node["name"], "var_value": node["value"]})
+                if response.status_code == 200:
+                    df = pd.DataFrame(response.json()["results"])
+                    used_by = format_directive_table(df)
+                    show_rules(used_by, key=f"used_by_{selected[i]}")
+                else:
+                    st.error("Failed to fetch 'used by' information.")
 
     # where is it defind, to which rule it belongs, to what value it is set
     # list the rules that use this constant
 
-with tab_neighbours:
+with tab_zoom:
     node_id = st.text_input("Node ID")
-    if st.button("Get Neighbours"):
+    if node_id:
         response = requests.post(f"{API_URL}/run_cypher", json={"query": f"MATCH (n {{node_id: {node_id}}})-[r]-(m) RETURN *"})
         graph = response.json()["html"]
         st.components.v1.html(graph, height=600)
+
+    # show metadata
+        response = requests.get(f"{API_URL}/get_metadata/{node_id}")
+        if response.status_code == 200:
+            metadata = pd.DataFrame(response.json()["metadata"], columns=["call_macro", "file_path", "line_number"])
+            st.dataframe(metadata, hide_index=True)
+        else:
+            st.error(response.content.decode())
 
 with tab_from_file:
     # inputs for file name and line number
@@ -149,7 +149,9 @@ with tab_from_file:
         else:
             df = pd.DataFrame(response.json()["results"])
             st.session_state.from_file_table = format_directive_table(df)
-    show_rules(st.session_state.from_file_table)
+
+    show_rules(st.session_state.from_file_table, key="from_file_table")
+
 
 with tab_chatbot:
     c=st.container()
@@ -192,8 +194,3 @@ with tab_chatbot:
             st.markdown(last_msg.content)
         
         st.session_state.messages.append(last_msg)
-
-
-
-
-

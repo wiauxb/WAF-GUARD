@@ -1,7 +1,7 @@
 from neo4j import GraphDatabase
 
-from src.parser.helper_classes.directives import DefineStr, Directive, SecRule, SecRuleRemoveById, SecRuleRemoveByTag
-from src.parser.helper_classes.query_factory import QueryFactory
+from .directives import DefineStr, Directive, SecRule, SecRuleRemoveById, SecRuleRemoveByTag
+from .query_factory import QueryFactory
 
 BATCH_SIZE_GENERIC = 5000
 BATCH_SIZE_SMALL = 1000
@@ -24,9 +24,14 @@ class Neo4jDB:
         self.flush_all_batch()
         self.driver.close()
 
+    def __del__(self):
+        """Ensure the driver is closed when the object is deleted."""
+        self.close()
+
     def query(self, query, **kwargs):
         with self.driver.session() as session:
-            return session.run(query, **kwargs)
+            result = session.run(query, **kwargs)
+            return list(result)
 
     def add_neo4j(self, directive:Directive):
         """Collects directives instead of executing immediately"""

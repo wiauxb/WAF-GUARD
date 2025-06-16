@@ -1,23 +1,8 @@
 import re
 import sys
 
-from src.parser.helper_classes.context import Context
-import src.parser.rule_parsing as rule_parsing
-
-class DirectiveFactory:
-
-    @classmethod
-    def create(cls, location, virtual_host, if_level, context, node_id, type, conditions, args):
-        if type.lower() == 'secruleremovebytag':
-            return SecRuleRemoveByTag(location, virtual_host, if_level, context, node_id, type, conditions, args)
-        elif type.lower() == 'secruleremovebyid':
-            return SecRuleRemoveById(location, virtual_host, if_level, context, node_id, type, conditions, args)
-        elif type.lower() in ["definestr", "setenv"]:
-            return DefineStr(location, virtual_host, if_level, context, node_id, type, conditions, args)
-        elif type.lower() in ["secrule"]:
-            return SecRule(location, virtual_host, if_level, context, node_id, type, conditions, args)
-        else:
-            return Directive(location, virtual_host, if_level, context, node_id, type, conditions, args)
+from .context import Context
+from .. import rule_parsing
 
 class Directive:
 
@@ -235,7 +220,7 @@ def parse_args_setvar(args):
     for key in separated_vars:
         splitted = key.split('.')
         if len(splitted) != 2:
-            vars[None] = vars.get(None, []) + [(key, separated_vars[key])] #[separated_vars[key]] #FIXME this break the hypothesis of key -> tuple of lentgh 2
+            vars[None] = vars.get(None, []) + [(key, separated_vars[key])]
         else:
             vars[splitted[0].upper()] = vars.get(splitted[0].upper(), []) + [(splitted[1], separated_vars[key])]
     collected_vars_no_value = {}
@@ -263,8 +248,11 @@ class SecRule(Directive):
             raise Exception(f"Invalid SecRule directive: {self.args}")
 
         var_pattern = re.compile(r"\|?[!&]{0,2}([^:\s|]+)(?::((?:\'.*?\')|(?:\".*?\")|(?:\/.+?\/)|(?:[^|]*)))?")
-        self.secrule_vars = re.findall(var_pattern, rule_parsing.strip_quotes(parsed[0]))
-        self.num_of_vars = len(self.secrule_vars)
+        tmp = re.findall(var_pattern, rule_parsing.strip_quotes(parsed[0]))
+        self.num_of_vars = len(tmp)
+        self.secrule_vars = []
+        for coll, var in tmp:
+            self.secrule_vars.append((coll.upper(), var))
         self.secrule_vars = [rule_parsing.strip_quotes(var) for variables in self.secrule_vars for var in variables]
 
         self.secrule_op = parsed[1]
