@@ -8,3 +8,4 @@ conf*
 db_dump/*
 docker/docker_data/*
 src/web_app/lib
+.venv

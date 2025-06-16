@@ -1,0 +1,6 @@
+FROM python:3.9 
+
+
+RUN pip install uvicorn langgraph streamlit langchain-openai langchain-community python-dotenv fastapi langchain-neo4j langchain-chroma
+COPY /scripts/start_chat.sh .
+RUN chmod +x start_chat.sh
