@@ -3,14 +3,19 @@ from frontend_functions import *
 import streamlit as st
 import requests
 import pandas as pd
-from langchain_core.messages import AIMessage, HumanMessage
-import websockets.sync.client
+from langchain_core.messages import AIMessage, HumanMessage, messages_to_dict
+# from websockets.asyncio.client import connect
 import asyncio
+from websockets.sync.client import connect
+import time
 
 
 API_URL = "http://fastapi:8000"
 WS_URL = "ws://chatbot:8005/ws"
 CHAT_URL = "http://chatbot:8005/chat"
+BASIC_GRAPH=CHAT_URL+"/basic_graph"
+UI_GRAPH=CHAT_URL+"/ui_graph"
+REASONING_GRAPH=CHAT_URL+"/reasoning_graph"
 
 
 st.set_page_config(page_title="Graph Query Interface", page_icon=":bar_chart:", layout="wide")
@@ -153,44 +158,81 @@ with tab_from_file:
     show_rules(st.session_state.from_file_table, key="from_file_table")
 
 
+
+
+
+def send_message_to_websocket(message):
+    print("in sending function", flush=True)
+    with connect(WS_URL) as websocket:
+        websocket.send(message)
+        # for message in websocket:
+        #     # response = websocket.recv()
+        #     # st.write(response)
+        #     print("in Loop", flush=True)
+        #     yield message
+
+
+
 with tab_chatbot:
-    c=st.container()
-    # Initialize messages in session state if not already
-    if "messages" not in st.session_state:
-        st.session_state["messages"] = [AIMessage(content="How can I help you?")]
+    col1, col2 = st.columns([0.2, 0.8])
+    with col1:
+        graph=st.radio("Select Graph", ["Basic", "Reasoning","UI tools"], horizontal=False)
+    with col2:
+        c=st.container()
+        # Initialize messages in session state if not already
+        if "messages" not in st.session_state:
+            st.session_state["messages"] = [AIMessage(content="How can I help you?")]
 
-    # Render the chat messages
-    for msg in st.session_state.messages:
-        if isinstance(msg, AIMessage):
-            c.chat_message("assistant").write(msg.content)
-        if isinstance(msg, HumanMessage):
-            c.chat_message("user").write(msg.content)
+        # Render the chat messages
+        for msg in st.session_state.messages:
+            if isinstance(msg, AIMessage):
+                c.chat_message("assistant").write(msg.content)
+            if isinstance(msg, HumanMessage):
+                c.chat_message("user").write(msg.content)
 
-    # Take user input and process it through the selected graph
-    if prompt := st.chat_input():
-        st.session_state.messages.append(HumanMessage(content=prompt))
-        # st.chat_message("user").write(prompt)
+        # Take user input and process it through the selected graph
+        if prompt := st.chat_input():
+            st.session_state.messages.append(HumanMessage(content=prompt))
+            # st.chat_message("user").write(prompt)
 
-        with c.chat_message("user"):
-            st.markdown(prompt)
+            with c.chat_message("user"):
+                st.markdown(prompt)
+
+            with c.chat_message("assistant"),st.container():
+                
+
+                    # Convert messages to the format expected by the API
+                messages = []
+                for message in st.session_state.messages:
+                    if isinstance(message, HumanMessage):
+                        messages.append({"role": "user", "content": message.content})
+                    elif isinstance(message, AIMessage):
+                        messages.append({"role": "assistant", "content": message.content})
+                # messages.append({"role": "user", "content": prompt})
+                payload = {"messages": messages_to_dict(st.session_state.messages)}
+                print(payload, flush=True)
+
+                with st.spinner("Analyzing..."):
+                    if graph == "Basic":
+                        response = requests.post(BASIC_GRAPH, json=payload).json()
+                    elif graph == "Reasoning":
+                        response = requests.post(REASONING_GRAPH, json=payload).json()
+                    elif graph == "UI tools":
+                        response = requests.post(UI_GRAPH, json=payload).json()
+                    last_msg = AIMessage(content=response["messages"][-1]["content"],kwargs=response["messages"][-1]["additional_kwargs"])
+                    st.write(last_msg.content)
+            
+            st.session_state.messages.append(last_msg)
 
 
-        with c.chat_message("assistant"):
 
-        # Convert messages to the format expected by the API
-            messages = []
-            for message in st.session_state.messages:
-                if isinstance(message, HumanMessage):
-                    messages.append({"role": "user", "content": message.content})
-                elif isinstance(message, AIMessage):
-                    messages.append({"role": "assistant", "content": message.content})
-            messages.append({"role": "user", "content": prompt})
-            payload = {"messages": messages}
 
-            # print(payload)
-            response = requests.post(CHAT_URL, json=payload).json()
-            # print(response, flush=True)
-            last_msg = AIMessage(content=response["messages"][-1]["content"],kwargs=response["messages"][-1]["additional_kwargs"])
-            st.markdown(last_msg.content)
-        
-        st.session_state.messages.append(last_msg)
+        # with c.chat_message("assistant"):
+        #     print("sending message to websocket", flush=True)
+        #     send_message_to_websocket(prompt)
+        #     print("response from websocket", flush=True)
+        # st.session_state.messages.append({"role": "assistant", "content": response})
+
+
+
+

@@ -223,6 +223,17 @@ def invoke_basic_graph(st_messages, callables=None):
     return graph_runnable.invoke({"messages": st_messages}, config={"callbacks": callables})
 
 
+async def stream_basic_graph(st_messages, callables=None):
+    if callables is None:
+        return graph_runnable.astream({"messages": st_messages},stream_mode="messages")
+    # Ensure the callables parameter is a list as you can have multiple callbacks
+    if not isinstance(callables, list):
+        raise TypeError("callables must be a list")
+
+    # Invoke the graph with the current messages and callback configuration
+    return graph_runnable.astream({"messages": st_messages}, config={"callbacks": callables})
+
+
 
 
 

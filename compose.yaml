@@ -144,12 +144,12 @@ services:
     working_dir: /app
     ports:
       - "8005:8005"
-    environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2}
-      - LANGCHAIN_ENDPOINT=${LANGCHAIN_ENDPOINT}
-      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
-      - LANGCHAIN_PROJECT=${LANGCHAIN_PROJECT}
+    # environment:
+    #   - OPENAI_API_KEY=${OPENAI_API_KEY}
+    #   - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2}
+    #   - LANGCHAIN_ENDPOINT=${LANGCHAIN_ENDPOINT}
+    #   - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
+    #   - LANGCHAIN_PROJECT=${LANGCHAIN_PROJECT}
     depends_on:
       fastapi:
         condition: service_started
