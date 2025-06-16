@@ -175,7 +175,8 @@ def send_message_to_websocket(message):
 with tab_chatbot:
     col1, col2 = st.columns([0.2, 0.8])
     with col1:
-        graph=st.radio("Select Graph", ["Basic", "Reasoning","UI tools"], horizontal=False)
+        # graph=st.radio("Select Graph", ["Basic", "Reasoning","UI tools"], horizontal=False)
+        graph=st.radio("Select Graph", ["UI tools"], horizontal=False)
     with col2:
         c=st.container()
         # Initialize messages in session state if not already
