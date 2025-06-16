@@ -172,7 +172,6 @@ def send_message_to_websocket(message):
         #     yield message
 
 
-
 with tab_chatbot:
     col1, col2 = st.columns([0.2, 0.8])
     with col1:
@@ -182,25 +181,25 @@ with tab_chatbot:
         # Initialize messages in session state if not already
         if "messages" not in st.session_state:
             st.session_state["messages"] = [AIMessage(content="How can I help you?")]
-
+ 
         # Render the chat messages
         for msg in st.session_state.messages:
             if isinstance(msg, AIMessage):
                 c.chat_message("assistant").write(msg.content)
             if isinstance(msg, HumanMessage):
                 c.chat_message("user").write(msg.content)
-
+ 
         # Take user input and process it through the selected graph
         if prompt := st.chat_input():
             st.session_state.messages.append(HumanMessage(content=prompt))
             # st.chat_message("user").write(prompt)
-
+ 
             with c.chat_message("user"):
                 st.markdown(prompt)
-
+ 
             with c.chat_message("assistant"),st.container():
                 
-
+ 
                     # Convert messages to the format expected by the API
                 messages = []
                 for message in st.session_state.messages:
@@ -211,7 +210,7 @@ with tab_chatbot:
                 # messages.append({"role": "user", "content": prompt})
                 payload = {"messages": messages_to_dict(st.session_state.messages)}
                 print(payload, flush=True)
-
+ 
                 with st.spinner("Analyzing..."):
                     if graph == "Basic":
                         response = requests.post(BASIC_GRAPH, json=payload).json()
@@ -223,16 +222,3 @@ with tab_chatbot:
                     st.write(last_msg.content)
             
             st.session_state.messages.append(last_msg)
-
-
-
-
-        # with c.chat_message("assistant"):
-        #     print("sending message to websocket", flush=True)
-        #     send_message_to_websocket(prompt)
-        #     print("response from websocket", flush=True)
-        # st.session_state.messages.append({"role": "assistant", "content": response})
-
-
-
-

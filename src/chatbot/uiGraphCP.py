@@ -23,12 +23,16 @@ from langgraph.types import Command
 from langgraph.prebuilt.chat_agent_executor import AgentState
 from langchain_core.messages import messages_from_dict, convert_to_openai_messages
 from langchain_core.load import dumpd, dumps, load, loads
+import os
 
 
 # from langsmith import Client
 from dotenv import load_dotenv
 load_dotenv()
 # client=Client()
+
+DB_USER = os.getenv("POSTGRES_USER", "admin")
+DB_PASSWORD = os.getenv("POSTGRES_PASSWORD", "password")
 
 class LastRulesData(TypedDict):
     content: str
@@ -319,7 +323,7 @@ def invoke_graph(st_messages, callables=None):
 
     with ConnectionPool(
         # Example configuration
-        conninfo="host=postgres port=5432 dbname=chatbot user=admin password=password",
+        conninfo=f"host=postgres port=5432 dbname=chatbot user={DB_USER} password={DB_PASSWORD}",
         max_size=20,
         kwargs=connection_kwargs,
     ) as pool:

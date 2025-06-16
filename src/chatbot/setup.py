@@ -8,6 +8,8 @@ from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 load_dotenv()
 
+DB_USER = os.getenv("POSTGRES_USER", "admin")
+DB_PASSWORD = os.getenv("POSTGRES_PASSWORD", "password")
 
 
 
@@ -83,8 +85,8 @@ else:
 
 ensure_database_exists(
     db_name='chatbot',
-    user='admin',
-    password='password', 
-    host='postgres',
+    user=DB_USER,
+    password=DB_PASSWORD,
+    host="postgres",
     port=5432
 )
