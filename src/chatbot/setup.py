@@ -78,10 +78,10 @@ def ensure_database_exists(
 
 #check if the database is populated if the folder /chromadb contains data
 if not os.path.exists("/chromadb/chroma.sqlite3"):
-    print("Database does not exist, populating...")
+    print("Vector Database does not exist, populating...")
     populate_db()
 else:
-    print("Database already exists")
+    print("Vector Database already exists")
 
 ensure_database_exists(
     db_name='chatbot',
