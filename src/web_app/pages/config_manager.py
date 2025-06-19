@@ -96,7 +96,7 @@ def get_selected_config_id():
         if selected_config is not None:
             selected_config = selected_config[1]
             if selected_config is not None:
-                return select_config
+                return selected_config
     return None
 
 def show_existing_configs():
@@ -106,7 +106,7 @@ def show_existing_configs():
         configs.set_index("id", inplace=True)
         styled_confs = configs
         selected_config = get_selected_config_id()
-        if selected_config is not None:
+        if selected_config:
             styled_confs = configs.style.set_properties(subset=pd.IndexSlice[selected_config, :], **{'background-color': '#FFC34D4D'})
         st.session_state.selected_config = st.dataframe(
             styled_confs,
