@@ -69,22 +69,12 @@ def new_config_form():
 
 
 def select_config(id):
-        response = requests.get(f"{API_URL}/configs/selected")
+        old_selected = get_selected_config_id()
         
-        if response.status_code != 200:
+        if old_selected is None:
             # Update the selected config
             response = requests.post(f"{API_URL}/configs/select/{id}")
             return
-            
-        selected_config = response.json()["selected_config"]
-        
-        # No configuration is selected yet
-        if selected_config is None:
-            response = requests.post(f"{API_URL}/configs/select/{id}")
-            return
-
-        # The config_id is at index 1 in the returned tuple
-        old_selected = selected_config[1]
 
         if old_selected != id:
             # Update the selected config
@@ -97,17 +87,25 @@ def react_to_select_config(configs):
         selected_index = configs.index[rows[0]]
         # select_config(selected_index)
 
+def get_selected_config_id():
+    response = requests.get(f"{API_URL}/configs/selected")
+    if response.status_code == 200:
+        selected_config = response.json()["selected_config"]
+        if selected_config is not None:
+            selected_config = selected_config[1]
+            if selected_config is not None:
+                return select_config
+    return None
+
 def show_existing_configs():
     existing_configs = requests.get(f"{API_URL}/configs")
     if existing_configs.status_code == 200:
         configs = pd.DataFrame(existing_configs.json()["configs"], columns=["id", "name", "parsed", "created_at"])
         configs.set_index("id", inplace=True)
         styled_confs = configs
-        response = requests.get(f"{API_URL}/configs/selected")
-        if response.status_code == 200:
-            selected_config = response.json()["selected_config"][1]
-            if selected_config is not None:
-                styled_confs = configs.style.set_properties(subset=pd.IndexSlice[selected_config, :], **{'background-color': '#FFC34D4D'})
+        selected_config = get_selected_config_id()
+        if selected_config is not None:
+            styled_confs = configs.style.set_properties(subset=pd.IndexSlice[selected_config, :], **{'background-color': '#FFC34D4D'})
         st.session_state.selected_config = st.dataframe(
             styled_confs,
             on_select="rerun",
@@ -140,12 +138,11 @@ def dump_config(config_id, uploaded_file):
 
 
 def parse_config(config_id):
-    response = requests.get(f"{API_URL}/configs/selected")
-    if response.status_code != 200:
+    selected_config = get_selected_config_id()
+    if select_config is None:
         st.error("Failed to fetch selected config.")
         st.error(response.content.decode())
-        return
-    selected_config = response.json()["selected_config"][1]
+        return 
     response = requests.post(f"{API_URL}/database/export/{selected_config}")
     if response.status_code != 200:
         st.error("Failed to export database.")
@@ -194,13 +191,12 @@ def load_parsing_data(selected):
         st.error("Parsing data not available for this config. Please parse before loading.")
         return
 
-    response = requests.get(f"{API_URL}/configs/selected")
-    if response.status_code != 200:
+    selected_config = get_selected_config_id()
+    if selected_config is None:
         st.error("Failed to fetch selected config.")
         st.error(response.content.decode())
         return
-    selected_config = response.json()["selected_config"]
-    if selected_config is not None and selected_config[1] == selected[0]:
+    if selected_config == selected[0]:
         st.success("Parsing data already loaded for this config.")
         return
 
