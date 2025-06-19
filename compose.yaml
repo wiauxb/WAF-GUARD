@@ -69,7 +69,7 @@ services:
     working_dir: /app
     ports:
       - "8000:8000"
-    command: "uvicorn api:app --reload --host 0.0.0.0 --port 8000"
+    command: "fastapi dev api/api.py --host 0.0.0.0 --port 8000"
     depends_on:
       postgres:
         condition: service_healthy
