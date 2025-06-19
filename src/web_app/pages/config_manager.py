@@ -56,7 +56,9 @@ def new_config_form():
     )
     with col_btn:
         if st.button("Submit", use_container_width=True):
-            if not name:
+            if not uploaded_file:
+                st.error("Please upload a config file.")
+            elif not name:
                 st.error("Please enter a name for the config file.")
             elif check_duplicate_name(name):
                 st.error("A config with this name already exists. Please choose a different name.")
@@ -65,7 +67,7 @@ def new_config_form():
                 return True
             else:
                 st.error("Failed to process config files.")
-                return False
+            return False
 
 
 def select_config(id):
