@@ -202,7 +202,7 @@ def load_parsing_data(selected):
         st.success("Parsing data already loaded for this config.")
         return
 
-    response = requests.post(f"{API_URL}/database/export/{selected_config[1]}")
+    response = requests.post(f"{API_URL}/database/export/{selected_config}")
     if response.status_code != 200:
         st.error("Failed to export active data.")
         st.error(response.content.decode())
