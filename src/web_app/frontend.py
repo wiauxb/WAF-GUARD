@@ -52,7 +52,7 @@ with tab_rqst:
         else:
             st.session_state.cypher_query = response.json()["cypher_query"]
             # Run the generated Cypher query and display the graph
-            response = requests.post(f"{API_URL}/run_cypher_to_json", json={"query": st.session_state.cypher_query})
+            response = requests.post(f"{API_URL}/cypher/to_json", json={"query": st.session_state.cypher_query})
             df = pd.DataFrame(response.json()["df"])
             st.session_state.rules_table = format_directive_table(df)
             # df = pd.DataFrame(response.json()["df"])
@@ -63,7 +63,7 @@ with tab_rqst:
     query_field = interm.text_area("Generated Cypher Query", st.session_state.cypher_query)
     if interm.button("Run Cypher Query", key="run_cypher_query"):
         st.session_state.cypher_query = query_field
-        response = requests.post(f"{API_URL}/run_cypher_to_json", json={"query": st.session_state.cypher_query})
+        response = requests.post(f"{API_URL}/cypher/to_json", json={"query": st.session_state.cypher_query})
         df = pd.DataFrame(response.json()["df"])
         st.session_state.rules_table = format_directive_table(df)
 
@@ -129,7 +129,7 @@ with tab_cst:
 with tab_zoom:
     node_id = st.text_input("Node ID")
     if node_id:
-        response = requests.post(f"{API_URL}/run_cypher", json={"query": f"MATCH (n {{node_id: {node_id}}})-[r]-(m) RETURN *"})
+        response = requests.post(f"{API_URL}/cypher/run", json={"query": f"MATCH (n {{node_id: {node_id}}})-[r]-(m) RETURN *"})
         graph = response.json()["html"]
         st.components.v1.html(graph, height=600)
 

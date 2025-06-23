@@ -60,7 +60,7 @@ def filter_rule(location:str, host:str, tool_call_id: Annotated[str,InjectedTool
     else:
         query = response.json()["cypher_query"]
         # Run the generated Cypher query and display the graph
-        response = requests.post(f"{API_URL}/run_cypher_to_json", json={"query": query})
+        response = requests.post(f"{API_URL}/cypher/to_json", json={"query": query})
 
         return response.json()["df"]
 
