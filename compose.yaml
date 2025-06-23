@@ -92,7 +92,7 @@ services:
     working_dir: /app
     ports:
       - "8501:8501"
-    entrypoint: "streamlit run frontend.py --server.port=8501 --server.address=0.0.0.0"
+    entrypoint: "streamlit run Interactions.py --server.port=8501 --server.address=0.0.0.0"
     depends_on:
       fastapi:
         condition: service_started
