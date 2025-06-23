@@ -4,7 +4,7 @@ from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 
 # Import routers
-from .routers import cypher, configs, nodes, storage, database
+from .routers import cypher, configs, nodes, storage, database, directives
 
 # Load environment variables
 load_dotenv()
@@ -19,6 +19,7 @@ app.include_router(nodes.router)
 app.include_router(configs.router)
 app.include_router(storage.router)
 app.include_router(database.router)
+app.include_router(directives.router)
 
 @app.get("/health")
 async def health():

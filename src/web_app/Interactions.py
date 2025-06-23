@@ -34,7 +34,7 @@ if "cst_table" not in st.session_state:
 if "from_file_table" not in st.session_state:
     st.session_state.from_file_table = pd.DataFrame()
 
-tab_rqst, tab_cst, tab_zoom, tab_from_file, tab_chatbot = st.tabs(["Request", "Constant", "Zoom", "From File", "Chatbot"])
+tab_rqst, tab_cst, tab_zoom, tab_from_file, tab_tag_id, tab_chatbot = st.tabs(["Request", "Constant", "Zoom", "From File", "Tag/Id", "Chatbot"])
 
 
 with tab_rqst:
@@ -171,6 +171,43 @@ def send_message_to_websocket(message):
         #     print("in Loop", flush=True)
         #     yield message
 
+with tab_tag_id:
+    col1, col2 = st.columns([0.1, 0.9])
+    search_type = col1.selectbox("Search by", ["Id", "Tag"])
+    search_value = col2.text_input(f"Enter {search_type}")
+
+    if search_value:
+        if search_type == "Id":
+            if not validate_id(search_value):
+                st.error("Invalid ID format. Please enter a valid ID.")
+                can_request = False
+            else:
+                can_request = True
+        else:
+            if not validate_tag(search_value):
+                st.error("Invalid tag format. Please enter a valid tag.")
+                can_request = False
+            else:
+                can_request = True
+        if can_request:
+
+            st.subheader(f"RemoveBy{search_type}")
+            response = requests.get(f"{API_URL}/directives/remove_by/{search_type.lower()}", json={search_type.lower(): search_value})
+            if response.status_code != 200:
+                st.error(response.content.decode())
+            else:
+                df = pd.DataFrame(response.json()["results"])
+                removeby = format_directive_table(df)
+                show_rules(removeby, key=f"removeby_{search_type.lower()}")
+
+            st.subheader(f"Directives with {search_type}")
+            response = requests.get(f"{API_URL}/directives/{search_type.lower()}", json={search_type.lower(): search_value})
+            if response.status_code != 200:
+                st.error(response.content.decode())
+            else:
+                df = pd.DataFrame(response.json()["results"])
+                directives = format_directive_table(df)
+                show_rules(directives, key=f"directives_{search_type.lower()}")
 
 with tab_chatbot:
     col1, col2 = st.columns([0.2, 0.8])

@@ -14,6 +14,42 @@ API_URL = "http://fastapi:8000"
 COLUMNS_OF_INTEREST = ["node_id", "type", "args", "Location", "VirtualHost", "phase", "id", "tags", "msg"]
 COLUMNS_TO_REMOVE = ["Context"]
 
+def validate_id(id: str) -> bool:
+    """
+    Validates if the given id is a valid integer
+    or a valid range in the format "start-end"
+    or a list of ids separated by commas.
+
+    Args:
+        id (str): The id to validate.
+
+    Returns:
+        bool: True if the id is valid, False otherwise.
+    """
+    if not id:
+        return False
+    if "-" in id:
+        start, end = [i.strip() for i in id.split("-")]
+        return start.isdigit() and end.isdigit() and int(start) < int(end)
+    if "," in id:
+        ids = [i.strip() for i in id.split(",")]
+        return all(i.isdigit() for i in ids)
+    return id.isdigit()
+
+def validate_tag(tag: str) -> bool:
+    """
+    Validates if the given tag is a valid string without spaces.
+
+    Args:
+        tag (str): The tag to validate.
+
+    Returns:
+        bool: True if the tag is valid, False otherwise.
+    """
+    if not tag:
+        return False
+    return " " not in tag
+
 # modified version of function from https://blog.streamlit.io/auto-generate-a-dataframe-filtering-ui-in-streamlit-with-filter_dataframe/
 def filter_dataframe(df: pd.DataFrame, key = None) -> pd.DataFrame:
     """
