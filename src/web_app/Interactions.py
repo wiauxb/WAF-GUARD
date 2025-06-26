@@ -34,7 +34,7 @@ if "cst_table" not in st.session_state:
 if "from_file_table" not in st.session_state:
     st.session_state.from_file_table = pd.DataFrame()
 
-tab_rqst, tab_cst, tab_zoom, tab_from_file, tab_tag_id, tab_chatbot = st.tabs(["Request", "Constant", "Zoom", "From File", "Tag/Id", "Chatbot"])
+tab_rqst, tab_cst, tab_zoom, tab_from_file, tab_tag_id, tab_removed_by, tab_chatbot = st.tabs(["Request", "Constant", "Zoom", "From File", "Tag/Id", "Removed By", "Chatbot"])
 
 
 with tab_rqst:
@@ -208,6 +208,37 @@ with tab_tag_id:
                 df = pd.DataFrame(response.json()["results"])
                 directives = format_directive_table(df)
                 show_rules(directives, key=f"directives_{search_type.lower()}")
+
+with tab_removed_by:
+    nodeid = st.text_input("node_id of the node removed")
+    if nodeid:
+        st.subheader("The directive:")
+        response = requests.get(f"{API_URL}/directives/id/{nodeid}")
+        if response.status_code != 200:
+            st.error(response.content.decode())
+        else:
+            df = pd.DataFrame(response.json()["results"])
+            directive = format_directive_table(df)
+            show_rules(directive, key=f"directive_{nodeid}")
+        
+        response = requests.get(f"{API_URL}/directives/removed/{nodeid}")
+        if response.status_code != 200:
+            st.error(response.content.decode())
+        else:
+            df = pd.DataFrame(response.json()["results"])
+            criterions_types = df["criterion_type"].unique()
+            for type in criterions_types:
+                st.subheader(f"Directives that removed based on a {type}")
+                df_type = df[df["criterion_type"] == type]
+                criterion_values = df_type["criterion_value"].unique()
+                for value in criterion_values:
+                    st.subheader(f"Criterion Value: {value}")
+                    directive_jsons = df_type[df_type["criterion_value"] == value]["directive"].tolist()
+                    df_dirs = pd.DataFrame(directive_jsons)
+                    # Show the directives for this type and value
+                    show_rules(format_directive_table(df_dirs), key=f"removed_by_{type}_{value}")
+            # removers = format_directive_table(df)
+            # show_rules(removers)
 
 with tab_chatbot:
     col1, col2 = st.columns([0.2, 0.8])

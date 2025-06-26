@@ -106,3 +106,50 @@ async def get_directives_by_tag(request: TagRequest = None):
             return {"results": df.to_dict(orient="records")}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving directives: {str(e)}")
+
+@router.get("/removed/{nodeid}")
+async def get_remover_directives(nodeid: int):
+    """
+    Get directives that removed a specific node.
+    It does not matter if it removed by ID or by tag.
+    """
+    try:
+        # Query to find directives that removed the given node ID
+        with neo4j_driver.session() as session:
+            result = session.run(
+                """
+                MATCH (n)-[:DoesRemove]->(crt)-[*..2]-(a {node_id: $nodeid})
+                WHERE n.node_id > a.node_id
+                RETURN LABELS(crt) as type, crt, n
+                """,
+                {"nodeid": nodeid}
+            )
+            records = []
+            for record in result:
+                records.append((record['type'][0], record['crt']["value"], record['n']))
+            removers = pd.DataFrame(records, columns=['criterion_type', 'criterion_value', 'directive']).fillna(-1)
+            return {"results": removers.to_dict(orient="records")}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving directives: {str(e)}")
+
+
+@router.get("/id/{nodeid}")
+async def get_directives_by_nodeid(nodeid: int):
+    """
+    Get directives with a specific node ID.
+    """
+    try:
+        # Query to find directives with the given node ID
+        with neo4j_driver.session() as session:
+            result = session.run(
+                """
+                MATCH (n {node_id: $nodeid})
+                RETURN n
+                """,
+                {"nodeid": nodeid}
+            )
+            records = [record["n"] for record in result]
+            df = pd.DataFrame(records).fillna(-1)
+            return {"results": df.to_dict(orient="records")}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving directives: {str(e)}")
