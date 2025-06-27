@@ -126,9 +126,15 @@ class Directive:
             return self.node_id < other.node_id
 
 class SecRuleRemoveByTag(Directive):
+    ARG_PATTERN = re.compile(r"\'([^\']*)\'|\"([^\"]*)\"|([^\s,]*)")
+
     def __init__(self, location, virtual_host, if_level, context, node_id, type, conditions, args):
         super().__init__(location, virtual_host, if_level, context, node_id, type, conditions, args)
-        self.tags_to_remove = [re.sub(r"(^[\"\'])|([\"\']$)", "", tag) for tag in re.split(r"[ ,]", self.args)]
+        self.tags_to_remove = []
+        for match in self.ARG_PATTERN.finditer(self.args):
+            for i in [1, 2, 3]:
+                if match.group(i):
+                    self.tags_to_remove.append(match.group(i))
 
 class SecRuleRemoveById(Directive):
 
