@@ -35,5 +35,5 @@ export_dir = os.getenv("EXPORT_DIR")
 
 # API URLs
 WAF_URL = "http://waf:8000"
-PARSER_URL = "http://parser:8000"
+ANALYZER_URL = "http://analyzer:8000"
 DELETE_BATCH_SIZE = 1000

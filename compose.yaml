@@ -113,13 +113,13 @@ services:
     working_dir: /opt/api
     command: "fastapi dev main.py --host 0.0.0.0 --port 8000"
 
-  parser:
-    container_name: parser
+  analyzer:
+    container_name: analyzer
     build:
-      dockerfile: parser_dockerfile
+      dockerfile: analyzer_dockerfile
       context: ./docker
     volumes:
-      - ${SRC_PATH}/parser:/app
+      - ${SRC_PATH}/analyzer:/app
       - ${PWD}/.env:/app/.env
     ports:
       - "8001:8000" 

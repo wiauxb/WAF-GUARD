@@ -6,7 +6,7 @@ import argparse
 from tqdm import tqdm
 from dotenv import load_dotenv
 
-from .parser import parse_compiled_config
+from .analyzer import parse_compiled_config
 from .helper_classes.neo4j_interface import Neo4jDB
 from .helper_classes.sql_interface import PostgresDB
 from .helper_classes.timer import Timer
@@ -66,7 +66,7 @@ def process_directives(directives, graph, sql_db):
             sql_db.add_sql(directive)
 
 def main(file_path):
-    """Main function to parse configuration and populate databases."""
+    """Main function to analyze configuration and populate databases."""
     load_dotenv()
     if os.getenv("RUNNING_IN_DOCKER"):
         neo4j_url = "bolt://neo4j:7687"
@@ -101,7 +101,7 @@ def main(file_path):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Parse Apache HTTPD configuration and populate Neo4j and PostgreSQL databases.")
+    parser = argparse.ArgumentParser(description="Analyze Apache HTTPD configuration and populate Neo4j and PostgreSQL databases.")
     parser.add_argument(
         "file_path",
         type=str,

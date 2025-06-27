@@ -5,7 +5,7 @@ from pathlib import Path
 import requests
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request
 
-from ..db.connections import files_conn, WAF_URL, PARSER_URL
+from ..db.connections import files_conn, WAF_URL, ANALYZER_URL
 from ..utils.file_utils import extract_config
 
 router = APIRouter(prefix="/configs", tags=["Configuration Management"])
@@ -59,9 +59,9 @@ async def delete_config(config_id: int):
     return {"message": "Config deleted successfully"}
 
 
-@router.post("/parse/{config_id}")
-async def parse_config(config_id: int):
-    """Start parsing a configuration and return a task ID for progress tracking."""
+@router.post("/analyze/{config_id}")
+async def analyze_config(config_id: int):
+    """Start analyzing a configuration and return a task ID for progress tracking."""
     # Validate config exists
     cursor = files_conn.cursor()
     cursor.execute("SELECT * FROM configs WHERE id = %s", (config_id,))
@@ -72,23 +72,23 @@ async def parse_config(config_id: int):
     # Create a new task entry
     task_id = str(uuid.uuid4())
     cursor.execute(
-        "INSERT INTO parsing_tasks (id, config_id, status, progress) VALUES (%s, %s, %s, %s)",
+        "INSERT INTO analysis_tasks (id, config_id, status, progress) VALUES (%s, %s, %s, %s)",
         (task_id, config_id, "pending", 0)
     )
     files_conn.commit()
     
-    # Send the task to the parser service asynchronously
+    # Send the task to the analyzer service asynchronously
     try:
-        response = requests.post(f"{PARSER_URL}/process_configs/{config_id}")
+        response = requests.post(f"{ANALYZER_URL}/process_configs/{config_id}")
         if response.status_code != 200:
             raise HTTPException(status_code=500, detail=f"Failed to start parsing: {response.text}")
     except requests.RequestException as e:
         cursor.execute(
-            "UPDATE parsing_tasks SET status = %s WHERE task_id = %s",
+            "UPDATE analysis_tasks SET status = %s WHERE task_id = %s",
             ("failed", task_id)
         )
         files_conn.commit()
-        raise HTTPException(status_code=500, detail=f"Failed to connect to parser service: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to connect to analyzer service: {str(e)}")
     
     # update the parsed status of the config in the db
     cursor.execute(
@@ -105,8 +105,8 @@ async def parse_config(config_id: int):
     }
 
 
-@router.get("/parse/{config_id}")
-async def get_parsed_config(config_id: int):
+@router.get("/analyze/{config_id}")
+async def get_analyzed_config(config_id: int):
     cursor = files_conn.cursor()
     cursor.execute("SELECT parsed FROM configs WHERE id = %s", (config_id,))
     result = cursor.fetchone()

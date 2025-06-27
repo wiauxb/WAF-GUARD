@@ -1,12 +1,12 @@
 import unittest
 from unittest.mock import patch, mock_open, MagicMock
 import os
-from src.parser.const_recovery import (
+from src.analyzer.const_recovery import (
     get_args_from_line,
     recover_used_constants,
 )
-from src.parser.helper_classes.context import FileContext, MacroContext
-from src.parser.helper_classes.directives import Directive
+from src.analyzer.helper_classes.context import FileContext, MacroContext
+from src.analyzer.helper_classes.directives import Directive
 
 
 class TestConstRecovery(unittest.TestCase):

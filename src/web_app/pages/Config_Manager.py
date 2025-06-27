@@ -139,7 +139,7 @@ def dump_config(config_id, uploaded_file):
     return True
 
 
-def parse_config(config_id):
+def analyze_config(config_id):
     selected_config = get_selected_config_id()
     if select_config is None:
         st.error("Failed to fetch selected config.")
@@ -150,10 +150,10 @@ def parse_config(config_id):
         st.error("Failed to export database.")
         st.error(response.content.decode())
         return
-    response = requests.post(f"{API_URL}/configs/parse/{config_id}")
+    response = requests.post(f"{API_URL}/configs/analyze/{config_id}")
     if response.status_code == 200:
         select_config(config_id)
-        st.success("Config parsed successfully.")
+        st.success("Config analyzed successfully.")
     else:
         st.error("Failed to parse config.")
         st.error(response.content.decode())
@@ -179,18 +179,18 @@ def confirm_delete_config(selected):
                 st.error("Failed to delete config.")
                 st.error(response.content.decode())
 
-def load_parsing_data(selected):
+def load_analysis_data(selected):
     if not selected:
-        st.error("Please select a config to load parsing data.")
+        st.error("Please select a config to load analysis data.")
         return
-    response = requests.get(f"{API_URL}/configs/parse/{selected[0]}")
+    response = requests.get(f"{API_URL}/configs/analyze/{selected[0]}")
     if response.status_code != 200:
-        st.error("Failed to fetch parsing data.")
+        st.error("Failed to fetch analysis data.")
         st.error(response.content.decode())
         return
     parsed_data = response.json()
     if not parsed_data["parsed"]:
-        st.error("Parsing data not available for this config. Please parse before loading.")
+        st.error("Analysis data not available for this config. Please analyze before loading.")
         return
 
     selected_config = get_selected_config_id()
@@ -199,7 +199,7 @@ def load_parsing_data(selected):
         st.error(response.content.decode())
         return
     if selected_config == selected[0]:
-        st.success("Parsing data already loaded for this config.")
+        st.success("Analysis data already loaded for this config.")
         return
 
     response = requests.post(f"{API_URL}/database/export/{selected_config}")
@@ -210,11 +210,11 @@ def load_parsing_data(selected):
 
     response = requests.post(f"{API_URL}/database/import/{selected[0]}")
     if response.status_code != 200:
-        st.error("Failed to import parsing data.")
+        st.error("Failed to import analysis data.")
         st.error(response.content.decode())
         return
 
-    #If we reach here, the parsing data was loaded successfully
+    #If we reach here, the analysis data was loaded successfully
     select_config(selected[0])
 
 st.set_page_config(page_title="Config Manager", layout="wide")
@@ -234,15 +234,15 @@ selected = show_existing_configs()
 button_col1, button_col2, button_col3 = st.columns(3)
 
 with button_col1:
-    if st.button("Load Existing Parsing data", use_container_width=True):
-        load_parsing_data(selected)
+    if st.button("Load Existing Analysis data", use_container_width=True):
+        load_analysis_data(selected)
         
 with button_col2:
-    if st.button("Parse & Load Config", use_container_width=True):
+    if st.button("Analyze & Load Config", use_container_width=True):
         if selected:
-            parse_config(selected[0])
+            analyze_config(selected[0])
         else:
-            st.error("Please select a config to parse.")
+            st.error("Please select a config to analyze.")
             
 with button_col3:
     if st.button("Delete Config", use_container_width=True):

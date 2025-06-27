@@ -4,7 +4,7 @@ import requests
 from ..db.connections import files_conn, WAF_URL
 from ..utils.file_utils import extract_config
 
-router = APIRouter(tags=["Configuration Storage and Parsing"])
+router = APIRouter(tags=["Configuration Storage and Analysis"])
 
 
 @router.post("/store_config")
@@ -74,12 +74,12 @@ async def store_dump(request: Request):
     return {"status": "success"}
 
 
-@router.get("/parsing_progress/{task_id}")
-async def get_parsing_progress(task_id: str):
-    """Get the progress of a parsing task."""
+@router.get("/analysis_progress/{task_id}")
+async def get_analysis_progress(task_id: str):
+    """Get the progress of an analysis task."""
     cursor = files_conn.cursor()
     cursor.execute(
-        "SELECT status, progress FROM parsing_tasks WHERE task_id = %s",
+        "SELECT status, progress FROM analysis_tasks WHERE task_id = %s",
         (task_id,)
     )
     result = cursor.fetchone()

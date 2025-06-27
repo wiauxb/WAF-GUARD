@@ -2,9 +2,19 @@
 
 \connect "files";
 
+DROP TABLE IF EXISTS "analysis_tasks";
+CREATE TABLE "public"."analysis_tasks" (
+    "config_id" integer NOT NULL,
+    "status" text NOT NULL,
+    "progress" integer NOT NULL,
+    "id" text NOT NULL,
+    CONSTRAINT "parsing_tasks_id" UNIQUE ("id")
+) WITH (oids = false);
+
+
 DROP TABLE IF EXISTS "configs";
 DROP SEQUENCE IF EXISTS configs_id_seq;
-CREATE SEQUENCE configs_id_seq INCREMENT 1 MINVALUE 1 MAXVALUE 9223372036854775807 START 12 CACHE 1;
+CREATE SEQUENCE configs_id_seq INCREMENT 1 MINVALUE 1 MAXVALUE 9223372036854775807 START 21 CACHE 1;
 
 CREATE TABLE "public"."configs" (
     "id" integer DEFAULT nextval('configs_id_seq') NOT NULL,
@@ -25,7 +35,7 @@ CREATE TABLE "public"."dumps" (
 
 DROP TABLE IF EXISTS "files";
 DROP SEQUENCE IF EXISTS files_id_seq;
-CREATE SEQUENCE files_id_seq INCREMENT 1 MINVALUE 1 MAXVALUE 2147483647 START 2344 CACHE 1;
+CREATE SEQUENCE files_id_seq INCREMENT 1 MINVALUE 1 MAXVALUE 2147483647 START 4306 CACHE 1;
 
 CREATE TABLE "public"."files" (
     "id" integer DEFAULT nextval('files_id_seq') NOT NULL,
@@ -33,16 +43,6 @@ CREATE TABLE "public"."files" (
     "path" text NOT NULL,
     "content" bytea,
     CONSTRAINT "files_pkey" PRIMARY KEY ("id")
-) WITH (oids = false);
-
-
-DROP TABLE IF EXISTS "parsing_tasks";
-CREATE TABLE "public"."parsing_tasks" (
-    "config_id" integer NOT NULL,
-    "status" text NOT NULL,
-    "progress" integer NOT NULL,
-    "id" text NOT NULL,
-    CONSTRAINT "parsing_tasks_id" UNIQUE ("id")
 ) WITH (oids = false);
 
 
@@ -57,12 +57,12 @@ CREATE TABLE "public"."selected_config" (
 ) WITH (oids = false);
 
 
+ALTER TABLE ONLY "public"."analysis_tasks" ADD CONSTRAINT "parsing_tasks_config_id_fkey" FOREIGN KEY (config_id) REFERENCES configs(id) ON DELETE CASCADE NOT DEFERRABLE;
+
 ALTER TABLE ONLY "public"."dumps" ADD CONSTRAINT "dumps_config_id_fkey" FOREIGN KEY (config_id) REFERENCES configs(id) ON DELETE CASCADE NOT DEFERRABLE;
 
 ALTER TABLE ONLY "public"."files" ADD CONSTRAINT "files_config_id_fkey" FOREIGN KEY (config_id) REFERENCES configs(id) ON DELETE CASCADE NOT DEFERRABLE;
 
-ALTER TABLE ONLY "public"."parsing_tasks" ADD CONSTRAINT "parsing_tasks_config_id_fkey" FOREIGN KEY (config_id) REFERENCES configs(id) ON DELETE CASCADE NOT DEFERRABLE;
-
 ALTER TABLE ONLY "public"."selected_config" ADD CONSTRAINT "selected_config_config_id_fkey" FOREIGN KEY (config_id) REFERENCES configs(id) ON DELETE SET NULL NOT DEFERRABLE;
 
--- 2025-06-13 20:19:54.95241+00
+-- 2025-06-27 18:55:47.483276+00
