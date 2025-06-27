@@ -34,7 +34,7 @@ create_database_if_not_exists() {
         fi
     else
         echo "Creating database '$db_name'..."
-        psql -U "$POSTGRES_USER" -c "CREATE DATABASE \"$db_name\";"
+        createdb -U "$POSTGRES_USER" "$db_name"
     fi
     
     if [ -f "$sql_file" ]; then
@@ -48,7 +48,7 @@ create_database_if_not_exists() {
 }
 
 # Wait for PostgreSQL to be ready
-until pg_isready -U "$POSTGRES_USER"; do
+until pg_isready -d "$POSTGRES_DB" -U "$POSTGRES_USER"; do
     echo "Waiting for PostgreSQL to be ready..."
     sleep 2
 done
@@ -56,7 +56,7 @@ done
 echo "PostgreSQL is ready. Initializing databases..."
 
 # Create databases
-create_database_if_not_exists "cwaf" "/docker-entrypoint-initdb.d/cwaf_db.sql"
-create_database_if_not_exists "files" "/docker-entrypoint-initdb.d/files_db.sql"
+create_database_if_not_exists "cwaf" "/init/cwaf_db.sql"
+create_database_if_not_exists "files" "/init/files_db.sql"
 
 echo "Database initialization completed."
