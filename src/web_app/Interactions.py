@@ -129,6 +129,15 @@ with tab_cst:
 with tab_zoom:
     node_id = st.text_input("Node ID")
     if node_id:
+        st.subheader("The directive:")
+        response = requests.get(f"{API_URL}/directives/id/{node_id}")
+        if response.status_code != 200:
+            st.error(response.content.decode())
+        else:
+            df = pd.DataFrame(response.json()["results"])
+            directive = format_directive_table(df)
+            show_rules(directive, key=f"zoom_directive_{node_id}")
+        st.subheader("Zoom:")
         response = requests.post(f"{API_URL}/cypher/run", json={"query": f"MATCH (n {{node_id: {node_id}}})-[r]-(m) RETURN *"})
         graph = response.json()["html"]
         st.components.v1.html(graph, height=600)
