@@ -52,6 +52,11 @@ Create a `.env` file with the following content:
    CHATBOT_PATH=${SRC_PATH}/chatbot
    ```
 
+### WAF instance
+The WAF docker service is used to create a httpd dump of the your configs. Therefore it must be compatible with your configs.
+
+To do so, the WAF instance necessitate to put all WAF installation files in `docker/docker_data/waf/waf_inst` directory. Ensure that your installation includes a mandatory `install.sh` script, which will handle all necessary setup steps. This script should be executable and will be used by the Docker container to automate the installation and configuration of the WAF components.
+
 ### Docker containers
 
 1. Ensure Docker and Docker Compose are installed on your system. (the [docker engine](https://docs.docker.com/engine/install/) and the [compose](https://docs.docker.com/compose/install/) plugin or compose standalone)
