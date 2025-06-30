@@ -91,3 +91,21 @@ Your Zip file can eather contain the `conf` directory at its root, or directly t
 
 3. Access the interface at `http://localhost:8501` to query part of the Neo4j graph, filter directives by an http query or track what impact does a constant have.
    > You can directly query the neo4j database using the interface at `http://localhost:7474` and the postgresql database using the interface at `http://localhost:8080`.
+
+
+## License
+
+WAF-GUARD is released under the [MIT License](LICENSE).
+
+## Acknowledgements
+
+This project is supported by Approach Cyber.
+This study has been conducted as part of the COODEVIIS project (agreement no. 8887), funded by the Wallonia Public Service (SPW) under the framework of the region’s recovery plan. It was in part supported by the CyberExcellence project (RW, Convention 2110186).
+
+## Contact
+
+For questions, suggestions, or issues, please open an issue on this repository or contact us directly at [bastien.wiaux@uclouvain.be](mailto:bastien.wiaux@uclouvain.be).
+
+---
+
+Thank you for using WAF-GUARD! We hope it enhances your experience in managing WAF configurations.
