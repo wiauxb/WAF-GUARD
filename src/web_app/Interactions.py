@@ -34,7 +34,7 @@ if "cst_table" not in st.session_state:
 if "from_file_table" not in st.session_state:
     st.session_state.from_file_table = pd.DataFrame()
 
-tab_rqst, tab_cst, tab_zoom, tab_from_file, tab_tag_id, tab_removed_by, tab_chatbot = st.tabs(["Request", "Constant", "Zoom", "From File", "Tag/Id", "Removed By", "Chatbot"])
+tab_rqst, tab_cst, tab_zoom, tab_from_file, tab_tag_id, tab_removed_by, tab_chatbot = st.tabs(["Location/Host", "Constant", "Zoom", "From File", "Tag/Id", "Removed By", "Chatbot"])
 
 
 with tab_rqst:
