@@ -1,6 +1,6 @@
-# HTTPD to Neo4j
+# WAF-GUARD
 
-This tool analyzes Apache HTTPD configuration using a dump and the files from the configuration and imports the directives into a Neo4j database for querying and visualization.
+The **W**eb **A**pplication **F**irewall **G**raph-based **U**nderstanding, **A**nalysis and **R**epresentation for **D**ebugging (**WAF-GUARD**) is an analyzer coupled with an interactive web interface that gives users access to all information encoded in a WAF configuration, as an Apache server with the ModSecurity module would see it. It is written in Python and uses Neo4j and PostgreSQL to store analysis results. Its architecture consists of multiple microservices to facilitate deployment onto a variety of systems. The containerization is done using Docker and services interact with each other through REST APIs.
 
 ## Project
 
