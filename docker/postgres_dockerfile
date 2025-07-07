@@ -3,6 +3,7 @@ FROM postgres:latest
 # Copy SQL files for database initialization
 COPY scripts/cwaf_db.sql /init/
 COPY scripts/files_db.sql /init/
+COPY scripts/chatbot_db.sql /init/
 
 # Copy initialization script
 COPY scripts/init-databases.sh /docker-entrypoint-initdb.d/
