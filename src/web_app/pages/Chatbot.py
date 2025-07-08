@@ -76,6 +76,34 @@ def new_thread():
     except Exception as e:
         st.error(f"Erreur lors de la création du thread : {e}")
         print(f"Erreur lors de la création du thread : {e}", flush=True)
+
+def delete_thread(thread_id):
+    try:
+        token= st.session_state.get("token")
+        headers = {"Authorization": f"Bearer {token}"}
+        response = requests.delete(f"{CHAT_URL}/threads/{thread_id}", headers=headers)
+        if response.status_code == 200:
+            st.toast("Thread supprimé avec succès", icon="🗑️")
+            st.rerun()
+        else:
+            st.error("Erreur lors de la suppression du thread.")
+    except Exception as e:
+        st.error(f"Erreur lors de la suppression du thread : {e}")
+        print(f"Erreur lors de la suppression du thread : {e}", flush=True)
+
+def rename_thread(thread_id, new_title):
+    try:
+        token= st.session_state.get("token")
+        headers = {"Authorization": f"Bearer {token}"}
+        response = requests.put(f"{CHAT_URL}/threads/{thread_id}", json={"new_title": new_title}, headers=headers)
+        if response.status_code == 200:
+            st.toast("Thread renommé avec succès", icon="✏️")
+            st.rerun()
+        else:
+            st.error("Erreur lors du renommage du thread.")
+    except Exception as e:
+        st.error(f"Erreur lors du renommage du thread : {e}")
+        print(f"Erreur lors du renommage du thread : {e}", flush=True)
     
 
 
@@ -142,22 +170,24 @@ def register_dialog():
 @st.dialog("Modifier la conversation")
 def edit_conversation(convo_id, title):
     new_title = st.text_input("Nouveau titre", value=title, key=f"edit_title_{convo_id}")
-    delete = st.checkbox("Supprimer cette conversation", key=f"delete_{convo_id}")
+    # delete = st.checkbox("Supprimer cette conversation", key=f"delete_{convo_id}")
 
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     with col1:
-        if st.button("Valider", key=f"validate_{convo_id}"):
-            if delete:
-                st.toast(f"Conversation supprimée : {title}", icon="🗑️")
-                # TODO: Supprimer la conversation de la base
+        if st.button("Rename", key=f"validate_{convo_id}"):
+            if new_title:
+                rename_thread(convo_id, new_title)
             else:
-                st.toast(f"Titre mis à jour : {new_title}", icon="✏️")
-                # TODO: Mettre à jour le titre dans la base
+                st.error("Le titre ne peut pas être vide.")
+            st.rerun()
+    with col2:
+        if st.button("Delete", key=f"delete_{convo_id}"):
+            delete_thread(convo_id)
+            st.rerun()
+    with col3:
+        if st.button("Cancel", key=f"cancel_{convo_id}"):
             st.rerun()
 
-    with col2:
-        if st.button("Annuler", key=f"cancel_{convo_id}"):
-            st.rerun()
 
 
 

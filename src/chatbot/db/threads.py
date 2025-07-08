@@ -41,4 +41,12 @@ def get_thread_messages(thread_id: str):
     print(f"Fetching checkpoint: {cp['channel_values']["messages"]}", flush=True)
     return cp["channel_values"]["messages"]
 
+def rename_thread(thread_id: str, new_title: str):
+    pool = get_pool()
+    with pool.connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE users_threads SET title = %s WHERE thread_id = %s", (new_title, thread_id))
+        conn.commit()
+        return {"message": "Thread renamed successfully"}
+
 

@@ -20,7 +20,7 @@ from uiGraphCP import invoke_graph
 from Graph.uiGraph import UIGraph
 from db.connection import get_pool
 from db.users import register_user, get_user_by_username
-from db.threads import get_threads_db, create_thread, delete_thread, get_thread_messages
+from db.threads import get_threads_db, create_thread, delete_thread, get_thread_messages,rename_thread
 
 SECRET_KEY = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
 ALGORITHM = "HS256"
@@ -49,6 +49,9 @@ class UserInDB(User):
 class ChatInput(BaseModel):
     messages: list[dict]
     config:dict
+
+class ThreadUpdate(BaseModel):
+    new_title: str | None = None
 
 
 
@@ -143,8 +146,7 @@ async def register(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]):
         raise HTTPException(status_code=400, detail="Username already exists")
 
     hashed_pw = get_password_hash(form_data.password)
-    # fake_users_db[form_data.username] = {"username": form_data.username, "hashed_password": hashed_pw}
-    # fake_threads_db[form_data.username] = []  # init empty thread list
+
     id= register_user(form_data.username, hashed_pw)
     print(f"User registered with ID: {id}", flush=True)
 
@@ -170,6 +172,17 @@ async def fetch_thread_messages(thread_id: str, user: Annotated[str, Depends(get
     print(f"Fetching messages for thread ID: {thread_id} for user: {user}", flush=True)
     messages = get_thread_messages(thread_id)
     return messages_to_dict(messages)
+
+
+@app.delete("/chat/threads/{thread_id}")
+async def delete_thread_endpoint(thread_id: str, user: Annotated[str, Depends(get_current_user)]):
+    print(f"Deleting thread ID: {thread_id} for user: {user}", flush=True)
+    return delete_thread(thread_id)
+
+@app.put("/chat/threads/{thread_id}")
+async def rename_thread_endpoint(thread_id: str, thread_update: ThreadUpdate, user: Annotated[str, Depends(get_current_user)]):
+    print(f"Renaming thread ID: {thread_id} to {thread_update.new_title} for user: {user}", flush=True)
+    return rename_thread(thread_id, thread_update.new_title)
 
 
 
