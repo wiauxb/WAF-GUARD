@@ -34,7 +34,7 @@ if "cst_table" not in st.session_state:
 if "from_file_table" not in st.session_state:
     st.session_state.from_file_table = pd.DataFrame()
 
-tab_rqst, tab_cst, tab_zoom, tab_from_file, tab_tag_id, tab_removed_by, tab_chatbot = st.tabs(["Location/Host", "Constant", "Zoom", "From File", "Tag/Id", "Removed By", "Chatbot"])
+tab_rqst, tab_cst, tab_zoom, tab_from_file, tab_tag_id, tab_removed_by = st.tabs(["Location/Host", "Constant", "Zoom", "From File", "Tag/Id", "Removed By"])
 
 
 with tab_rqst:
@@ -248,55 +248,3 @@ with tab_removed_by:
                     show_rules(format_directive_table(df_dirs), key=f"removed_by_{type}_{value}")
             # removers = format_directive_table(df)
             # show_rules(removers)
-
-with tab_chatbot:
-    col1, col2 = st.columns([0.2, 0.8])
-    with col1:
-        # graph=st.radio("Select Graph", ["Basic", "Reasoning","UI tools"], horizontal=False)
-        graph=st.radio("Select Graph", ["UI tools"], horizontal=False)
-    with col2:
-        c=st.container()
-        # Initialize messages in session state if not already
-        if "messages" not in st.session_state:
-            st.session_state["messages"] = [AIMessage(content="How can I help you?")]
- 
-        # Render the chat messages
-        for msg in st.session_state.messages:
-            if isinstance(msg, AIMessage):
-                c.chat_message("assistant").write(msg.content)
-            if isinstance(msg, HumanMessage):
-                c.chat_message("user").write(msg.content)
- 
-        # Take user input and process it through the selected graph
-        if prompt := st.chat_input():
-            st.session_state.messages.append(HumanMessage(content=prompt))
-            # st.chat_message("user").write(prompt)
- 
-            with c.chat_message("user"):
-                st.markdown(prompt)
- 
-            with c.chat_message("assistant"),st.container():
-                
- 
-                    # Convert messages to the format expected by the API
-                messages = []
-                for message in st.session_state.messages:
-                    if isinstance(message, HumanMessage):
-                        messages.append({"role": "user", "content": message.content})
-                    elif isinstance(message, AIMessage):
-                        messages.append({"role": "assistant", "content": message.content})
-                # messages.append({"role": "user", "content": prompt})
-                payload = {"messages": messages_to_dict(st.session_state.messages)}
-                print(payload, flush=True)
- 
-                with st.spinner("Analyzing..."):
-                    if graph == "Basic":
-                        response = requests.post(BASIC_GRAPH, json=payload).json()
-                    elif graph == "Reasoning":
-                        response = requests.post(REASONING_GRAPH, json=payload).json()
-                    elif graph == "UI tools":
-                        response = requests.post(UI_GRAPH, json=payload).json()
-                    last_msg = AIMessage(content=response["messages"][-1]["content"],kwargs=response["messages"][-1]["additional_kwargs"])
-                    st.write(last_msg.content)
-            
-            st.session_state.messages.append(last_msg)

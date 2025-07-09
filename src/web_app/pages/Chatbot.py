@@ -10,113 +10,130 @@ BASIC_GRAPH = CHAT_URL + "/basic_graph"
 UI_GRAPH = CHAT_URL + "/ui_graph"
 REASONING_GRAPH = CHAT_URL + "/reasoning_graph"
 
-
+# =====================
+# Authentication Utils
+# =====================
 def login_user(username, password):
+    """Authenticate user and return token if successful."""
     try:
-        response = requests.post(f"{CHAT_URL}/login", data={"username": username, "password": password},headers={"Content-Type": "application/x-www-form-urlencoded"})
+        response = requests.post(f"{CHAT_URL}/login", data={"username": username, "password": password}, headers={"Content-Type": "application/x-www-form-urlencoded"})
         print(response.text, flush=True)
-        # response={"access_token": "mock_token", "username": "mock_user", "status_code": 200}
         if response.status_code == 200:
             return response.json()
         return response
     except Exception as e:
-        st.error(f"Erreur lors de la connexion : {e}")
+        st.error(f"Login error: {e}")
     return None
 
 def register_user(username, password):
+    """Register a new user and return token if successful."""
     try:
-        response = requests.post(f"{CHAT_URL}/register", data={"username": username, "password": password},headers={"Content-Type": "application/x-www-form-urlencoded"})
-        # response = {"access_token": "mock_token", "username": "mock_user", "status_code": 200}
+        response = requests.post(f"{CHAT_URL}/register", data={"username": username, "password": password}, headers={"Content-Type": "application/x-www-form-urlencoded"})
         if response.status_code == 200:
             return response.json()
-        # return response
     except Exception as e:
-        st.error(f"Erreur d'inscription : {e}")
+        st.error(f"Registration error: {e}")
     return None
 
-
+# =====================
+# Thread (Conversation) Management
+# =====================
 def get_threads():
+    """Fetch all threads for the authenticated user."""
     try:
-        token= st.session_state.get("token")
+        token = st.session_state.get("token")
         headers = {"Authorization": f"Bearer {token}"}
         response = requests.get(f"{CHAT_URL}/threads", headers=headers)
         if response.status_code == 200:
             return response.json()
         return []
     except Exception as e:
-        st.error(f"Erreur lors de la récupération des threads : {e}")
+        st.error(f"Error fetching threads: {e}")
         return []
 
-def get_thread_message(thread_id):
+def get_thread_messages(thread_id):
+    """Fetch all messages for a given thread."""
     try:
-        token= st.session_state.get("token")
+        token = st.session_state.get("token")
         headers = {"Authorization": f"Bearer {token}"}
         response = requests.get(f"{CHAT_URL}/threads/{thread_id}", headers=headers)
         if response.status_code == 200:
             messages = response.json()
-            print(f"Messages from api: {messages}", flush=True)
+            print(f"Messages from API: {messages}", flush=True)
             return messages_from_dict(messages)
         return []
     except Exception as e:
-        st.error(f"Erreur lors de la récupération des messages du thread : {e}")
+        st.error(f"Error fetching thread messages: {e}")
         return []
-    
-def new_thread():
+
+def create_new_thread():
+    """Create a new thread and update session state."""
     try:
-        token= st.session_state.get("token")
+        token = st.session_state.get("token")
         headers = {"Authorization": f"Bearer {token}"}
         response = requests.post(f"{CHAT_URL}/threads", headers=headers)
         if response.status_code == 200:
             thread_id = response.json()
-            st.session_state["selected_conversation"] = thread_id
-            st.toast("Nouveau thread créé", icon="🆕")
+            st.session_state["selected_thread"] = thread_id
+            st.session_state["messages"] = []
+            st.toast("New thread created", icon="🆕")
             st.rerun()
         else:
-            st.error("Erreur lors de la création du thread.")
+            st.error("Error creating thread.")
     except Exception as e:
-        st.error(f"Erreur lors de la création du thread : {e}")
-        print(f"Erreur lors de la création du thread : {e}", flush=True)
+        st.error(f"Error creating thread: {e}")
+        print(f"Error creating thread: {e}", flush=True)
 
 def delete_thread(thread_id):
+    """Delete a thread by its ID and update session state accordingly."""
     try:
-        token= st.session_state.get("token")
+        token = st.session_state.get("token")
         headers = {"Authorization": f"Bearer {token}"}
         response = requests.delete(f"{CHAT_URL}/threads/{thread_id}", headers=headers)
         if response.status_code == 200:
-            st.toast("Thread supprimé avec succès", icon="🗑️")
+            st.toast("Thread deleted successfully", icon="🗑️")
+            # Remove thread from state and update selected_thread/messages
+            threads = get_threads()
+            if threads:
+                st.session_state["selected_thread"] = threads[0]["id"]
+                st.session_state["messages"] = get_thread_messages(threads[0]["id"])
+            else:
+                st.session_state["selected_thread"] = None
+                st.session_state["messages"] = []
             st.rerun()
         else:
-            st.error("Erreur lors de la suppression du thread.")
+            st.error("Error deleting thread.")
     except Exception as e:
-        st.error(f"Erreur lors de la suppression du thread : {e}")
-        print(f"Erreur lors de la suppression du thread : {e}", flush=True)
+        st.error(f"Error deleting thread: {e}")
+        print(f"Error deleting thread: {e}", flush=True)
 
 def rename_thread(thread_id, new_title):
+    """Rename a thread by its ID."""
     try:
-        token= st.session_state.get("token")
+        token = st.session_state.get("token")
         headers = {"Authorization": f"Bearer {token}"}
         response = requests.put(f"{CHAT_URL}/threads/{thread_id}", json={"new_title": new_title}, headers=headers)
         if response.status_code == 200:
-            st.toast("Thread renommé avec succès", icon="✏️")
+            st.toast("Thread renamed successfully", icon="✏️")
             st.rerun()
         else:
-            st.error("Erreur lors du renommage du thread.")
+            st.error("Error renaming thread.")
     except Exception as e:
-        st.error(f"Erreur lors du renommage du thread : {e}")
-        print(f"Erreur lors du renommage du thread : {e}", flush=True)
-    
+        st.error(f"Error renaming thread: {e}")
+        print(f"Error renaming thread: {e}", flush=True)
 
-
-
-@st.dialog("🔐 Connexion requise")
+# =====================
+# Dialogs
+# =====================
+@st.dialog("🔐 Login required")
 def login_dialog():
     with st.form("login_form"):
-        st.markdown("## Connexion")
-        username = st.text_input("username")
-        password = st.text_input("Mot de passe", type="password")
+        st.markdown("## Login")
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
         col1, col2 = st.columns(2)
-        login_submitted = col1.form_submit_button("Se connecter")
-        register_clicked = col2.form_submit_button("Créer un compte")
+        login_submitted = col1.form_submit_button("Login")
+        register_clicked = col2.form_submit_button("Create account")
 
         if login_submitted:
             user_data = login_user(username, password)
@@ -126,31 +143,30 @@ def login_dialog():
                 st.session_state["username"] = username
                 st.rerun()
             else:
-                st.error("username ou mot de passe invalide.")
+                st.error("Invalid username or password.")
 
         if register_clicked:
             st.session_state["show_register"] = True
             st.rerun()
 
-
-@st.dialog("📝 Création de compte")
+@st.dialog("📝 Create account")
 def register_dialog():
     with st.form("register_form"):
-        st.markdown("## Créer un compte")
-        username = st.text_input("username (nouveau)")
-        password = st.text_input("Mot de passe", type="password")
-        confirm_password = st.text_input("Confirmer le mot de passe", type="password")
+        st.markdown("## Create account")
+        username = st.text_input("Username (new)")
+        password = st.text_input("Password", type="password")
+        confirm_password = st.text_input("Confirm password", type="password")
         col1, col2 = st.columns(2)
-        submit = col1.form_submit_button("S'inscrire")
-        cancel = col2.form_submit_button("Retour")
+        submit = col1.form_submit_button("Register")
+        cancel = col2.form_submit_button("Back")
 
         if submit:
             if password != confirm_password:
-                st.error("Les mots de passe ne correspondent pas.")
+                st.error("Passwords do not match.")
             else:
                 user_data = register_user(username, password)
                 if user_data:
-                    st.success("Compte créé avec succès ✅")
+                    st.success("Account created successfully ✅")
                     st.session_state["authenticated"] = True
                     st.session_state["token"] = user_data["access_token"]
                     st.session_state["username"] = username
@@ -161,55 +177,37 @@ def register_dialog():
             st.session_state["show_register"] = False
             st.rerun()
 
-
-
-
-
-
-
-@st.dialog("Modifier la conversation")
-def edit_conversation(convo_id, title):
-    new_title = st.text_input("Nouveau titre", value=title, key=f"edit_title_{convo_id}")
-    # delete = st.checkbox("Supprimer cette conversation", key=f"delete_{convo_id}")
-
+@st.dialog("Edit thread")
+def edit_thread_dialog(thread_id, title):
+    new_title = st.text_input("New title", value=title, key=f"edit_title_{thread_id}")
     col1, col2, col3 = st.columns(3)
     with col1:
-        if st.button("Rename", key=f"validate_{convo_id}"):
+        if st.button("Rename", key=f"validate_{thread_id}"):
             if new_title:
-                rename_thread(convo_id, new_title)
+                rename_thread(thread_id, new_title)
             else:
-                st.error("Le titre ne peut pas être vide.")
+                st.error("Title cannot be empty.")
             st.rerun()
     with col2:
-        if st.button("Delete", key=f"delete_{convo_id}"):
-            delete_thread(convo_id)
+        if st.button("Delete", key=f"delete_{thread_id}"):
+            delete_thread(thread_id)
             st.rerun()
     with col3:
-        if st.button("Cancel", key=f"cancel_{convo_id}"):
+        if st.button("Cancel", key=f"cancel_{thread_id}"):
             st.rerun()
 
+# =====================
+# Main App
+# =====================
+st.set_page_config(page_title="WAF Chatbot", layout="wide")
 
-
-
-
-
-
-
-
-
-
-st.set_page_config(page_title="Chatbot WAF", layout="wide")
-# Initialisation
-if "authenticated" not in st.session_state:
-    st.session_state["authenticated"] = False
-
-# === Initialisation session_state ===
+# Session state initialization
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 if "show_register" not in st.session_state:
     st.session_state["show_register"] = False
 
-# === Affichage des modales ===
+# Show dialogs if not authenticated
 if not st.session_state["authenticated"]:
     if st.session_state["show_register"]:
         register_dialog()
@@ -217,48 +215,42 @@ if not st.session_state["authenticated"]:
         login_dialog()
     st.stop()
 
-# Sélection du graphe
+# Sidebar options
 st.sidebar.title("Options")
-selected_graph = st.sidebar.selectbox("Choisissez un graphe", ["UI tools", "Reasoning", "Basic"])
+selected_graph = st.sidebar.selectbox("Choose a graph", ["UI tools", "Reasoning", "Basic"])
 
 if st.sidebar.button("New Thread", key="new_thread"):
-    new_thread()
-# Liste des conversations
+    create_new_thread()
+
+# List threads
 st.sidebar.markdown("### Threads")
-conversations = get_threads()
-if not conversations:
-    print("No conversations found, creating a new thread", flush=True)
-    # new_thread()
+threads = get_threads()
+if not threads:
+    print("No threads found, creating a new thread", flush=True)
+    # create_new_thread()
 
-# État de la conversation sélectionnée
-if "selected_conversation" not in st.session_state:
-    st.session_state.selected_conversation = conversations[0]["id"]
+# Selected thread state
+if "selected_thread" not in st.session_state and threads:
+    st.session_state.selected_thread = threads[0]["id"]
 
-for convo in conversations:
+for thread in threads:
     col1, col2 = st.sidebar.columns([0.8, 0.2])
-    if col1.button(convo["title"], key=convo["id"],use_container_width=True):
-        st.session_state.selected_conversation = convo["id"]
-        st.session_state.messages = get_thread_message(convo["id"])
-
+    if col1.button(thread["title"], key=thread["id"], use_container_width=True):
+        st.session_state.selected_thread = thread["id"]
+        st.session_state.messages = get_thread_messages(thread["id"])
     with col2:
-        if st.button("⋮", key=f"menu_{convo['id']}"):
-            # st.sidebar.write(f"Menu convo {convo['id']}")  # Placeholder pour menu contextuel
-            edit_conversation(convo["id"], convo["title"])
+        if st.button("⋮", key=f"menu_{thread['id']}"):
+            edit_thread_dialog(thread["id"], thread["title"])
 
-# Affichage principal
-st.title("Assistant de configuration WAF")
+# Main display
+st.title("WAF-ssistant")
 
+# Initialize messages
+if "messages" not in st.session_state and "selected_thread" in st.session_state:
+    st.session_state.messages = get_thread_messages(st.session_state.selected_thread)
 
-
-
-
-
-# Initialisation des messages
-if "messages" not in st.session_state:
-    st.session_state.messages = get_thread_message(st.session_state.selected_conversation)
-
-# Affichage des messages
-for msg in st.session_state.messages:
+# Display messages
+for msg in st.session_state.get("messages", []):
     if isinstance(msg, AIMessage):
         with st.chat_message("assistant"):
             st.markdown(msg.content)
@@ -266,22 +258,19 @@ for msg in st.session_state.messages:
         with st.chat_message("user"):
             st.markdown(msg.content)
 
-# Réponse à une nouvelle entrée utilisateur
-if prompt := st.chat_input("Posez votre question ici..."):
+# Handle new user input
+if prompt := st.chat_input("Ask your question here..."):
     st.chat_message("user").markdown(prompt)
     msg = HumanMessage(content=prompt)
     st.session_state.messages.append(msg)
-
-    payload = {"messages": [message_to_dict(msg)], "config":{"thread_id": st.session_state.selected_conversation}}
-
-    with st.spinner("Analyse en cours..."):
+    payload = {"messages": [message_to_dict(msg)], "config": {"thread_id": st.session_state.selected_thread}}
+    with st.spinner("Analyzing..."):
         if selected_graph == "Basic":
             response = requests.post(BASIC_GRAPH, json=payload).json()
         elif selected_graph == "Reasoning":
             response = requests.post(REASONING_GRAPH, json=payload).json()
         elif selected_graph == "UI tools":
             response = requests.post(UI_GRAPH, json=payload).json()
-
         response_msg = AIMessage(
             content=response["messages"][-1]["content"],
             kwargs=response["messages"][-1]["additional_kwargs"]
