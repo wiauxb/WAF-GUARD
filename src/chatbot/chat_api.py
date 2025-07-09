@@ -24,7 +24,7 @@ from db.threads import get_threads_db, create_thread, delete_thread, get_thread_
 
 SECRET_KEY = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = 250
 
 
 class Token(BaseModel):
@@ -68,7 +68,7 @@ def chat_ui(input: ChatInput):
     print("Input messages:", input.messages, flush=True)
     print("Input config:", input.config, flush=True)
     response=uiGraph.invoke(input.messages,configuration=input.config)
-    print("Response from UI graph:", response, flush=True)
+    # print("Response from UI graph:", response, flush=True)
     return response
 
 

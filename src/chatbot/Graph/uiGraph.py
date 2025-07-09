@@ -25,6 +25,7 @@ from langchain_core.messages import messages_from_dict, convert_to_openai_messag
 from langchain_core.load import dumpd, dumps, load, loads
 import os
 from Graph.BaseLangGraph import BaseLangGraph
+from db.files import get_current_config_file
 
 
 # from langsmith import Client
@@ -51,6 +52,7 @@ class UIGraph(BaseLangGraph):
             UIGraph.get_constant_info,
             UIGraph.get_directives_with_constant,
             UIGraph.get_macro_call_trace,
+            UIGraph.removed_by,
         ]
 
     # tool 1: filtre règle sur base de location et host, ordonné dans l'ordre d'exécution
@@ -76,6 +78,22 @@ class UIGraph(BaseLangGraph):
             response = requests.post(f"{API_URL}/cypher/to_json", json={"query": query})
 
             return response.json()["df"]
+        
+
+    @tool
+    @staticmethod
+    def removed_by(node_id):
+        """
+        Tool used to get the list of directives that removed a node based on its id.
+        Args:
+        node_id (int): The id of the node to get the directives
+
+        """
+        response = requests.get(f"{API_URL}/directives/removed/{node_id}")
+        if response.status_code != 200:
+            return response.content.decode()
+        else:
+            return response.json()["results"]
 
 
     @staticmethod
@@ -155,7 +173,7 @@ class UIGraph(BaseLangGraph):
             macro_line,macro_content=UIGraph.extract_macro_definiton(call_data[i+1][1],call_data[i][0])
             output += f"Line {macro_line}: {call_data[i+1][1]}\n"
             output+=f"{macro_content}\n\n"
-        # print(output)
+        print(output,flush=True)
         return output
 
 
@@ -173,10 +191,7 @@ class UIGraph(BaseLangGraph):
         """
         # Normalize path to internal representation
         path = path.split("/conf/")[-1]
-        internal_path = "/app/conf/" + path
-
-        with open(internal_path, 'r') as f:
-            lines = f.readlines()
+        internal_path = "conf/" + path
 
         macro_start_re = re.compile(rf"<Macro\s+{re.escape(macro_name)}\b.*?>", re.IGNORECASE)
         macro_end_re = re.compile(r"</Macro>", re.IGNORECASE)
@@ -185,7 +200,8 @@ class UIGraph(BaseLangGraph):
         macro_lines = []
         first_line_number = None
 
-        for i, line in enumerate(lines, start=1):
+        f = get_current_config_file(internal_path)
+        for i, line in enumerate(f, start=1):
             if not in_macro:
                 if macro_start_re.search(line):
                     in_macro = True
@@ -204,14 +220,14 @@ class UIGraph(BaseLangGraph):
     @staticmethod
     def extract_macro_usages(filepath, macro_name, target_line):
         path=filepath.split("/conf/")[-1]
-        internal_path="/app/conf/"+path
+        internal_path="conf/"+path
         usage_re = re.compile(rf"\bUse\s+{re.escape(macro_name)}\b", re.IGNORECASE)
         matches = []
 
-        with open(internal_path, 'r') as f:
-            for lineno, line in enumerate(f, start=1):
-                if usage_re.search(line):
-                    matches.append((lineno, line.strip()))
+        f = get_current_config_file(internal_path)
+        for lineno, line in enumerate(f, start=1):
+            if usage_re.search(line):
+                matches.append((lineno, line.strip()))
         
         closest = min(matches, key=lambda x: abs(x[0] - target_line))
         print(closest, flush=True)
@@ -228,12 +244,13 @@ class UIGraph(BaseLangGraph):
         You are the WAF-ssistant an expert of WAF configuration using Apache2 and modSecurity. 
         You role is to support the user in answering specific questions about the current WAF configuration.
         The configuration has been parsed and stored in a NEO4j and postGres database.
+        The tool get_macro_call_trace returns apache2 configuration lines, you need to properly format the output of the tool to be displayed in markdown. If needed add your comments before or after the code block.
         """
         llmprompt=ChatPromptTemplate.from_messages(
             [("system", prompt,),("placeholder", "{messages}"),]
         )
         try:
-            llm = ChatOpenAI(model="gpt-4o-mini")
+            llm = ChatOpenAI(model="o3-mini-2025-01-31")
             agent=llmprompt|llm.bind_tools(UIGraph.get_tools())
             response = agent.invoke({"messages":messages})
             return {"messages": [response]}  # add the response to the messages using LangGraph reducer paradigm
@@ -261,31 +278,6 @@ class UIGraph(BaseLangGraph):
             "modelNode",
             tools_condition
         )
-
+        graph.add_edge("tools", "modelNode")
         graph.add_edge(START, "modelNode")
         return graph
-
-    # def invoke_graph(st_messages, callables=None):
-        
-    #     # config = {"configurable": {"thread_id": "2"}}
-    #     # print("########################## ST_MESSGAGE #######################", flush=True)
-    #     # print(st_messages, flush=True)
-        
-        
-    #     # print("########################## BASE_MESSAGE #######################", flush=True)
-    #     messages=(messages_from_dict(st_messages))
-    #     # print(messages, flush=True)
-
-    #     print("#################################### OPEN_AI_MESSAGE #####################################", flush=True)
-    #     openai_messages=convert_to_openai_messages(messages)
-    #     print(openai_messages, flush=True)
-
-    #     if callables is None:
-    #         return graph_runnable.invoke({"messages": openai_messages})
-    #         # return graph.invoke({"messages": messages},config=config)
-    #     # Ensure the callables parameter is a list as you can have multiple callbacks
-    #     if not isinstance(callables, list):
-    #         raise TypeError("callables must be a list")
-
-    #     # Invoke the graph with the current messages and callback configuration
-    #     return graph.invoke({"messages": st_messages}, config={"callbacks": callables})
