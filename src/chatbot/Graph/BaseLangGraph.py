@@ -1,6 +1,7 @@
 # base_graph.py
 from abc import ABC, abstractmethod
-from langchain_core.messages import messages_from_dict, convert_to_openai_messages
+from langchain_core.messages import messages_from_dict, convert_to_openai_messages,messages_to_dict
+# from langchain_core.messages import AIMessage, HumanMessage, message_to_dict, messages_from_dict
 from langgraph.checkpoint.postgres import PostgresSaver
 
 class BaseLangGraph(ABC):
@@ -31,4 +32,19 @@ class BaseLangGraph(ABC):
             config["callbacks"] = callbacks
         formated_messages=(messages_from_dict(messages))
         openai_messages = convert_to_openai_messages(formated_messages)
-        return self.graph.invoke({"messages": openai_messages},config=config)
+        response_messages=self.graph.invoke({"messages": openai_messages},config=config)["messages"]
+        # print(f"Response messages type: {type(response_messages[0])}", flush=True)
+        # print(f"Response messages: {response_messages}", flush=True)
+        response = []
+
+        # iterate from the last message to the first, append the message to response until the first user message
+        for message in reversed(response_messages):
+            if message.type == "human":
+                break
+            response.append(message)
+        response.reverse()
+
+        #force the response format because of openai messages
+        payload=messages_to_dict(response)
+        # print(f"Payload: {payload}", flush=True)
+        return payload

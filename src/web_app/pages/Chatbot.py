@@ -1,6 +1,6 @@
 import streamlit as st
 import requests
-from langchain_core.messages import AIMessage, HumanMessage, message_to_dict, messages_from_dict
+from langchain_core.messages import AIMessage, HumanMessage, message_to_dict, messages_from_dict, ToolMessage
 import time
 
 # URLs
@@ -196,6 +196,27 @@ def edit_thread_dialog(thread_id, title):
         if st.button("Cancel", key=f"cancel_{thread_id}"):
             st.rerun()
 
+
+def extract_tool_messages(messages):
+    """Extract tool messages from the list of messages."""
+    #Iterate through messages and collect tools messages and the previous ai message that contains the parameters of the tool call
+    # The function should return a list of dict with keys name, args and response 
+    tool_messages = []
+    for i, msg in enumerate(messages):
+        if isinstance(msg, ToolMessage):
+            print(f"I value at tool message: {i}", flush=True)
+            print(f"Type of i: {type(i)}", flush=True)
+            tool_call = {
+                "name": msg.name,
+                "response": msg.content
+            }
+            # Check if the previous message is an AIMessage
+            if i > 0 and isinstance(messages[i - 1], AIMessage):
+                previous_message = messages[i - 1]
+                tool_call["args"] = previous_message.tool_calls[0]["args"]
+            tool_messages.append(tool_call)
+    return tool_messages
+
 # =====================
 # Main App
 # =====================
@@ -271,12 +292,28 @@ if prompt := st.chat_input("Ask your question here..."):
             response = requests.post(REASONING_GRAPH, json=payload).json()
         elif selected_graph == "UI tools":
             response = requests.post(UI_GRAPH, json=payload).json()
-        response_msg = AIMessage(
-            content=response["messages"][-1]["content"],
-            kwargs=response["messages"][-1]["additional_kwargs"]
-        )
+        # print(f"Response in front: {response}", flush=True)
+
+        # response_msg = AIMessage(
+        #     content=response["messages"][-1]["content"],
+        #     kwargs=response["messages"][-1]["additional_kwargs"]
+        # )
+        response_msg = messages_from_dict(response)
+        last_message = response_msg[-1]
+        #remove the last message from response_msg
+        response_msg = response_msg[:-1]
+        tool_messages= extract_tool_messages(response_msg)
+
+        print(f"Tool messages: {tool_messages}", flush=True)
         with st.chat_message("assistant"):
-            st.markdown(response_msg.content)
-        st.session_state.messages.append(response_msg)
+            st.markdown(last_message.content)
+            review = st.feedback("thumbs")
+            with st.expander("Tools details"):
+                for tool_message in tool_messages:
+                    with st.expander(f"{tool_message['name']}"):
+                        st.markdown(f"Args: {tool_message['args']}")
+                        st.markdown(f"Response: {tool_message['response']}")
+        st.session_state.messages.append(last_message)
+
 
 
