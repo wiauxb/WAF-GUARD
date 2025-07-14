@@ -82,6 +82,9 @@ CREATE TABLE "public"."users_threads" (
     "thread_id" text DEFAULT nextval('users_threads_thread_id_seq')::text NOT NULL,
     "user_id" text NOT NULL,
     "title" text DEFAULT 'New Thread' NOT NULL,
+
+    "created_at" TIMESTAMPTZ DEFAULT now() NOT NULL,
+    "updated_at" TIMESTAMPTZ DEFAULT now() NOT NULL,
     CONSTRAINT "users_threads_pkey" PRIMARY KEY ("thread_id")
 )
 WITH (oids = false);

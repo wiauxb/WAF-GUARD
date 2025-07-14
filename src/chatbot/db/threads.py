@@ -6,14 +6,15 @@ def get_threads_db(user_id: str):
     with pool.connection() as conn:
         print(f"Fetching threads for user_id: {user_id}", flush=True)
         cursor = conn.cursor()
-        cursor.execute("SELECT thread_id, title FROM users_threads WHERE user_id = %s", (user_id,))
+        cursor.execute("SELECT thread_id, title, updated_at FROM users_threads WHERE user_id = %s", (user_id,))
         threads = cursor.fetchall()
         print(f"Threads fetched: {threads}", flush=True)
         response = []
         for thread in threads:
             response.append({
                 "id": thread[0],
-                "title": thread[1]
+                "title": thread[1],
+                "updated_at": thread[2].isoformat()
             })
         return response
 
@@ -48,5 +49,13 @@ def rename_thread(thread_id: str, new_title: str):
         cursor.execute("UPDATE users_threads SET title = %s WHERE thread_id = %s", (new_title, thread_id))
         conn.commit()
         return {"message": "Thread renamed successfully"}
+    
+def update_thread_timestamp(thread_id: str):
+    pool = get_pool()
+    with pool.connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE users_threads SET updated_at = now() WHERE thread_id = %s", (thread_id,))
+        conn.commit()
+        return {"message": "Thread timestamp updated successfully"}
 
 
