@@ -6,7 +6,7 @@ def get_threads_db(user_id: str):
     with pool.connection() as conn:
         print(f"Fetching threads for user_id: {user_id}", flush=True)
         cursor = conn.cursor()
-        cursor.execute("SELECT thread_id, title, updated_at FROM users_threads WHERE user_id = %s", (user_id,))
+        cursor.execute("SELECT thread_id, title, updated_at FROM users_threads WHERE user_id = %s ORDER BY updated_at DESC", (user_id,))
         threads = cursor.fetchall()
         print(f"Threads fetched: {threads}", flush=True)
         response = []

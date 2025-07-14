@@ -256,9 +256,11 @@ if "selected_thread" not in st.session_state and threads:
 
 for thread in threads:
     col1, col2 = st.sidebar.columns([0.8, 0.2])
-    if col1.button(thread["title"], key=thread["id"], use_container_width=True):
+    button_type = "primary" if thread["id"] == st.session_state.get("selected_thread") else "secondary"
+    if col1.button(thread["title"], key=thread["id"], use_container_width=True, type=button_type):
         st.session_state.selected_thread = thread["id"]
         st.session_state.messages = get_thread_messages(thread["id"])
+        st.rerun()
     with col2:
         if st.button("⋮", key=f"menu_{thread['id']}"):
             edit_thread_dialog(thread["id"], thread["title"])
