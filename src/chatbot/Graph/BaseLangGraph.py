@@ -30,6 +30,7 @@ class BaseLangGraph(ABC):
             config["configurable"] = configuration
         if callbacks:
             config["callbacks"] = callbacks
+        config["recursion_limit"] = 4
         formated_messages=(messages_from_dict(messages))
         openai_messages = convert_to_openai_messages(formated_messages)
         response_messages=self.graph.invoke({"messages": openai_messages},config=config)["messages"]

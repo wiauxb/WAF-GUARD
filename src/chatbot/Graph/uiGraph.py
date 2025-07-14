@@ -39,12 +39,19 @@ DB_PASSWORD = os.getenv("POSTGRES_PASSWORD", "password")
 
 API_URL = "http://fastapi:8000"
 
+class LastRulesData(TypedDict):
+    content: str
+    size: int
+    question: str
+
+
 class UIGraph(BaseLangGraph):
 
     class GraphsState(AgentState):
         messages: Annotated[list[AnyMessage], add_messages]
-
-
+        last_rules:LastRulesData
+        
+    
     @staticmethod
     def get_tools():
         return [
@@ -53,14 +60,16 @@ class UIGraph(BaseLangGraph):
             UIGraph.get_directives_with_constant,
             UIGraph.get_macro_call_trace,
             UIGraph.removed_by,
+            # UIGraph.read_last_rules,
         ]
 
     # tool 1: filtre règle sur base de location et host, ordonné dans l'ordre d'exécution
     @tool
     @staticmethod
-    def filter_rule(location:str, host:str, tool_call_id: Annotated[str,InjectedToolCallId], state: Annotated[GraphsState, InjectedState]):
+    def filter_rule(location:str, host:str, tool_call_id: Annotated[str,InjectedToolCallId]):
         """
-        Tool used to filter rules of the configuration based on location and host. The arguments are used in cypher query with regex
+        Tool used to filter rules of the configuration based on location and host.
+        The arguments are used in cypher query with regex
 
         Args:
         location (str): The regex used to filter the location. If the request is not clear or do not explicitly ask for exact match, use .* to match all Location that contain the string
@@ -69,6 +78,7 @@ class UIGraph(BaseLangGraph):
         """
         print("##################################################################################", flush=True)
         print(f"filter_rule({location}, {host})", flush=True)
+        print("tool_call_id:", tool_call_id, flush=True)
         response = requests.post(f"{API_URL}/parse_http_request", json={"location": location, "host": host})
         if response.status_code != 200:
             return response.content.decode()
@@ -76,8 +86,45 @@ class UIGraph(BaseLangGraph):
             query = response.json()["cypher_query"]
             # Run the generated Cypher query and display the graph
             response = requests.post(f"{API_URL}/cypher/to_json", json={"query": query})
+            df=pd.DataFrame.from_dict(response.json()["df"])
+            serialized_df = df.to_json(orient="records")
+            data=LastRulesData(
+            content=serialized_df,
+            size=len(df),
+            question="hello this is a question",)
 
-            return response.json()["df"]
+            return Command(update={
+                "last_rules": data,
+                # update the message history
+                "messages": [
+                    ToolMessage(
+                        df,
+                        tool_call_id=tool_call_id
+                    )
+                ]})
+            # return df
+        
+
+    @tool
+    @staticmethod
+    def read_last_rules(state: Annotated[GraphsState, InjectedState]):
+        """
+        Tool used to read the stored rules.
+
+        """
+        print("##################### in read_last_rules #######################", flush=True)
+        data=state["last_rules"]
+        str_df=data["content"]
+        if str_df is None:
+            print("##########################  No rules #######################", flush=True)
+            return "No rules found"
+        else:
+            df=pd.read_json(str_df, orient="records")
+            print("##########################  DF stored #######################", flush=True)
+            print(df.head(), flush=True)
+            print("########################## SIZE #######################", flush=True)
+            print(data["size"], flush=True)
+            return df
         
 
     @tool
@@ -127,7 +174,7 @@ class UIGraph(BaseLangGraph):
         if response.status_code != 200:
             return response.content.decode()
         else:
-            print(response.json(), flush=True)
+            # print(response.json(), flush=True)
             return response.json()["records"]
         
     # tool 4: get the list of directives where a constant is used
@@ -146,7 +193,7 @@ class UIGraph(BaseLangGraph):
         if response.status_code != 200:
             return response.content.decode()
         else:
-            print(response.json(), flush=True)
+            # print(response.json(), flush=True)
             return response.json()["results"]
         
     # tool 5: Get the macro call context of a node
@@ -173,7 +220,7 @@ class UIGraph(BaseLangGraph):
             macro_line,macro_content=UIGraph.extract_macro_definiton(call_data[i+1][1],call_data[i][0])
             output += f"Line {macro_line}: {call_data[i+1][1]}\n"
             output+=f"{macro_content}\n\n"
-        print(output,flush=True)
+        # print(output,flush=True)
         return output
 
 
@@ -230,7 +277,6 @@ class UIGraph(BaseLangGraph):
                 matches.append((lineno, line.strip()))
         
         closest = min(matches, key=lambda x: abs(x[0] - target_line))
-        print(closest, flush=True)
         return closest
         
 
@@ -245,7 +291,9 @@ class UIGraph(BaseLangGraph):
         You role is to support the user in answering specific questions about the current WAF configuration.
         The configuration has been parsed and stored in a NEO4j and postGres database.
         The tool get_macro_call_trace returns apache2 configuration lines, you need to properly format the output of the tool to be displayed in markdown. If needed add your comments before or after the code block.
+        
         """
+        # The tool filter_rule only store the rules but does not return them, you need to use the read_last_rules tool to get the rules stored.
         llmprompt=ChatPromptTemplate.from_messages(
             [("system", prompt,),("placeholder", "{messages}"),]
         )
@@ -253,6 +301,7 @@ class UIGraph(BaseLangGraph):
             llm = ChatOpenAI(model="o3-mini-2025-01-31")
             agent=llmprompt|llm.bind_tools(UIGraph.get_tools())
             response = agent.invoke({"messages":messages})
+            print("Response from model:", response, flush=True)
             return {"messages": [response]}  # add the response to the messages using LangGraph reducer paradigm
         except Exception as e:
             print(f"Error in call_model: {e}", flush=True)

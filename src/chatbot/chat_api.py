@@ -65,8 +65,8 @@ uiGraph= UIGraph(get_pool(),checkpointer=True)  # Assuming checkpointer is not n
 @app.post("/chat/ui_graph")
 def chat_ui(input: ChatInput):
     print("Ui graph endpoint", flush=True)
-    print("Input messages:", input.messages, flush=True)
-    print("Input config:", input.config, flush=True)
+    # print("Input messages:", input.messages, flush=True)
+    # print("Input config:", input.config, flush=True)
     response=uiGraph.invoke(input.messages,configuration=input.config)
     update_thread_timestamp(input.config["thread_id"])
     # print("Response from UI graph:", response, flush=True)
