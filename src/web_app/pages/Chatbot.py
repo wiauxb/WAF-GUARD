@@ -122,6 +122,31 @@ def rename_thread(thread_id, new_title):
         st.error(f"Error renaming thread: {e}")
         print(f"Error renaming thread: {e}", flush=True)
 
+def send_message(message):
+    """Send a message to a specific thread."""
+    try:
+        graph=st.session_state.get("selected_graph")
+        print(f"Graph selected: {graph}", flush=True)
+        token = st.session_state.get("token")
+        headers = {"Authorization": f"Bearer {token}"}
+        payload = {"messages": [message_to_dict(message)], "config": {"thread_id": st.session_state.get("selected_thread"), "user_id": st.session_state.get("user_id")}}
+        if graph == "UI tools":
+            response = requests.post(UI_GRAPH, json=payload, headers=headers)
+        elif graph == "Reasoning":
+            response = requests.post(REASONING_GRAPH, json=payload, headers=headers)
+        elif graph == "Basic":
+            response = requests.post(BASIC_GRAPH, json=payload, headers=headers)
+        if response.status_code == 200:
+            response_messages = messages_from_dict(response.json())
+            return response_messages
+        else:
+            st.error("Error sending message.")
+            return []
+    except Exception as e:
+        st.error(f"Error sending message: {e}")
+        print(f"Error sending message: {e}", flush=True)
+        return []
+
 # =====================
 # Dialogs
 # =====================
@@ -141,6 +166,7 @@ def login_dialog():
                 st.session_state["authenticated"] = True
                 st.session_state["token"] = user_data["access_token"]
                 st.session_state["username"] = username
+                st.session_state["user_id"] = user_data["user_id"]
                 st.rerun()
             else:
                 st.error("Invalid username or password.")
@@ -238,7 +264,7 @@ if not st.session_state["authenticated"]:
 
 # Sidebar options
 st.sidebar.title("Options")
-selected_graph = st.sidebar.selectbox("Choose a graph", ["UI tools", "Reasoning", "Basic"])
+st.session_state["selected_graph"] = st.sidebar.selectbox("Choose a graph", ["UI tools", "Reasoning", "Basic"])
 
 if st.sidebar.button("New Thread", key="new_thread"):
     create_new_thread()
@@ -286,27 +312,14 @@ if prompt := st.chat_input("Ask your question here..."):
     st.chat_message("user").markdown(prompt)
     msg = HumanMessage(content=prompt)
     st.session_state.messages.append(msg)
-    payload = {"messages": [message_to_dict(msg)], "config": {"thread_id": st.session_state.selected_thread}}
     with st.spinner("Analyzing..."):
-        if selected_graph == "Basic":
-            response = requests.post(BASIC_GRAPH, json=payload).json()
-        elif selected_graph == "Reasoning":
-            response = requests.post(REASONING_GRAPH, json=payload).json()
-        elif selected_graph == "UI tools":
-            response = requests.post(UI_GRAPH, json=payload).json()
-        # print(f"Response in front: {response}", flush=True)
-
-        # response_msg = AIMessage(
-        #     content=response["messages"][-1]["content"],
-        #     kwargs=response["messages"][-1]["additional_kwargs"]
-        # )
-        response_msg = messages_from_dict(response)
+        response_msg = send_message(msg)
+        print(f"Response messages: {response_msg}", flush=True)
         last_message = response_msg[-1]
         #remove the last message from response_msg
         response_msg = response_msg[:-1]
         tool_messages= extract_tool_messages(response_msg)
 
-        print(f"Tool messages: {tool_messages}", flush=True)
         with st.chat_message("assistant"):
             st.markdown(last_message.content)
             review = st.feedback("thumbs")

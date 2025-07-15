@@ -21,6 +21,7 @@ from Graph.uiGraph import UIGraph
 from db.connection import get_pool
 from db.users import register_user, get_user_by_username
 from db.threads import get_threads_db, create_thread, delete_thread, get_thread_messages,rename_thread, update_thread_timestamp
+from db.store import add_to_store
 
 SECRET_KEY = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
 ALGORITHM = "HS256"
@@ -30,6 +31,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 250
 class Token(BaseModel):
     access_token: str
     token_type: str
+    user_id: str 
 
 
 class TokenData(BaseModel):
@@ -57,20 +59,11 @@ class ThreadUpdate(BaseModel):
 
 app = FastAPI()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
-uiGraph= UIGraph(get_pool(),checkpointer=True)  # Assuming checkpointer is not needed for this example
+uiGraph= UIGraph(get_pool(),checkpointer=True,store=True)  # Assuming checkpointer is not needed for this example
 
 
 
 
-@app.post("/chat/ui_graph")
-def chat_ui(input: ChatInput):
-    print("Ui graph endpoint", flush=True)
-    # print("Input messages:", input.messages, flush=True)
-    # print("Input config:", input.config, flush=True)
-    response=uiGraph.invoke(input.messages,configuration=input.config)
-    update_thread_timestamp(input.config["thread_id"])
-    # print("Response from UI graph:", response, flush=True)
-    return response
 
 
 
@@ -122,6 +115,20 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
     return user
 
 
+@app.post("/chat/ui_graph")
+def chat_ui(input: ChatInput,user: Annotated[str, Depends(get_current_user)]):
+    print("Ui graph endpoint", flush=True)
+    # print("Input messages:", input.messages, flush=True)
+    # print("Input config:", input.config, flush=True)
+    config= input.config
+    config["thread_id"] = user["users_id"]
+    response=uiGraph.invoke(input.messages,configuration=config)
+    update_thread_timestamp(input.config["thread_id"])
+    # print("Response from UI graph:", response, flush=True)
+    return response
+
+
+
 
 @app.post("/chat/login")
 async def login_for_access_token(
@@ -139,7 +146,7 @@ async def login_for_access_token(
     access_token = create_access_token(
         data={"sub": user["username"]}, expires_delta=access_token_expires
     )
-    return Token(access_token=access_token, token_type="bearer")
+    return Token(access_token=access_token, user_id=user["users_id"], token_type="bearer")
 
 @app.post("/chat/register", response_model=Token)
 async def register(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]):
@@ -155,7 +162,7 @@ async def register(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]):
         data={"sub": form_data.username},
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
     )
-    return {"access_token": token, "token_type": "bearer"}
+    return {"access_token": token, "token_type": "bearer", "user_id": id}
 
 
 @app.get("/chat/threads")

@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from langchain_core.messages import messages_from_dict, convert_to_openai_messages,messages_to_dict
 # from langchain_core.messages import AIMessage, HumanMessage, message_to_dict, messages_from_dict
 from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.store.postgres import PostgresStore
 
 class BaseLangGraph(ABC):
     def __init__(self,pool,checkpointer=False,store=False):
@@ -21,7 +22,18 @@ class BaseLangGraph(ABC):
         if self.checkpointer:
             checkpointer = PostgresSaver(self.pool)
             # checkpointer.setup()
-        return graph.compile(checkpointer=checkpointer)
+        if self.store:
+            store = PostgresStore(self.pool)
+            store.setup()
+        if not self.checkpointer and not self.store:
+            return graph.compile()
+        if self.checkpointer and not self.store:
+            return graph.compile(checkpointer=checkpointer)
+        if not self.checkpointer and self.store:
+            return graph.compile(store=store)
+        # if both checkpointer and store are enabled, return both
+        if self.checkpointer and self.store:
+            return graph.compile(checkpointer=checkpointer, store=store)
 
 
     def invoke(self, messages, configuration=None, callbacks=None):
