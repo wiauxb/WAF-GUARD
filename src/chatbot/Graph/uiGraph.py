@@ -164,10 +164,10 @@ class UIGraph(BaseLangGraph):
     @tool
     def get_constant_info(constant_name:str):
         """
-        Tool used to get the information of a constant or variable based on its name.
+        Tool used to get the list of constants and variables inside the configuration that contain constant_name.
 
         Args:
-        constant_name (str): The name of the constant to get the information
+        constant_name (str): The name of the constant to find
 
         """
         response = requests.get(f"{API_URL}/search_var/{constant_name}")
