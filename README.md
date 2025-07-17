@@ -17,6 +17,8 @@ The project is structured as follows:
 ├── src/                    # Source code for the project
 │   ├── analyzer/           # Analyzer responsible for the analysis of the dumps
 │   │                               and populating the DBs.
+│   ├── chatbot/            #LangGraph application that defines chatbot logic and exposes FastAPI
+│   │ 
 │   ├── waf_rest_api/       # WAF implementation (apache + modsecurity) + REST API endpoint
 │   │                               responsible of dumping the configs
 │   └── web_app/            # Streamlit web application for management, exploration and visualization
@@ -37,13 +39,22 @@ Create a `.env` file with the following content:
    ```
    PWD=<path-to-the-root-of-this-project>
 
-   NEO4J_URL=bolt://localhost:7687
+   NEO4J_URL=bolt://neo4j:7687
    NEO4J_USER=neo4j
    NEO4J_PASSWORD=<your-password>
 
-   POSTGRES_URL=localhost
+   POSTGRES_HOST=postgres
+   POSTGRES_PORT=5432
    POSTGRES_USER=admin
    POSTGRES_PASSWORD=<your-password>
+
+   OPENAI_API_KEY=<your-api-key>
+
+
+   WAF_URL = "http://waf:8000"
+   ANALYZER_URL = "http://analyzer:8000"
+   API_URL="http://fastapi:8000"
+   CHAT_URL = "http://chatbot:8005/chat"
 
    DOCKER_DATA_PATH=${PWD}/docker/docker_data
    EXPORT_DIR=${DOCKER_DATA_PATH}/db_exports
