@@ -9,13 +9,10 @@ import asyncio
 from websockets.sync.client import connect
 import time
 
+import os
 
-API_URL = "http://fastapi:8000"
-WS_URL = "ws://chatbot:8005/ws"
-CHAT_URL = "http://chatbot:8005/chat"
-BASIC_GRAPH=CHAT_URL+"/basic_graph"
-UI_GRAPH=CHAT_URL+"/ui_graph"
-REASONING_GRAPH=CHAT_URL+"/reasoning_graph"
+
+API_URL = os.getenv("API_URL")
 
 
 st.set_page_config(page_title="Graph Query Interface", page_icon=":bar_chart:", layout="wide")

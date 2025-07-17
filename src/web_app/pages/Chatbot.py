@@ -4,8 +4,11 @@ from langchain_core.messages import AIMessage, HumanMessage, message_to_dict, me
 import time
 
 # URLs
-WS_URL = "ws://chatbot:8005/ws"
-CHAT_URL = "http://chatbot:8005/chat"
+# WS_URL = "ws://chatbot:8005/ws"
+import os
+
+
+CHAT_URL = os.getenv("CHAT_URL")
 BASIC_GRAPH = CHAT_URL + "/basic_graph"
 UI_GRAPH = CHAT_URL + "/ui_graph"
 REASONING_GRAPH = CHAT_URL + "/reasoning_graph"
