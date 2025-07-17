@@ -1,13 +1,11 @@
 import os
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
-from dotenv import load_dotenv
 
 # Import routers
 from .routers import cypher, configs, nodes, storage, database, directives
 
 # Load environment variables
-load_dotenv()
 
 
 # Initialize FastAPI app

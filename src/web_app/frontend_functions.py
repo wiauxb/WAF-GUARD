@@ -8,9 +8,10 @@ from pandas.api.types import (
 )
 import requests
 import streamlit as st
+import os
 
 
-API_URL = "http://fastapi:8000"
+API_URL = os.getenv("API_URL")
 COLUMNS_OF_INTEREST = ["node_id", "type", "args", "Location", "VirtualHost", "phase", "id", "tags", "msg"]
 COLUMNS_TO_REMOVE = ["Context"]
 

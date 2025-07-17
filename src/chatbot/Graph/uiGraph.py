@@ -29,15 +29,13 @@ from db.files import get_current_config_file
 
 
 # from langsmith import Client
-from dotenv import load_dotenv
-load_dotenv()
 # client=Client()
 
-DB_USER = os.getenv("POSTGRES_USER", "admin")
-DB_PASSWORD = os.getenv("POSTGRES_PASSWORD", "password")
+DB_USER = os.getenv("POSTGRES_USER")
+DB_PASSWORD = os.getenv("POSTGRES_PASSWORD")
 
 
-API_URL = "http://fastapi:8000"
+API_URL = os.getenv("API_URL")
 
 class LastRulesData(TypedDict):
     content: str

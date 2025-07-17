@@ -4,14 +4,13 @@ import time
 import math
 import argparse
 from tqdm import tqdm
-from dotenv import load_dotenv
 
 from .analyzer import parse_compiled_config
 from .helper_classes.neo4j_interface import Neo4jDB
 from .helper_classes.sql_interface import PostgresDB
 from .helper_classes.timer import Timer
 
-DELETE_BATCH_SIZE = 1000
+DELETE_BATCH_SIZE = os.getenv("DELETE_BATCH_SIZE")
 
 def reset_neo4j(neo4j_url, neo4j_user, neo4j_pass):
     graph = Neo4jDB(neo4j_url, neo4j_user, neo4j_pass)
@@ -67,13 +66,12 @@ def process_directives(directives, graph, sql_db):
 
 def main(file_path):
     """Main function to analyze configuration and populate databases."""
-    load_dotenv()
     if os.getenv("RUNNING_IN_DOCKER"):
         neo4j_url = "bolt://neo4j:7687"
         postgres_url = "postgres"
     else:
         neo4j_url = os.getenv("NEO4J_URL")
-        postgres_url = os.getenv("POSTGRES_URL")
+        postgres_url = os.getenv("POSTGRES_HOST")
     neo4j_user = os.getenv("NEO4J_USER")
     neo4j_pass = os.getenv("NEO4J_PASSWORD")
     postgres_user = os.getenv("POSTGRES_USER")

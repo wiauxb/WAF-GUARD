@@ -27,8 +27,7 @@ import os
 
 
 # from langsmith import Client
-from dotenv import load_dotenv
-load_dotenv()
+
 # client=Client()
 
 DB_USER = os.getenv("POSTGRES_USER", "admin")
