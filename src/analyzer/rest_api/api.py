@@ -5,17 +5,15 @@ import subprocess
 import tempfile
 import zipfile
 from fastapi import FastAPI, UploadFile, File, HTTPException
-from dotenv import load_dotenv
 import psycopg2
 
 from ..main import main
 
-load_dotenv()
 
 if os.getenv("RUNNING_IN_DOCKER"):
     pstgr_url = "postgres"
 else:
-    pstgr_url = os.getenv("POSTGRES_URL")
+    pstgr_url = os.getenv("POSTGRES_HOST")
 pstgr_user = os.getenv("POSTGRES_USER")
 pstgr_pass = os.getenv("POSTGRES_PASSWORD")
 if not pstgr_url or not pstgr_user or not pstgr_pass:

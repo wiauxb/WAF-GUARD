@@ -9,8 +9,11 @@ import hashlib
 import pandas as pd
 import requests
 
+import os
+
+
 UPLOADED_LOCATION = "/shared/uploaded"
-API_URL = "http://fastapi:8000"
+API_URL = os.getenv("API_URL")
 
 def process_config_archive(uploaded_file, nickname=None):
     response = requests.post(f"{API_URL}/store_config", data={"config_nickname": nickname}, files={"file": uploaded_file})

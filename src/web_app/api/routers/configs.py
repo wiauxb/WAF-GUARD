@@ -44,8 +44,16 @@ async def select_config(config_id: int):
     config = cursor.fetchone()
     if not config:
         raise HTTPException(status_code=404, detail="Config does not exist")
-    # Set the selected config
-    cursor.execute("UPDATE selected_config SET config_id = %s", (config_id,))
+
+    # Check if selected_config table is empty
+    cursor.execute("SELECT * FROM selected_config")
+    selected = cursor.fetchone()
+    if not selected:
+        # Insert new row if table is empty
+        cursor.execute("INSERT INTO selected_config (config_id) VALUES (%s)", (config_id,))
+    else:
+        # Update existing row
+        cursor.execute("UPDATE selected_config SET config_id = %s", (config_id,))
     files_conn.commit()
     return {"message": "Config selected successfully"}
 
