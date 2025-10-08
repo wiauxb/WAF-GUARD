@@ -50,7 +50,7 @@ Create a `.env` file with the following content:
 
    OPENAI_API_KEY=<your-api-key>
 
-
+   DELETE_BATCH_SIZE = 1000
    WAF_URL = "http://waf:8000"
    ANALYZER_URL = "http://analyzer:8000"
    API_URL="http://fastapi:8000"

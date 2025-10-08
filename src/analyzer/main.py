@@ -32,10 +32,23 @@ def initialize_databases(neo4j_url, neo4j_user, neo4j_pass, postgres_url, postgr
     # sleep for 5 seconds to allow Neo4j to restart
     # time.sleep(5) #FIXME remove ?
     graph = Neo4jDB(neo4j_url, neo4j_user, neo4j_pass)
+    print("GRAPH instantiated")
     sql_db = PostgresDB(postgres_url, postgres_user, postgres_pass, "cwaf") #FIXME: why not create a new schema for each config ?
+    print("SQL instantiated")
+    # Terminate all other connections to the database
+    sql_db.execute("""
+        SELECT pg_terminate_backend(pg_stat_activity.pid)
+        FROM pg_stat_activity
+        WHERE pg_stat_activity.datname = current_database()
+        AND pid <> pg_backend_pid()
+    """)
+    print("Other connections terminated")
     sql_db.execute("DROP SCHEMA public CASCADE")
+    print("SQL schema dropped")
     sql_db.execute("CREATE SCHEMA public")
+    print("SQL schema created")
     sql_db.init_tables()
+    print("SQL cleared and tables created")
     return graph, sql_db
 
 
