@@ -1,9 +1,5 @@
 FROM postgres:latest
 
-# Create the data directory with correct permissions
-RUN mkdir -p /var/lib/postgresql/data && \
-    chown -R postgres:postgres /var/lib/postgresql/data
-
 # Copy SQL files for database initialization
 COPY scripts/cwaf_db.sql /init/
 COPY scripts/files_db.sql /init/
