@@ -36,14 +36,17 @@ services:
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: cwaf
+      POSTGRES_DB_CWAF: ${POSTGRES_DB_CWAF}
+      POSTGRES_DB_FILES: ${POSTGRES_DB_FILES}
+      POSTGRES_DB_CHATBOT: ${POSTGRES_DB_CHATBOT}
+      PGDATA: /var/lib/postgresql/17/docker
     ports:
       - "5432:5432"
     volumes:
       - ${DOCKER_DATA_PATH}/postgres:/var/lib/postgresql
       - ${EXPORT_DIR}:/exports
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}"]
+      test: [ "CMD-SHELL", "pg_isready -d $${POSTGRES_DB_CWAF} -U $${POSTGRES_USER}"]
       interval: 1s
       timeout: 5s
       retries: 10
@@ -80,6 +83,8 @@ services:
       - ANALYZER_URL=${ANALYZER_URL}
       - DELETE_BATCH_SIZE=${DELETE_BATCH_SIZE}
       - EXPORT_DIR=${EXPORT_DIR}
+      - POSTGRES_DB_CWAF=${POSTGRES_DB_CWAF}
+      - POSTGRES_DB_FILES=${POSTGRES_DB_FILES}
     working_dir: /app
     ports:
       - "8000:8000"
@@ -143,6 +148,8 @@ services:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - DELETE_BATCH_SIZE=${DELETE_BATCH_SIZE}
+      - POSTGRES_DB_CWAF=${POSTGRES_DB_CWAF}
+      - POSTGRES_DB_FILES=${POSTGRES_DB_FILES}
     volumes:
       - ${SRC_PATH}/analyzer:/app
     ports:
@@ -177,6 +184,9 @@ services:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - POSTGRES_DB_CHATBOT=${POSTGRES_DB_CHATBOT}
+      - POSTGRES_DB_CWAF=${POSTGRES_DB_CWAF}
+      - POSTGRES_DB_FILES=${POSTGRES_DB_FILES}
     depends_on:
       fastapi:
         condition: service_started

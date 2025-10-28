@@ -168,5 +168,6 @@ def show_rules(directive_table: pd.DataFrame, container: st = st, key = None):
         for i, t in enumerate(sub_tabs):
             with t:
                 response = requests.get(f"{API_URL}/get_metadata/{selected[i]}")
+                # print(response.json(),flush=True)
                 metadata = pd.DataFrame(response.json()["metadata"], columns=["call_macro", "file_path", "line_number"])
                 container.dataframe(metadata, hide_index=True)

@@ -11,6 +11,9 @@ postgres_host = os.getenv("POSTGRES_HOST")
 postgresUser = os.getenv("POSTGRES_USER")
 postgresPass = os.getenv("POSTGRES_PASSWORD")
 
+postgres_db_cwaf = os.getenv("POSTGRES_DB_CWAF", "cwaf")
+postgres_db_files = os.getenv("POSTGRES_DB_FILES", "files")
+
 # API URLs
 WAF_URL = os.getenv("WAF_URL")
 ANALYZER_URL = os.getenv("ANALYZER_URL")
@@ -27,14 +30,14 @@ parsed_conn = psycopg2.connect(
     host="postgres",
     user=postgresUser,
     password=postgresPass,
-    database="cwaf"
+    database=postgres_db_cwaf
 )
 
 files_conn = psycopg2.connect(
     host="postgres",
     user=postgresUser,
     password=postgresPass,
-    database="files"
+    database=postgres_db_files
 )
 
 

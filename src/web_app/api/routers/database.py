@@ -49,7 +49,7 @@ async def export_database(config_name: str):
         postgres_export_path = Path(f"{export_path}/postgres")
         postgres_export_path.mkdir(exist_ok=True)
 
-        # Export data from the 'cwaf' database
+        # Export data from the parsed config database
         cursor = parsed_conn.cursor()
         
         # Get all table names

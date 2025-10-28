@@ -9,6 +9,8 @@ from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 DB_USER = os.getenv("POSTGRES_USER", "admin")
 DB_PASSWORD = os.getenv("POSTGRES_PASSWORD", "password")
+POSTGRES_DB_CWAF = os.getenv("POSTGRES_DB_CWAF", "cwaf")
+POSTGRES_DB_CHATBOT = os.getenv("POSTGRES_DB_CHATBOT", "chatbot")
 
 
 
@@ -53,7 +55,7 @@ def ensure_database_exists(
         password=password,
         host=host,
         port=port,
-        database="cwaf"
+        database=POSTGRES_DB_CWAF
     )
     conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
     cursor = conn.cursor()
@@ -83,7 +85,7 @@ else:
     print("Vector Database already exists")
 
 ensure_database_exists(
-    db_name='chatbot',
+    db_name=POSTGRES_DB_CHATBOT,
     user=DB_USER,
     password=DB_PASSWORD,
     host="postgres",

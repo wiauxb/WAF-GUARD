@@ -11,6 +11,7 @@ from .helper_classes.sql_interface import PostgresDB
 from .helper_classes.timer import Timer
 
 DELETE_BATCH_SIZE = os.getenv("DELETE_BATCH_SIZE")
+POSTGRES_DB_CWAF = os.getenv("POSTGRES_DB_CWAF", "cwaf")
 
 def reset_neo4j(neo4j_url, neo4j_user, neo4j_pass):
     graph = Neo4jDB(neo4j_url, neo4j_user, neo4j_pass)
@@ -33,7 +34,7 @@ def initialize_databases(neo4j_url, neo4j_user, neo4j_pass, postgres_url, postgr
     # time.sleep(5) #FIXME remove ?
     graph = Neo4jDB(neo4j_url, neo4j_user, neo4j_pass)
     print("GRAPH instantiated")
-    sql_db = PostgresDB(postgres_url, postgres_user, postgres_pass, "cwaf") #FIXME: why not create a new schema for each config ?
+    sql_db = PostgresDB(postgres_url, postgres_user, postgres_pass, POSTGRES_DB_CWAF) #FIXME: why not create a new schema for each config ?
     print("SQL instantiated")
     # Terminate all other connections to the database
     sql_db.execute("""

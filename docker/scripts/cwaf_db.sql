@@ -1,7 +1,5 @@
 -- Adminer 4.17.1 PostgreSQL 17.4 (Debian 17.4-1.pgdg120+2) dump
 
-\connect "cwaf";
-
 DROP TABLE IF EXISTS "macrocall";
 DROP SEQUENCE IF EXISTS macrocall_id_seq;
 CREATE SEQUENCE macrocall_id_seq INCREMENT 1 MINVALUE 1 MAXVALUE 2147483647 START 556961 CACHE 1;

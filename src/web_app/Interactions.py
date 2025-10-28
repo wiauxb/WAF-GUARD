@@ -232,7 +232,9 @@ with tab_removed_by:
             st.error(response.content.decode())
         else:
             df = pd.DataFrame(response.json()["results"])
+            print(df.head(),flush=True)
             criterions_types = df["criterion_type"].unique()
+
             for type in criterions_types:
                 st.subheader(f"Directives that removed based on a {type}")
                 df_type = df[df["criterion_type"] == type]

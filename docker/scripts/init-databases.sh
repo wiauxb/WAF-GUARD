@@ -56,8 +56,8 @@ done
 echo "PostgreSQL is ready. Initializing databases..."
 
 # Create databases
-create_database_if_not_exists "cwaf" "/init/cwaf_db.sql"
-create_database_if_not_exists "files" "/init/files_db.sql"
-create_database_if_not_exists "chatbot" "/init/chatbot_db.sql"
+create_database_if_not_exists "${POSTGRES_DB_CWAF}" "/init/cwaf_db.sql"
+create_database_if_not_exists "${POSTGRES_DB_FILES}" "/init/files_db.sql"
+create_database_if_not_exists "${POSTGRES_DB_CHATBOT}" "/init/chatbot_db.sql"
 
 echo "Database initialization completed."

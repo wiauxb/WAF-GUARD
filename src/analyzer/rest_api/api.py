@@ -16,12 +16,13 @@ else:
     pstgr_url = os.getenv("POSTGRES_HOST")
 pstgr_user = os.getenv("POSTGRES_USER")
 pstgr_pass = os.getenv("POSTGRES_PASSWORD")
+pstgr_db_files = os.getenv("POSTGRES_DB_FILES", "files")
 if not pstgr_url or not pstgr_user or not pstgr_pass:
     raise HTTPException(status_code=500, detail="Database credentials are not set in environment variables.")
 # connect to the database and get the files
 file_conn = psycopg2.connect(
     host=pstgr_url,
-    database="files",
+    database=pstgr_db_files,
     user=pstgr_user,
     password=pstgr_pass
 )

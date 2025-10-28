@@ -1,7 +1,5 @@
 -- Adminer 5.3.0 PostgreSQL 17.5 dump
 
-\connect "chatbot";
-
 DROP TABLE IF EXISTS "checkpoint_blobs";
 CREATE TABLE "public"."checkpoint_blobs" (
     "thread_id" text NOT NULL,

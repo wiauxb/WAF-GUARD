@@ -1,4 +1,4 @@
-FROM postgres:latest
+FROM postgres:17.6
 
 # Copy SQL files for database initialization
 COPY scripts/cwaf_db.sql /init/
