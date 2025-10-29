@@ -19,7 +19,7 @@ const parseConfigArray = (arr: ConfigArray): Config => ({
 })
 
 export default function DashboardPage() {
-  const { setConfigs, setSelectedConfig } = useConfigStore()
+  const { selectedConfigId, setConfigs, setSelectedConfig } = useConfigStore()
 
   const { data: configsData, isLoading: configsLoading } = useQuery({
     queryKey: ['configs'],
@@ -27,6 +27,16 @@ export default function DashboardPage() {
       const response = await webAppApi.get<{ configs: ConfigArray[] }>('/configs')
       // Convert array format to object format
       const parsedConfigs = response.data.configs.map(parseConfigArray)
+      setConfigs(parsedConfigs)
+      
+      // Restore selected config from localStorage
+      if (selectedConfigId) {
+        const selected = parsedConfigs.find((c) => c.id === selectedConfigId)
+        if (selected) {
+          setSelectedConfig(selected)
+        }
+      }
+      
       return { configs: parsedConfigs }
     },
   })
@@ -46,17 +56,6 @@ export default function DashboardPage() {
       return response.data
     },
   })
-
-  useEffect(() => {
-    if (configsData?.configs) {
-      setConfigs(configsData.configs)
-    }
-    if (selectedConfigData?.selected_config) {
-      const selectedId = selectedConfigData.selected_config.config_id
-      const selected = configsData?.configs?.find((c: Config) => c.id === selectedId)
-      setSelectedConfig(selected || null)
-    }
-  }, [configsData, selectedConfigData, setConfigs, setSelectedConfig])
 
   const stats = [
     {
