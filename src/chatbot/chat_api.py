@@ -1,5 +1,6 @@
 from fastapi import FastAPI, WebSocket, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.middleware.cors import CORSMiddleware
 
 from pydantic import BaseModel
 from fastapi.responses import StreamingResponse
@@ -56,6 +57,13 @@ class ThreadUpdate(BaseModel):
 
 
 app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Adjust this to your needs
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 uiGraph= UIGraph(get_pool(),checkpointer=True)  # Assuming checkpointer is not needed for this example
 

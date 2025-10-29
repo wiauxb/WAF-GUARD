@@ -5,6 +5,7 @@ import subprocess
 import tempfile
 import zipfile
 from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 import psycopg2
 
 from ..main import main
@@ -28,6 +29,13 @@ file_conn = psycopg2.connect(
 )
 
 app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Adjust this to your needs
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 def run_analyzer(id: int):
     """Run the analyzer on the config."""
