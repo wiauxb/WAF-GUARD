@@ -32,16 +32,15 @@ export interface ChatConfig {
 }
 
 // Config types
+// Backend returns arrays: [id, nickname, parsed, created_at]
+export type ConfigArray = [number, string, boolean, string]
+
 export interface Config {
   id: number
   nickname: string
-  selected: boolean  // Whether this config is currently selected
+  parsed: boolean
   created_at: string
-  parsed?: boolean   // Whether this config has been analyzed
 }
-
-// API response format (array format from backend)
-export type ConfigArray = [number, string, boolean, string] // [id, nickname, selected, created_at]
 
 export interface SelectedConfig {
   id: number

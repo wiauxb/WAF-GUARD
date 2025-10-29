@@ -242,7 +242,7 @@ export default function ChatbotPage() {
                           {thread.title || 'New Conversation'}
                         </p>
                       )}
-                      <p className="text-xs opacity-70" suppressHydrationWarning>
+                      <p className="text-xs opacity-70">
                         {formatRelativeTime(thread.updated_at)}
                       </p>
                     </div>
@@ -315,7 +315,7 @@ export default function ChatbotPage() {
                   >
                     <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                     {message.timestamp && (
-                      <p className="text-xs opacity-70 mt-1" suppressHydrationWarning>
+                      <p className="text-xs opacity-70 mt-1">
                         {formatRelativeTime(message.timestamp)}
                       </p>
                     )}
