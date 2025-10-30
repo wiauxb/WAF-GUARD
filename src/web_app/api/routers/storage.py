@@ -5,7 +5,7 @@ import traceback
 from typing import List
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request
 import requests
-from ..models.models import ConfigContent
+from ..models.models import ConfigContent, FileContent
 from ..db.connections import files_conn, WAF_URL
 from ..utils.file_utils import extract_config
 
@@ -93,6 +93,34 @@ async def config_tree(config_id: int, path: str = Form(...)) -> List[ConfigConte
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to get config tree: {str(e)}")
     
+
+#save updated file in config files
+#add path and file content in Form data
+@router.post("/update_config/{config_id}")
+async def update_config(config_id: int, fileContent: FileContent):
+    try:
+        cursor = files_conn.cursor()
+        cursor.execute("""
+            UPDATE files
+            SET content = %s
+            WHERE config_id = %s AND path = %s
+        """, (fileContent.content.encode(), config_id, fileContent.path))
+        files_conn.commit()
+
+        info_path = f"/tmp/config_{config_id}_info.json"
+        with open(info_path, "r") as info_file:
+            config_info = json.load(info_file)
+        config_path = config_info["path"]
+        if not config_path:
+            raise HTTPException(status_code=404, detail="Config not found")
+        full_path = Path(config_path) / fileContent.path
+        with open(full_path, "w") as file:
+            file.write(fileContent.content)
+        return {"status": "success"}
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to update config file: {str(e)}")
+
 
 
 @router.post("/get_dump")

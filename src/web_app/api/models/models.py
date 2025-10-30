@@ -25,3 +25,7 @@ class ConfigContent(BaseModel):
     filename: str
     is_folder: bool
     file_content: Optional[str] = None
+
+class FileContent(BaseModel):
+    path: str
+    content: str
