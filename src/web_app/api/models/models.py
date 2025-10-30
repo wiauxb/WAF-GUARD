@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic import BaseModel
 
 
@@ -18,3 +19,9 @@ class FileContextQuery(BaseModel):
 class ConstantQuery(BaseModel):
     var_name: str
     var_value: str = None
+
+
+class ConfigContent(BaseModel):
+    filename: str
+    is_folder: bool
+    file_content: Optional[str] = None

@@ -80,9 +80,13 @@ async def get_dump(file: UploadFile = File(...)):
     
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_zip_path = save_uploaded_file(file, temp_dir)
+        print(f"Saved uploaded file to {temp_zip_path}")
         extract_dir = extract_zip_file(temp_zip_path, temp_dir)
+        print(f"Extracted zip file to {extract_dir}")
         copy_config_files(extract_dir)
+        print(f"Copied config files to Apache conf directory")
         dump = run_apache_config_dump()
+        print(f"Generated Apache config dump")
         return {"dump": dump}
 
 @app.get("/health")

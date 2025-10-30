@@ -83,6 +83,12 @@ export interface CypherResult {
 }
 
 // File types
+export interface ConfigContent {
+  filename: string
+  is_folder: boolean
+  file_content?: string | null
+}
+
 export interface FileContext {
   file_path: string
   line_num: number

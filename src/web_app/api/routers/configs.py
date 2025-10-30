@@ -14,7 +14,7 @@ router = APIRouter(prefix="/configs", tags=["Configuration Management"])
 @router.get("")
 async def get_configs():
     cursor = files_conn.cursor()
-    cursor.execute("SELECT * FROM configs")
+    cursor.execute("SELECT * FROM public.configs")
     configs = cursor.fetchall()
     return {"configs": configs}
 
