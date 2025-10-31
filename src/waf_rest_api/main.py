@@ -17,12 +17,12 @@ app.add_middleware(
 )
 
 
-def check_zip_file(filename: str):
+async def check_zip_file(filename: str):
     """Check if the file is a zip file."""
     if not filename.endswith('.zip'):
         raise HTTPException(status_code=400, detail="File must be a zip file")
 
-def save_uploaded_file(file: UploadFile, temp_dir: str) -> str:
+async def save_uploaded_file(file: UploadFile, temp_dir: str) -> str:
     """Save uploaded file to a temporary directory."""
     temp_zip_path = os.path.join(temp_dir,file.filename)
     with open(temp_zip_path, "wb") as buffer:
@@ -30,7 +30,7 @@ def save_uploaded_file(file: UploadFile, temp_dir: str) -> str:
         # buffer.write(file.file.read())
     return temp_zip_path
 
-def extract_zip_file(temp_zip_path: str, temp_dir: str) -> str:
+async def extract_zip_file(temp_zip_path: str, temp_dir: str) -> str:
     """Extract zip file to a directory."""
     try:
         extract_dir = os.path.join(temp_dir, "extracted")
@@ -42,7 +42,7 @@ def extract_zip_file(temp_zip_path: str, temp_dir: str) -> str:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to extract zip file: {str(e)}")
 
-def copy_config_files(extract_dir: str):
+async def copy_config_files(extract_dir: str):
     """Copy extracted files to Apache conf directory."""
     try:
         conf_dir = os.path.join(extract_dir, "conf")
@@ -58,7 +58,7 @@ def copy_config_files(extract_dir: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to copy config files: {str(e)}")
 
-def run_apache_config_dump():
+async def run_apache_config_dump():
     """Run the httpd command to get the config dump."""
     try:
         result = subprocess.run(
@@ -76,17 +76,14 @@ async def get_dump(file: UploadFile = File(...)):
     """
     Process uploaded zip file with Apache configuration and return config dump.
     """
-    check_zip_file(file.filename)
+    print("getting dump")
+    await check_zip_file(file.filename)
     
     with tempfile.TemporaryDirectory() as temp_dir:
-        temp_zip_path = save_uploaded_file(file, temp_dir)
-        print(f"Saved uploaded file to {temp_zip_path}")
-        extract_dir = extract_zip_file(temp_zip_path, temp_dir)
-        print(f"Extracted zip file to {extract_dir}")
-        copy_config_files(extract_dir)
-        print(f"Copied config files to Apache conf directory")
-        dump = run_apache_config_dump()
-        print(f"Generated Apache config dump")
+        temp_zip_path = await save_uploaded_file(file, temp_dir)
+        extract_dir = await extract_zip_file(temp_zip_path, temp_dir)
+        await copy_config_files(extract_dir)
+        dump = await run_apache_config_dump()
         return {"dump": dump}
 
 @app.get("/health")

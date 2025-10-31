@@ -25,7 +25,6 @@ const navItems = [
   { href: '/chatbot', label: 'Chatbot', icon: MessageSquare },
   { href: '/cypher', label: 'Query Graph', icon: Database },
   { href: '/directives', label: 'Directives', icon: Search },
-  { href: '/database', label: 'Database', icon: Settings },
   { href: '/services', label: 'Services', icon: Activity },
 ]
 
