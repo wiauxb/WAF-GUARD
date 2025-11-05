@@ -72,9 +72,9 @@ uiGraph= UIGraph(get_pool(),checkpointer=True)  # Assuming checkpointer is not n
 
 @app.post("/chat/ui_graph")
 def chat_ui(input: ChatInput):
-    print("Ui graph endpoint", flush=True)
-    print("Input messages:", input.messages, flush=True)
-    print("Input config:", input.config, flush=True)
+    # print("Ui graph endpoint", flush=True)
+    # print("Input messages:", input.messages, flush=True)
+    # print("Input config:", input.config, flush=True)
     response=uiGraph.invoke(input.messages,configuration=input.config)
     update_thread_timestamp(input.config["thread_id"])
     # print("Response from UI graph:", response, flush=True)
@@ -178,8 +178,9 @@ async def create_new_thread(user: Annotated[str, Depends(get_current_user)]):
 
 @app.get("/chat/threads/{thread_id}")
 async def fetch_thread_messages(thread_id: str, user: Annotated[str, Depends(get_current_user)]):
-    print(f"Fetching messages for thread ID: {thread_id} for user: {user}", flush=True)
+    # print(f"Fetching messages for thread ID: {thread_id} for user: {user}", flush=True)
     messages = get_thread_messages(thread_id)
+    print(f"Messages fetched: {messages_to_dict(messages)}")
     return messages_to_dict(messages)
 
 

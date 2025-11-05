@@ -19,11 +19,11 @@ export interface Message {
 }
 
 export interface Thread {
-  thread_id: string
+  id: string
   title?: string
-  created_at: string
+  created_at?: string
   updated_at: string
-  users_id: number
+  users_id?: number
 }
 
 export interface ChatConfig {

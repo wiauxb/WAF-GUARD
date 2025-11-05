@@ -68,7 +68,7 @@ export default function ChatbotPage() {
       return response.data
     },
     onSuccess: (data) => {
-      setCurrentThreadId(data.thread_id)
+      setCurrentThreadId(data.id)
       setMessages([])
       queryClient.invalidateQueries({ queryKey: ['threads'] })
       toast.success('New conversation started!')
@@ -152,7 +152,7 @@ export default function ChatbotPage() {
     if (!currentThreadId) {
       // Create new thread first
       const newThread = await createThreadMutation.mutateAsync()
-      setCurrentThreadId(newThread.thread_id)
+      setCurrentThreadId(newThread.id)
     }
 
     const userMessage: Message = {
@@ -203,33 +203,33 @@ export default function ChatbotPage() {
             <div className="space-y-1">
               {threads?.map((thread: Thread) => (
                 <div
-                  key={thread.thread_id}
+                  key={thread.id}
                   className={`p-3 rounded-lg cursor-pointer transition-colors ${
-                    currentThreadId === thread.thread_id
+                    currentThreadId === thread.id
                       ? 'bg-primary text-primary-foreground'
                       : 'hover:bg-accent'
                   }`}
                   onClick={() => {
-                    setCurrentThreadId(thread.thread_id)
+                    setCurrentThreadId(thread.id)
                     setMessages([])
                   }}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
-                      {editThreadId === thread.thread_id ? (
+                      {editThreadId === thread.id ? (
                         <Input
                           value={editThreadTitle}
                           onChange={(e) => setEditThreadTitle(e.target.value)}
                           onBlur={() => {
                             renameThreadMutation.mutate({
-                              threadId: thread.thread_id,
+                              threadId: thread.id,
                               newTitle: editThreadTitle
                             })
                           }}
                           onKeyPress={(e) => {
                             if (e.key === 'Enter') {
                               renameThreadMutation.mutate({
-                                threadId: thread.thread_id,
+                                threadId: thread.id,
                                 newTitle: editThreadTitle
                               })
                             }
@@ -250,7 +250,7 @@ export default function ChatbotPage() {
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
-                          setEditThreadId(thread.thread_id)
+                          setEditThreadId(thread.id)
                           setEditThreadTitle(thread.title || 'New Conversation')
                         }}
                         className="p-1 hover:bg-accent rounded"
@@ -261,7 +261,7 @@ export default function ChatbotPage() {
                         onClick={(e) => {
                           e.stopPropagation()
                           if (confirm('Delete this conversation?')) {
-                            deleteThreadMutation.mutate(thread.thread_id)
+                            deleteThreadMutation.mutate(thread.id)
                           }
                         }}
                         className="p-1 hover:bg-destructive hover:text-destructive-foreground rounded"
