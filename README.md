@@ -36,32 +36,54 @@ This structure organizes the project into logical components, making it easier t
 ### Environment
 Create a `.env` file with the following content:
 
-   ```
+   ```bash
    PWD=<path-to-the-root-of-this-project>
 
+   # Environment Configuration (dev or prod)
+   ENVIRONMENT=dev
+
+   # Neo4j Configuration
    NEO4J_URL=bolt://neo4j:7687
+   NEO4J_URL_PROD=bolt+ssc://neo4j:7687
    NEO4J_USER=neo4j
    NEO4J_PASSWORD=<your-password>
 
+   # PostgreSQL Configuration
    POSTGRES_HOST=postgres
    POSTGRES_PORT=5432
    POSTGRES_USER=admin
    POSTGRES_PASSWORD=<your-password>
 
-   OPENAI_API_KEY=<your-api-key>
+   # PostgreSQL Database Names
+   POSTGRES_DB_CWAF=cwafdb
+   POSTGRES_DB_FILES=filesdb
+   POSTGRES_DB_CHATBOT=chatbotdb
 
-   DELETE_BATCH_SIZE = 1000
+   # Service URLs
    WAF_URL = "http://waf:8000"
    ANALYZER_URL = "http://analyzer:8000"
    API_URL="http://fastapi:8000"
    CHAT_URL = "http://chatbot:8005/chat"
 
+   # OpenAI API Key
+   OPENAI_API_KEY=<your-api-key>
+
+   # Configuration
+   DELETE_BATCH_SIZE = 1000
+
+   # Docker Paths
    DOCKER_DATA_PATH=${PWD}/docker/docker_data
+   WEB_APP_PATH=${PWD}/src/web_app
+   CHATBOT_PATH=${PWD}/src/chatbot
    EXPORT_DIR=${DOCKER_DATA_PATH}/db_exports
    SRC_PATH=${PWD}/src
-   WEB_APP_PATH=${SRC_PATH}/web_app
-   CHATBOT_PATH=${SRC_PATH}/chatbot
    ```
+
+   **For Production Deployment (Azure):**
+   - Set `ENVIRONMENT=prod`
+   - Update `POSTGRES_HOST` to your Azure PostgreSQL server hostname
+   - Update `NEO4J_URL_PROD` to your production Neo4j instance with SSL enabled
+   - PostgreSQL connections will automatically use `sslmode=require` in production mode
 
 ### WAF instance
 The WAF docker service is used to create a httpd dump of the your configs. Therefore it must be compatible with your configs.

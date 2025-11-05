@@ -1,4 +1,5 @@
 from neo4j import GraphDatabase
+import os
 
 from .directives import DefineStr, Directive, SecRule, SecRuleRemoveById, SecRuleRemoveByTag
 from .query_factory import QueryFactory
@@ -9,7 +10,14 @@ BATCH_SIZE_SMALL = 1000
 class Neo4jDB:
 
     def __init__(self, uri, user, password):
-        self.driver = GraphDatabase.driver(uri, auth=(user, password))
+        environment = os.getenv("ENVIRONMENT", "dev")
+        neo4j_url_prod = os.getenv("NEO4J_URL_PROD")
+
+        if environment == "prod" and neo4j_url_prod:
+            self.driver = GraphDatabase.driver(neo4j_url_prod, auth=(user, password))
+        else:
+            self.driver = GraphDatabase.driver(uri, auth=(user, password))
+
         try:
             self.driver.verify_connectivity()
         except Exception as e:

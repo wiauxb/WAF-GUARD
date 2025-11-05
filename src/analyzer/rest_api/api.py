@@ -10,6 +10,8 @@ import psycopg2
 
 from ..main import main
 
+# Environment detection
+ENVIRONMENT = os.getenv("ENVIRONMENT", "dev")
 
 if os.getenv("RUNNING_IN_DOCKER"):
     pstgr_url = "postgres"
@@ -20,13 +22,23 @@ pstgr_pass = os.getenv("POSTGRES_PASSWORD")
 pstgr_db_files = os.getenv("POSTGRES_DB_FILES", "files")
 if not pstgr_url or not pstgr_user or not pstgr_pass:
     raise HTTPException(status_code=500, detail="Database credentials are not set in environment variables.")
-# connect to the database and get the files
-file_conn = psycopg2.connect(
-    host=pstgr_url,
-    database=pstgr_db_files,
-    user=pstgr_user,
-    password=pstgr_pass
-)
+
+# connect to the database and get the files with environment-based SSL
+if ENVIRONMENT == "prod":
+    file_conn = psycopg2.connect(
+        host=pstgr_url,
+        database=pstgr_db_files,
+        user=pstgr_user,
+        password=pstgr_pass,
+        sslmode='require'
+    )
+else:
+    file_conn = psycopg2.connect(
+        host=pstgr_url,
+        database=pstgr_db_files,
+        user=pstgr_user,
+        password=pstgr_pass
+    )
 
 app = FastAPI()
 app.add_middleware(

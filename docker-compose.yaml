@@ -72,7 +72,9 @@ services:
       - ${DOCKER_DATA_PATH}/shared:/shared
       - ${EXPORT_DIR}:/exports
     environment:
+      - ENVIRONMENT=${ENVIRONMENT}
       - NEO4J_URL=${NEO4J_URL}
+      - NEO4J_URL_PROD=${NEO4J_URL_PROD}
       - NEO4J_USER=${NEO4J_USER}
       - NEO4J_PASSWORD=${NEO4J_PASSWORD}
       - POSTGRES_HOST=${POSTGRES_HOST}
@@ -140,7 +142,9 @@ services:
       context: ./docker
     environment:
       - RUNNING_IN_DOCKER=true
+      - ENVIRONMENT=${ENVIRONMENT}
       - NEO4J_URL=${NEO4J_URL}
+      - NEO4J_URL_PROD=${NEO4J_URL_PROD}
       - NEO4J_USER=${NEO4J_USER}
       - NEO4J_PASSWORD=${NEO4J_PASSWORD}
       - POSTGRES_HOST=${POSTGRES_HOST}
@@ -175,6 +179,7 @@ services:
     ports:
       - "8005:8005"
     environment:
+      - ENVIRONMENT=${ENVIRONMENT}
       - API_URL=${API_URL}
       - NEO4J_URL=${NEO4J_URL}
       - NEO4J_USER=${NEO4J_USER}

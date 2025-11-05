@@ -1,4 +1,5 @@
 import psycopg2
+import os
 
 from .context import *
 from .directives import Directive
@@ -6,12 +7,23 @@ from .directives import Directive
 
 class PostgresDB:
     def __init__(self, uri, user, password, database):
-        self.connection = psycopg2.connect(
-            host=uri,
-            user=user,
-            password=password,
-            database=database
-        )
+        environment = os.getenv("ENVIRONMENT", "dev")
+
+        if environment == "prod":
+            self.connection = psycopg2.connect(
+                host=uri,
+                user=user,
+                password=password,
+                database=database,
+                sslmode='require'
+            )
+        else:
+            self.connection = psycopg2.connect(
+                host=uri,
+                user=user,
+                password=password,
+                database=database
+            )
         self.prepare_statements()
 
     def init_tables(self):

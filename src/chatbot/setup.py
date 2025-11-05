@@ -7,6 +7,9 @@ from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 
 
+# Environment detection
+ENVIRONMENT = os.getenv("ENVIRONMENT", "dev")
+
 DB_USER = os.getenv("POSTGRES_USER", "admin")
 DB_PASSWORD = os.getenv("POSTGRES_PASSWORD", "password")
 POSTGRES_DB_CWAF = os.getenv("POSTGRES_DB_CWAF", "cwaf")
@@ -49,14 +52,24 @@ def ensure_database_exists(
     host='localhost',
     port=5432
 ):
-    # Connect to the default 'postgres' database
-    conn = psycopg2.connect(
-        user=user,
-        password=password,
-        host=host,
-        port=port,
-        database=POSTGRES_DB_CWAF
-    )
+    # Connect to the default 'postgres' database with environment-based SSL
+    if ENVIRONMENT == "prod":
+        conn = psycopg2.connect(
+            user=user,
+            password=password,
+            host=host,
+            port=port,
+            database=POSTGRES_DB_CWAF,
+            sslmode='require'
+        )
+    else:
+        conn = psycopg2.connect(
+            user=user,
+            password=password,
+            host=host,
+            port=port,
+            database=POSTGRES_DB_CWAF
+        )
     conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
     cursor = conn.cursor()
 
