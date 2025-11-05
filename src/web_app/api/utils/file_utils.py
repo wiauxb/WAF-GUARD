@@ -5,7 +5,7 @@ import zipfile
 from pathlib import Path
 
 
-def extract_config(file, name=None):
+def extract_config(file, config_id=None, name=None):
     """
     Process the uploaded config archive file.
     This function handles the extraction and parsing of the config files.
@@ -17,24 +17,37 @@ def extract_config(file, name=None):
     Returns:
         Path object to the extracted directory
     """
+    try:
     # Generate unique filename using timestamp and UUID
-    if name:
-        name_hash = hashlib.md5(name.encode()).hexdigest()[:8]
-        unique_filename = f"/tmp/config_{int(time.time())}_{name_hash}.zip"
-    else:
-        unique_filename = f"/tmp/config_{int(time.time())}_{uuid.uuid4().hex[:8]}.zip"
-    
-    # Save the uploaded file
-    with open(unique_filename, "wb") as f:
-        f.write(file.read())
-    
-    # Extract the zip file
-    extract_path = Path(f"/tmp/{Path(unique_filename).stem}")
-    with zipfile.ZipFile(unique_filename, "r") as zip_ref:
-        extract_path.mkdir(exist_ok=True)
-        zip_ref.extractall(extract_path)
+        if name:
+            name_hash = hashlib.md5(name.encode()).hexdigest()[:8]
+            unique_filename = f"/tmp/config_{int(time.time())}_{name_hash}.zip"
+        else:
+            unique_filename = f"/tmp/config_{int(time.time())}_{uuid.uuid4().hex[:8]}.zip"
+        
+        # Save the uploaded file
+        with open(unique_filename, "wb") as f:
+            f.write(file.read())
+        
+        # Extract the zip file
+        extract_path = Path(f"/tmp/{Path(unique_filename).stem}")
+        with zipfile.ZipFile(unique_filename, "r") as zip_ref:
+            extract_path.mkdir(exist_ok=True)
+            zip_ref.extractall(extract_path)
 
-    # Delete the zip file after extraction
-    Path(unique_filename).unlink()
-    
-    return Path(extract_path).absolute().resolve()
+        # save extracted config path in json file
+        if config_id is not None:
+            config_info = {
+                "config_id": config_id,
+                "path": str(extract_path)
+            }
+            with open(f"/tmp/config_{config_id}_info.json", "w") as info_file:
+                import json
+                json.dump(config_info, info_file)
+
+        # Delete the zip file after extraction
+        Path(unique_filename).unlink()
+        
+        return Path(extract_path).absolute().resolve()
+    except Exception as e:
+        raise Exception(f"Failed to process config archive: {str(e)}")

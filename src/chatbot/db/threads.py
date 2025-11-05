@@ -39,7 +39,7 @@ def get_thread_messages(thread_id: str):
     pool = get_pool()
     checkpoint=PostgresSaver(pool)
     cp=checkpoint.get(config={"configurable":{"thread_id": thread_id}})
-    print(f"Fetching checkpoint: {cp['channel_values']["messages"]}", flush=True)
+    # print(f"Fetching checkpoint: {cp['channel_values']["messages"]}", flush=True)
     return cp["channel_values"]["messages"]
 
 def rename_thread(thread_id: str, new_title: str):

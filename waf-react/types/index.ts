@@ -19,11 +19,11 @@ export interface Message {
 }
 
 export interface Thread {
-  thread_id: string
+  id: string
   title?: string
-  created_at: string
+  created_at?: string
   updated_at: string
-  users_id: number
+  users_id?: number
 }
 
 export interface ChatConfig {
@@ -32,18 +32,14 @@ export interface ChatConfig {
 }
 
 // Config types
+// Backend returns arrays: [id, nickname, parsed, created_at]
+export type ConfigArray = [number, string, boolean, string]
+
 export interface Config {
   id: number
   nickname: string
   parsed: boolean
   created_at: string
-}
-
-// API response format is array of arrays: [id, nickname, parsed, created_at]
-export type ConfigTuple = [number, string, boolean, string]
-
-export interface ConfigsResponse {
-  configs: ConfigTuple[]
 }
 
 export interface SelectedConfig {
@@ -87,6 +83,12 @@ export interface CypherResult {
 }
 
 // File types
+export interface ConfigContent {
+  filename: string
+  is_folder: boolean
+  file_content?: string | null
+}
+
 export interface FileContext {
   file_path: string
   line_num: number

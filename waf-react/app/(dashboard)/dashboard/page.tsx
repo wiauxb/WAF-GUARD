@@ -8,15 +8,36 @@ import { webAppApi, chatbotApi } from '@/lib/api'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { useConfigStore } from '@/stores/config'
 import { useEffect } from 'react'
+import { Config, ConfigArray } from '@/types'
+
+// Helper function to convert array to Config object
+const parseConfigArray = (arr: ConfigArray): Config => ({
+  id: arr[0],
+  nickname: arr[1],
+  parsed: arr[2],
+  created_at: arr[3],
+})
 
 export default function DashboardPage() {
-  const { setConfigs, setSelectedConfig } = useConfigStore()
+  const { selectedConfigId, setConfigs, setSelectedConfig } = useConfigStore()
 
   const { data: configsData, isLoading: configsLoading } = useQuery({
     queryKey: ['configs'],
     queryFn: async () => {
-      const response = await webAppApi.get('/configs')
-      return response.data
+      const response = await webAppApi.get<{ configs: ConfigArray[] }>('/configs')
+      // Convert array format to object format
+      const parsedConfigs = response.data.configs.map(parseConfigArray)
+      setConfigs(parsedConfigs)
+      
+      // Restore selected config from localStorage
+      if (selectedConfigId) {
+        const selected = parsedConfigs.find((c) => c.id === selectedConfigId)
+        if (selected) {
+          setSelectedConfig(selected)
+        }
+      }
+      
+      return { configs: parsedConfigs }
     },
   })
 
@@ -35,17 +56,6 @@ export default function DashboardPage() {
       return response.data
     },
   })
-
-  useEffect(() => {
-    if (configsData?.configs) {
-      setConfigs(configsData.configs)
-    }
-    if (selectedConfigData?.selected_config) {
-      const selectedId = selectedConfigData.selected_config.config_id
-      const selected = configsData?.configs?.find((c: any) => c.id === selectedId)
-      setSelectedConfig(selected || null)
-    }
-  }, [configsData, selectedConfigData, setConfigs, setSelectedConfig])
 
   const stats = [
     {
@@ -68,7 +78,7 @@ export default function DashboardPage() {
     },
     {
       title: 'Parsed Configs',
-      value: configsData?.configs?.filter((c: any) => c.parsed).length || 0,
+      value: configsData?.configs?.filter((c: Config) => c.parsed).length || 0,
       icon: Activity,
       description: 'Analyzed configurations',
       href: '/configs',

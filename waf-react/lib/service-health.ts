@@ -17,7 +17,7 @@ export async function checkWafHealth(): Promise<ServiceHealth> {
 export async function checkAnalyzerHealth(): Promise<ServiceHealth> {
   try {
     // The analyzer doesn't have a /health endpoint, so we'll just check if it responds
-    await analyzerApi.get('/')
+    await analyzerApi.get('/health')
     return { status: 'online' }
   } catch (error) {
     return { status: 'offline', message: 'Analyzer service unavailable' }

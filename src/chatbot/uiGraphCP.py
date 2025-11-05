@@ -51,8 +51,8 @@ def filter_rule(location:str, host:str, tool_call_id: Annotated[str,InjectedTool
     host (str): The regex used to filter the host. If the request is not clear or do not explicitly ask for exact match, use .* to match all
 
     """
-    print("##################################################################################", flush=True)
-    print(f"filter_rule({location}, {host})", flush=True)
+    # print("##################################################################################", flush=True)
+    # print(f"filter_rule({location}, {host})", flush=True)
     response = requests.post(f"{API_URL}/parse_http_request", json={"location": location, "host": host})
     if response.status_code != 200:
         return response.content.decode()
@@ -94,7 +94,7 @@ def get_constant_info(constant_name:str):
     if response.status_code != 200:
         return response.content.decode()
     else:
-        print(response.json(), flush=True)
+        # print(response.json(), flush=True)
         return response.json()["records"]
     
 # tool 4: get the list of directives where a constant is used
@@ -112,7 +112,7 @@ def get_directives_with_constant(constant_name:str):
     if response.status_code != 200:
         return response.content.decode()
     else:
-        print(response.json(), flush=True)
+        # print(response.json(), flush=True)
         return response.json()["results"]
     
 # tool 5: Get the macro call context of a node
@@ -197,15 +197,15 @@ def extract_macro_usages(filepath, macro_name, target_line):
                 matches.append((lineno, line.strip()))
     
     closest = min(matches, key=lambda x: abs(x[0] - target_line))
-    print(closest, flush=True)
+    # print(closest, flush=True)
     return closest
     
 
 # Core invocation of the model
 def call_model(state: GraphsState):
     messages = state["messages"]
-    if "last_rules" in state.keys():
-        print(state["last_rules"], flush=True)
+    # if "last_rules" in state.keys():
+    #     print(state["last_rules"], flush=True)
     prompt=f"""
     You are the WAF-ssistant an expert of WAF configuration using Apache2 and modSecurity. 
     You role is to support the user in answering specific questions about the current WAF configuration.

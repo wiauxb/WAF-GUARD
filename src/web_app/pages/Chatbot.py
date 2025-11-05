@@ -62,11 +62,11 @@ def get_thread_messages(thread_id):
         response = requests.get(f"{CHAT_URL}/threads/{thread_id}", headers=headers)
         if response.status_code == 200:
             messages = response.json()
-            print(f"Messages from API: {messages}", flush=True)
+            # print(f"Messages from API: {messages}", flush=True)
             return messages_from_dict(messages)
         return []
     except Exception as e:
-        st.error(f"Error fetching thread messages: {e}")
+        # st.error(f"Error fetching thread messages: {e}")
         return []
 
 def create_new_thread():

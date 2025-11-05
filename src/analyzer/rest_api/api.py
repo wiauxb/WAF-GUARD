@@ -86,6 +86,11 @@ def clean_directory(directory: str):
     if os.path.exists(directory):
         shutil.rmtree(directory)
 
+@app.get("/health")
+async def health_check():
+    """Health check endpoint."""
+    return {"status": "ok"}
+
 @app.post("/process_configs/{id}")
 async def process_config(id: int):
     """
