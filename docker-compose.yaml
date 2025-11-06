@@ -39,7 +39,6 @@ services:
       POSTGRES_DB_CWAF: ${POSTGRES_DB_CWAF}
       POSTGRES_DB_FILES: ${POSTGRES_DB_FILES}
       POSTGRES_DB_CHATBOT: ${POSTGRES_DB_CHATBOT}
-      PGDATA: /var/lib/postgresql/17/docker
     ports:
       - "5432:5432"
     volumes:
