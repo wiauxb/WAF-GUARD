@@ -1,0 +1,22 @@
+fastapi[standard]
+neo4j
+python-dotenv 
+pydantic 
+psycopg2-binary 
+dotenv 
+requests 
+tqdm
+uvicorn #?
+langgraph
+streamlit #?
+langchain-openai 
+langchain-community 
+langchain-neo4j 
+langchain-chroma 
+psycopg 
+psycopg-pool 
+langgraph-checkpoint-postgres
+pyjwt 
+python-multipart
+pyvis 
+pandas

@@ -10,4 +10,3 @@ COPY scripts/init-databases.sh /docker-entrypoint-initdb.d/
 
 # Make the initialization script executable
 RUN chmod +x /docker-entrypoint-initdb.d/init-databases.sh
-
