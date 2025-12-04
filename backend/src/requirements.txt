@@ -2,7 +2,7 @@ fastapi[standard]
 neo4j
 python-dotenv 
 pydantic 
-psycopg2-binary 
+#psycopg2-binary 
 dotenv 
 requests 
 tqdm
@@ -20,3 +20,4 @@ pyjwt
 python-multipart
 pyvis 
 pandas
+loguru

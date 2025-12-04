@@ -6,6 +6,7 @@ venv/*
 **pycache**
 db_dump/*
 docker/docker_data/*
+waf/scripts/*
 src/web_app/lib
 .venv
 tmp.html

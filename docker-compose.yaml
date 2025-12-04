@@ -29,20 +29,18 @@ services:
 
   postgres:
     container_name: postgres
-    build: ./postgres
+    image: postgres:latest
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB_CWAF: ${POSTGRES_DB_CWAF}
-      POSTGRES_DB_FILES: ${POSTGRES_DB_FILES}
-      POSTGRES_DB_CHATBOT: ${POSTGRES_DB_CHATBOT}
+      POSTGRES_DB: ${POSTGRES_DB_CWAF}
     ports:
       - "5432:5432"
     volumes:
       - ${DOCKER_DATA_PATH}/postgres:/var/lib/postgresql
       - ${EXPORT_DIR}:/exports
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -d $${POSTGRES_DB_CWAF} -U $${POSTGRES_USER}"]
+      test: [ "CMD-SHELL", "pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}"]
       interval: 1s
       timeout: 5s
       retries: 10
@@ -76,15 +74,17 @@ services:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - WAF_URL=${WAF_URL}
-      - ANALYZER_URL=${ANALYZER_URL}
       - DELETE_BATCH_SIZE=${DELETE_BATCH_SIZE}
       - EXPORT_DIR=${EXPORT_DIR}
       - POSTGRES_DB_CWAF=${POSTGRES_DB_CWAF}
       - POSTGRES_DB_FILES=${POSTGRES_DB_FILES}
+      - POSTGRES_DB_CHATBOT=${POSTGRES_DB_CHATBOT}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
     working_dir: /app
     ports:
       - "8000:8000"
-    command: "fastapi dev api/api.py --host 0.0.0.0 --port 8000"
+    command: "fastapi dev main.py --host 0.0.0.0 --port 8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -101,6 +101,7 @@ services:
     build: ./frontend
     volumes:
       - ${PWD}/frontend/waf-react:/app/waf-react
+      - /app/waf-react/node_modules
     ports:
       - "8002:8002"
     working_dir: /app/waf-react
@@ -139,71 +140,3 @@ services:
       - "9090:8000"
     working_dir: /opt/api
     command: "fastapi dev main.py --host 0.0.0.0 --port 8000"
-
-  # analyzer:
-  #   container_name: analyzer
-  #   build:
-  #     dockerfile: analyzer_dockerfile
-  #     context: ./docker
-  #   environment:
-  #     - RUNNING_IN_DOCKER=true
-  #     - ENVIRONMENT=${ENVIRONMENT}
-  #     - NEO4J_URL=${NEO4J_URL}
-  #     - NEO4J_URL_PROD=${NEO4J_URL_PROD}
-  #     - NEO4J_USER=${NEO4J_USER}
-  #     - NEO4J_PASSWORD=${NEO4J_PASSWORD}
-  #     - POSTGRES_HOST=${POSTGRES_HOST}
-  #     - POSTGRES_PORT=${POSTGRES_PORT}
-  #     - POSTGRES_USER=${POSTGRES_USER}
-  #     - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-  #     - DELETE_BATCH_SIZE=${DELETE_BATCH_SIZE}
-  #     - POSTGRES_DB_CWAF=${POSTGRES_DB_CWAF}
-  #     - POSTGRES_DB_FILES=${POSTGRES_DB_FILES}
-  #   volumes:
-  #     - ${SRC_PATH}/analyzer:/app
-  #   ports:
-  #     - "8001:8000" 
-  #   working_dir: /app
-  #   tty: true
-  #   command: "fastapi dev rest_api/api.py --host 0.0.0.0 --port 8000"
-  #   depends_on:
-  #     postgres:
-  #         condition: service_healthy
-  #         restart: true
-
-
-  # chatbot:
-  #   container_name: chatbot
-  #   build: 
-  #     dockerfile: chatbot_dockerfile
-  #     context: ./docker
-  #   volumes:
-  #     - ${CHATBOT_PATH}:/app
-  #     - ${DOCKER_DATA_PATH}/chromadb:/chromadb
-  #   working_dir: /app
-  #   ports:
-  #     - "8005:8005"
-  #   environment:
-  #     - ENVIRONMENT=${ENVIRONMENT}
-  #     - API_URL=${API_URL}
-  #     - NEO4J_URL=${NEO4J_URL}
-  #     - NEO4J_USER=${NEO4J_USER}
-  #     - NEO4J_PASSWORD=${NEO4J_PASSWORD}
-  #     - POSTGRES_HOST=${POSTGRES_HOST}
-  #     - POSTGRES_PORT=${POSTGRES_PORT}
-  #     - POSTGRES_USER=${POSTGRES_USER}
-  #     - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-  #     - OPENAI_API_KEY=${OPENAI_API_KEY}
-  #     - POSTGRES_DB_CHATBOT=${POSTGRES_DB_CHATBOT}
-  #     - POSTGRES_DB_CWAF=${POSTGRES_DB_CWAF}
-  #     - POSTGRES_DB_FILES=${POSTGRES_DB_FILES}
-  #   depends_on:
-  #     fastapi:
-  #       condition: service_started
-  #     neo4j:
-  #       condition: service_started
-  #     postgres:
-  #       condition: service_started
-  #     streamlit:
-  #       condition: service_started
-  #   entrypoint: "/start_chat.sh"
