@@ -36,6 +36,15 @@ def extract_zip_file(temp_zip_path: str, temp_dir: str) -> str:
 
 def copy_config_files(extract_dir: str):
     """Copy extracted files to Apache conf directory."""
+    # clean the /etc/httpd/conf directory first
+    for item in os.listdir("/etc/httpd/conf"):
+        item_path = os.path.join("/etc/httpd/conf", item)
+        if os.path.isdir(item_path):
+            shutil.rmtree(item_path)
+        else:
+            os.remove(item_path)
+
+    # copy files from extract_dir or extract_dir/conf to /etc/httpd/conf
     try:
         conf_dir = os.path.join(extract_dir, "conf")
         source_dir = conf_dir if os.path.isdir(conf_dir) else extract_dir

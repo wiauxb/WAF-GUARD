@@ -6,7 +6,7 @@ import re
 def parse_arguments(args: str):
     # split the string by spaces, but keep the quoted strings together
     # e.g. 'a b "c d"' -> ['a', 'b', 'c d']
-    return re.findall(r'(?:\"[^\"]*\"|\'[^\']*\'|\S)+', args)
+    return re.findall(r"(?:\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|\S+)", args)
 
 def get_args_from_line(line:str):
     args = parse_arguments(line)

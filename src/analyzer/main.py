@@ -24,7 +24,7 @@ def reset_neo4j(neo4j_url, neo4j_user, neo4j_pass):
         """)
         deleted = result[0]["deleted"]
         print(f"\033[33mNeo4j | \033[0mDeleted {deleted} relationships")
-        if deleted == 0:
+        if deleted < DELETE_BATCH_SIZE:
             break
 
 def initialize_databases(neo4j_url, neo4j_user, neo4j_pass, postgres_url, postgres_user, postgres_pass):
