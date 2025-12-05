@@ -16,8 +16,8 @@ langchain-chroma
 psycopg 
 psycopg-pool 
 langgraph-checkpoint-postgres
-pyjwt 
+python-jose[cryptography]
+bcrypt>=4.0.1,<6.0.0
 python-multipart
 pyvis 
 pandas
-loguru

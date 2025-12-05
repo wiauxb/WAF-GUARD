@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { chatbotApi } from '@/lib/api'
+import { webAppApi } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
 import toast from 'react-hot-toast'
 import { Lock, User, Shield } from 'lucide-react'
@@ -30,14 +30,10 @@ export default function RegisterPage() {
     setLoading(true)
 
     try {
-      const formData = new FormData()
-      formData.append('username', username)
-      formData.append('password', password)
-
-      const response = await chatbotApi.post('/chat/register', formData, {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
+      const response = await webAppApi.post('/api/v1/auth/register', {
+        username,
+        password,
+        password_confirm: confirmPassword,
       })
 
       const { access_token } = response.data

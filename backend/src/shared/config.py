@@ -8,7 +8,6 @@ from pydantic_settings import BaseSettings
 from typing import Optional
 from pathlib import Path
 import logging
-from loguru import logger
 import sys
 
 class Settings(BaseSettings):
@@ -33,8 +32,6 @@ class Settings(BaseSettings):
     POSTGRES_HOST: str = "postgres"  # Docker Compose service name
     POSTGRES_PORT: int = 5432
     POSTGRES_DB_CWAF: str
-    POSTGRES_DB_FILES: str
-    POSTGRES_DB_CHATBOT: str
 
     # Connection pool settings
     POSTGRES_POOL_SIZE: int = 20
@@ -60,8 +57,8 @@ class Settings(BaseSettings):
     NEO4J_ENCRYPTED: bool = False  # Set to True for production with SSL
     
     # ==================== Authentication Settings ====================
-    JWT_SECRET_KEY: str  # Used for JWT token signing
-    ALGORITHM: str = "HS256"
+    JWT_SECRET_KEY: str="my_secret_key"  # Used for JWT token signing
+    JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     
