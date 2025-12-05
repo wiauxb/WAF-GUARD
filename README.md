@@ -92,6 +92,55 @@ Your Zip file can eather contain the `conf` directory at its root, or directly t
 3. Access the interface at `http://localhost:8501` to query part of the Neo4j graph, filter directives by an http query or track what impact does a constant have.
    > You can directly query the neo4j database using the interface at `http://localhost:7474` and the postgresql database using the interface at `http://localhost:8080`.
 
+## Previews
+
+<details><summary>Config Manager</summary>
+
+![](./images/GUI/00--config_manager.png)
+
+</details>
+
+<details><summary>Location/Host</summary>
+
+![](./images/GUI/00_location_host_empty.png)
+![](./images/GUI/00_location_host.png)
+![](./images/GUI/00_location_host_full.png)
+
+</details>
+
+<details><summary>Constant</summary>
+
+![](./images/GUI/01_constant.png)
+![](./images/GUI/01_constant_full.png)
+
+</details>
+
+<details><summary>Zoom</summary>
+
+![](./images/GUI/02_zoom.png)
+
+</details>
+
+<details><summary>From File</summary>
+
+![](./images/GUI/front_ui_from_file.png)
+![](./images/GUI/front_ui_from_file_macro-call.png)
+
+</details>
+
+<details><summary>Tags/Id</summary>
+
+![](./images/GUI/03_tag.png)
+
+</details>
+
+<details><summary>Removed By</summary>
+
+![](./images/GUI/04_removeby.png)
+![](./images/GUI/front_ui_removed_by_light.png)
+
+</details>
+
 
 ## License
 
