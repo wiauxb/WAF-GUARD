@@ -11,3 +11,4 @@ src/web_app/lib
 .venv
 tmp.html
 dump.txt
+backend/src/storage/*

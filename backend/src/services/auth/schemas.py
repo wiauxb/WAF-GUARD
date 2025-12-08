@@ -52,8 +52,3 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     expires_in: int
-
-
-class SuccessResponse(BaseModel):
-    success: bool = True
-    message: str

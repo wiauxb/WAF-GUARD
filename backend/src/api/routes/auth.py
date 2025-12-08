@@ -6,9 +6,9 @@ from services.auth.schemas import (
     PasswordChangeRequest,
     SetActiveConfigRequest,
     UserInfo,
-    TokenResponse,
-    SuccessResponse
+    TokenResponse
 )
+from shared.schemas import SuccessResponse
 from api.dependencies import get_auth_service, get_current_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -20,11 +20,11 @@ async def register(
 ):
     """
     Register a new user account.
-    
+
     - **username**: 3-255 characters, alphanumeric + underscore/hyphen only
-    - **password**: Minimum 8 characters
+    - **password**: Minimum 4 characters
     - **password_confirm**: Must match password
-    
+
     Returns the created user information (without password).
     """
     try:
@@ -76,11 +76,11 @@ async def change_password(
 ):
     """
     Change current user's password.
-    
+
     - **old_password**: Current password for verification
-    - **new_password**: New password (minimum 8 characters)
+    - **new_password**: New password (minimum 4 characters)
     - **new_password_confirm**: Must match new_password
-    
+
     Requires valid JWT token in Authorization header.
     """
     try:

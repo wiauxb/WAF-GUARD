@@ -143,22 +143,19 @@ def ensure_storage_directories():
     """
     Ensure all necessary storage directories exist.
     Call this at application startup in main.py
+
+    Note: Individual config directories (config_{id}) are created dynamically
+    by ConfigFileStorage when configurations are uploaded.
     """
     storage_root = Path(settings.STORAGE_ROOT)
-    
+
     directories = [
-        storage_root / "configs" / "modsecurity" / "current",
-        storage_root / "configs" / "modsecurity" / "versions",
-        storage_root / "configs" / "apache" / "current",
-        storage_root / "configs" / "apache" / "versions",
-        storage_root / "configs" / "nginx" / "current",
-        storage_root / "configs" / "nginx" / "versions",
+        storage_root / "configs",
         storage_root / "logs",
-        storage_root / "temp",
     ]
-    
+
     for directory in directories:
         directory.mkdir(parents=True, exist_ok=True)
-    
+
     logger = logging.getLogger(__name__)
     logger.info(f"Storage directories initialized at {storage_root}")

@@ -19,12 +19,17 @@ from sqlalchemy.orm import Session
 from shared.database import get_postgres_db
 from services.auth.service import AuthService
 from services.auth.schemas import UserInfo
+from services.configmanager.service import ConfigManagerService
 
 security = HTTPBearer()
 
 def get_auth_service(db: Session = Depends(get_postgres_db)) -> AuthService:
     """Get AuthService instance"""
     return AuthService(db)
+
+def get_config_manager(db: Session = Depends(get_postgres_db)) -> ConfigManagerService:
+    """Get ConfigManagerService instance"""
+    return ConfigManagerService(db)
 
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),

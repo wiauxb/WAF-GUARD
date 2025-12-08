@@ -32,14 +32,19 @@ export interface ChatConfig {
 }
 
 // Config types
-// Backend returns arrays: [id, nickname, parsed, created_at]
-export type ConfigArray = [number, string, boolean, string]
-
 export interface Config {
   id: number
-  nickname: string
-  parsed: boolean
+  name: string
+  description: string | null
+  file_path: string
+  file_hash: string | null
+  file_size: number | null
+  parsing_status: 'not_parsed' | 'parsing' | 'parsed' | 'error'
+  parsing_error: string | null
+  created_by_user_id: number | null
   created_at: string
+  updated_at: string
+  parsed_at: string | null
 }
 
 export interface SelectedConfig {
@@ -83,6 +88,21 @@ export interface CypherResult {
 }
 
 // File types
+export interface ConfigTreeNode {
+  name: string
+  type: 'file' | 'directory'
+  size?: number | null
+}
+
+export interface ConfigTreeResponse {
+  is_file: boolean
+  path: string
+  children?: ConfigTreeNode[] | null  // For directories
+  content?: string | null  // For files
+  size?: number | null
+}
+
+// Legacy type for compatibility (can be removed after full migration)
 export interface ConfigContent {
   filename: string
   is_folder: boolean

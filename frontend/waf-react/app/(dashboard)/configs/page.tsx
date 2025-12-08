@@ -23,17 +23,9 @@ import {
   Save
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { Config, ConfigArray, ConfigContent } from '@/types'
+import { Config, ConfigContent, ConfigTreeResponse, ConfigTreeNode } from '@/types'
 import { useConfigStore } from '@/stores/config'
 import { formatDate } from '@/lib/utils'
-
-// Helper function to convert array to Config object
-const parseConfigArray = (arr: ConfigArray): Config => ({
-  id: arr[0],
-  nickname: arr[1],
-  parsed: arr[2],
-  created_at: arr[3],
-})
 
 export default function ConfigsPage() {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
@@ -56,31 +48,28 @@ export default function ConfigsPage() {
   const { data: configsData, isLoading } = useQuery({
     queryKey: ['configs'],
     queryFn: async () => {
-      const response = await webAppApi.get<{ configs: ConfigArray[] }>('/configs')
-      // Convert array format to object format
-      const parsedConfigs = response.data.configs.map(parseConfigArray)
-      setConfigs(parsedConfigs)
-      
+      const response = await webAppApi.get<Config[]>('/api/v1/configurations')
+      setConfigs(response.data)
+
       // Restore selected config from localStorage
       if (selectedConfigId) {
-        const selected = parsedConfigs.find((c) => c.id === selectedConfigId)
+        const selected = response.data.find((c) => c.id === selectedConfigId)
         if (selected) {
           setSelectedConfig(selected)
         }
       }
-      
-      return { configs: parsedConfigs }
+
+      return { configs: response.data }
     },
   })
 
-  // Fetch selected config from server
-  const { data: selectedConfigData } = useQuery({
-    queryKey: ['selected-config'],
+  // Fetch selected config from user info
+  const { data: userInfo } = useQuery({
+    queryKey: ['user-info'],
     queryFn: async () => {
-      const response = await webAppApi.get('/configs/selected')
-      if (response.data.selected_config) {
-        const selectedId = response.data.selected_config.config_id
-        const selected = configs.find((c) => c.id === selectedId)
+      const response = await webAppApi.get('/api/v1/auth/me')
+      if (response.data.active_configuration_id) {
+        const selected = configs.find((c) => c.id === response.data.active_configuration_id)
         if (selected) {
           setSelectedConfig(selected)
         }
@@ -95,8 +84,8 @@ export default function ConfigsPage() {
     mutationFn: async () => {
       const formData = new FormData()
       formData.append('file', selectedFile!)
-      formData.append('config_nickname', configNickname)
-      const response = await webAppApi.post('/store_config', formData, {
+      formData.append('name', configNickname)
+      const response = await webAppApi.post('/api/v1/configurations', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
       return response.data
@@ -118,17 +107,19 @@ export default function ConfigsPage() {
   const selectMutation = useMutation({
     mutationFn: async (configId: number) => {
       const config = configs.find((c) => c.id === configId)
-      if (!config?.parsed) {
+      if (config?.parsing_status !== 'parsed') {
         throw new Error('Only analyzed configurations can be selected')
       }
-      const response = await webAppApi.post(`/configs/select/${configId}`)
+      const response = await webAppApi.put('/api/v1/auth/me/active-config', {
+        configuration_id: configId
+      })
       return response.data
     },
     onSuccess: (_, configId) => {
       const selected = configs.find((c) => c.id === configId)
       setSelectedConfig(selected || null)
       toast.success('Configuration selected and saved!')
-      queryClient.invalidateQueries({ queryKey: ['selected-config'] })
+      queryClient.invalidateQueries({ queryKey: ['user-info'] })
     },
     onError: (error: any) => {
       toast.error(error.message || error.response?.data?.detail || 'Failed to select configuration')
@@ -138,7 +129,7 @@ export default function ConfigsPage() {
   // Delete config mutation
   const deleteMutation = useMutation({
     mutationFn: async (configId: number) => {
-      const response = await webAppApi.delete(`/configs/${configId}`)
+      const response = await webAppApi.delete(`/api/v1/configurations/${configId}`)
       return response.data
     },
     onSuccess: () => {
@@ -171,10 +162,12 @@ export default function ConfigsPage() {
       if (!selectedConfigForView || !selectedFilePath) {
         throw new Error('No file selected')
       }
-      const response = await webAppApi.post(`/update_config/${selectedConfigForView.id}`, {
-        path: selectedFilePath,
-        content: fileContent,
-      })
+      const response = await webAppApi.put(
+        `/api/v1/configurations/${selectedConfigForView.id}/files/${selectedFilePath}`,
+        {
+          content: fileContent,
+        }
+      )
       return response.data
     },
     onSuccess: () => {
@@ -212,18 +205,27 @@ export default function ConfigsPage() {
   const loadConfigFiles = async (configId: number, path: string) => {
     setIsLoadingFiles(true)
     try {
-      // The endpoint is POST and expects 'path' as a Form parameter
-      const formData = new FormData()
-      formData.append('path', path || '')
-      
-      const response = await webAppApi.post<ConfigContent[]>(
-        `/config_tree/${configId}`,
-        formData,
+      const response = await webAppApi.get<ConfigTreeResponse>(
+        `/api/v1/configurations/${configId}/tree`,
         {
-          headers: { 'Content-Type': 'multipart/form-data' }
+          params: { path: path || '/' }
         }
       )
-      setFileTree(response.data)
+
+      // Convert new API response to legacy format for UI compatibility
+      if (response.data.is_file) {
+        // If it's a file, we shouldn't be here (this is for directory listing)
+        // But handle it gracefully
+        setFileTree([])
+      } else {
+        // Convert children array to ConfigContent format
+        const legacyFormat: ConfigContent[] = response.data.children?.map((node: ConfigTreeNode) => ({
+          filename: node.name,
+          is_folder: node.type === 'directory',
+          file_content: null
+        })) || []
+        setFileTree(legacyFormat)
+      }
       setCurrentPath(path)
     } catch (error: any) {
       console.error('Failed to load files:', error)
@@ -245,20 +247,16 @@ export default function ConfigsPage() {
       // Load file content
       setIsLoadingFiles(true)
       try {
-        const formData = new FormData()
-        formData.append('path', newPath)
-        
-        const response = await webAppApi.post<ConfigContent[]>(
-          `/config_tree/${selectedConfigForView.id}`,
-          formData,
+        const response = await webAppApi.get<ConfigTreeResponse>(
+          `/api/v1/configurations/${selectedConfigForView.id}/tree`,
           {
-            headers: { 'Content-Type': 'multipart/form-data' }
+            params: { path: newPath }
           }
         )
-        
-        if (response.data.length > 0 && response.data[0].file_content) {
-          setFileContent(response.data[0].file_content)
-          setOriginalFileContent(response.data[0].file_content)
+
+        if (response.data.is_file && response.data.content) {
+          setFileContent(response.data.content)
+          setOriginalFileContent(response.data.content)
           setSelectedFilePath(newPath)
           setIsFileModified(false)
         }
@@ -479,18 +477,28 @@ export default function ConfigsPage() {
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-2">
                     <FileCode className="h-5 w-5 text-primary" />
-                    <CardTitle className="text-lg">{config.nickname}</CardTitle>
+                    <CardTitle className="text-lg">{config.name}</CardTitle>
                   </div>
                   <div className="flex items-center gap-2">
-                    {config.parsed ? (
+                    {config.parsing_status === 'parsed' ? (
                       <span className="flex items-center gap-1 text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 px-2 py-1 rounded-full">
                         <CheckCircle className="h-3 w-3" />
                         Analyzed
                       </span>
+                    ) : config.parsing_status === 'parsing' ? (
+                      <span className="flex items-center gap-1 text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 px-2 py-1 rounded-full">
+                        <Clock className="h-3 w-3" />
+                        Parsing
+                      </span>
+                    ) : config.parsing_status === 'error' ? (
+                      <span className="flex items-center gap-1 text-xs bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 px-2 py-1 rounded-full">
+                        <Clock className="h-3 w-3" />
+                        Error
+                      </span>
                     ) : (
                       <span className="flex items-center gap-1 text-xs bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200 px-2 py-1 rounded-full">
                         <Clock className="h-3 w-3" />
-                        Pending
+                        Not Parsed
                       </span>
                     )}
                   </div>
@@ -506,8 +514,8 @@ export default function ConfigsPage() {
                     size="sm"
                     variant={selectedConfig?.id === config.id ? 'default' : 'outline'}
                     onClick={() => selectMutation.mutate(config.id)}
-                    disabled={selectMutation.isPending || !config.parsed}
-                    title={!config.parsed ? 'Config must be analyzed before selection' : ''}
+                    disabled={selectMutation.isPending || config.parsing_status !== 'parsed'}
+                    title={config.parsing_status !== 'parsed' ? 'Config must be analyzed before selection' : ''}
                   >
                     {selectedConfig?.id === config.id ? (
                       <>
@@ -518,7 +526,7 @@ export default function ConfigsPage() {
                       'Select'
                     )}
                   </Button>
-                  {!config.parsed && (
+                  {config.parsing_status !== 'parsed' && (
                     <Button
                       size="sm"
                       variant="outline"

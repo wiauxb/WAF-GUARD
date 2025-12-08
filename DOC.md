@@ -60,9 +60,7 @@ def delete_configuration(configuration_id: int) -> bool
 def get_dump_path(configuration_id: int) -> str
     # Get filesystem path to configuration dump file (internal use by ParserService)
 def get_configuration_tree(configuration_id: int, path: str = "/") -> ConfigTreeResponse
-    # Get file tree structure or file content at path
-def get_file_content(configuration_id: int, file_path: str) -> str
-    # Get content of a specific configuration file
+    # Get file tree structure (if path is directory) or file content (if path is file)
 def update_file_content(configuration_id: int, file_path: str, content: str) -> bool
     # Update configuration file content (sets parsing_status to not_parsed)
 ```
@@ -265,9 +263,9 @@ class ConversationHistoryResponse(BaseModel):
 ```python
 class RegisterRequest(BaseModel):
     username: str = Field(min_length=3, max_length=255, pattern=r'^[a-zA-Z0-9_-]+$')
-    password: str = Field(min_length=8, max_length=255)
-    password_confirm: str = Field(min_length=8, max_length=255)
-    
+    password: str = Field(min_length=4, max_length=255)
+    password_confirm: str = Field(min_length=4, max_length=255)
+
     @validator('password_confirm')
     def passwords_match(cls, v, values):
         if 'password' in values and v != values['password']:
@@ -276,12 +274,12 @@ class RegisterRequest(BaseModel):
 
 class LoginRequest(BaseModel):
     username: str = Field(min_length=3, max_length=255)
-    password: str = Field(min_length=8, max_length=255)
+    password: str = Field(min_length=4, max_length=255)
 
 class PasswordChangeRequest(BaseModel):
-    old_password: str = Field(min_length=8, max_length=255)
-    new_password: str = Field(min_length=8, max_length=255)
-    new_password_confirm: str = Field(min_length=8, max_length=255)
+    old_password: str = Field(min_length=4, max_length=255)
+    new_password: str = Field(min_length=4, max_length=255)
+    new_password_confirm: str = Field(min_length=4, max_length=255)
     
     @validator('new_password_confirm')
     def passwords_match(cls, v, values):
@@ -324,9 +322,8 @@ class TokenResponse(BaseModel):
 | GET | `/by-name/{name}` | ✅ | - | `ConfigurationResponse` | Get config by name |
 | PATCH | `/{id}` | ✅ | `ConfigurationUpdateRequest` | `ConfigurationResponse` | Update metadata |
 | DELETE | `/{id}` | ✅ | - | `SuccessResponse` | Delete config |
-| GET | `/{id}/tree` | ✅ | Query: path | `ConfigTreeResponse` | Get file tree/content |
-| GET | `/{id}/files/{path:path}` | ✅ | - | `FileContentResponse` | Get file content |
-| PUT | `/{id}/files/{path:path}` | ✅ | `FileUpdateRequest` | `SuccessResponse` | Update file (future) |
+| GET | `/{id}/tree` | ✅ | Query: path | `ConfigTreeResponse` | Get file tree or content |
+| PUT | `/{id}/files/{path:path}` | ✅ | `FileUpdateRequest` | `SuccessResponse` | Update file content |
 
 ### Request Schemas
 
@@ -391,11 +388,6 @@ class ConfigTreeResponse(BaseModel):
     children: Optional[List[Dict[str, Any]]] = None  # [{"name": "file.conf", "type": "file", "size": 1024}, ...]
     # If file:
     content: Optional[str] = None
-
-class FileContentResponse(BaseModel):
-    file_path: str
-    content: str
-    size: int
 ```
 
 ---
