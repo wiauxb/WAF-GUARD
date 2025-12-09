@@ -47,6 +47,12 @@ class UserWithActiveConfigResponse(BaseModel):
 ```python
 def upload_configuration(user_id: int, zip_file: UploadFile, request: ConfigurationUploadRequest) -> ConfigurationResponse
     # Upload configuration zip, generate dump via WAF, store files, create DB record
+    # Process:
+    # 1. Store and extract zip file
+    # 2. Call WAFService.generate_dump() → receives gzip-compressed dump (bytes)
+    # 3. ConfigFileStorage.store_dump() → streams decompression to disk (1MB chunks)
+    # 4. Create DB record with metadata
+    # Performance: Handles large dumps (>1MB) efficiently with minimal memory overhead
 def get_all_configurations(order_by: str = "created_at", order_desc: bool = True) -> List[ConfigurationResponse]
     # List all configurations
 def get_configuration_by_id(configuration_id: int) -> ConfigurationResponse
@@ -117,15 +123,32 @@ class ConfigTreeResponse(BaseModel):
 ```
 ### WAFService
 ```python
-def generate_dump(config_zip_path: str, waf_url: str, timeout: int = 120) -> str
+def generate_dump(config_zip_path: str, waf_url: str, timeout: int = 120) -> bytes
+    # Send configuration zip to WAF container's /get_dump endpoint
+    # Returns gzip-compressed Apache dump (binary)
+    # Compression typically achieves 70-90% size reduction
+```
+
+**Implementation Details:**
+- Sends configuration zip to WAF container via HTTP POST
+- WAF container returns gzip-compressed dump instead of JSON (performance optimization)
+- Returns compressed binary content (not decompressed)
+- ConfigFileStorage handles decompression during disk write (streaming in 1MB chunks)
+- Network transfer size reduced by 70-90% compared to plain text
+
+**Data Flow:**
+```
+ConfigZip → WAFService → Gzip Binary → ConfigFileStorage → Decompressed Text File
 ```
 
 #### Request Schemas
 ```python
+# No request schemas - uses filesystem path
 ```
 
 #### Response Schemas
 ```python
+# Returns: bytes (gzip-compressed Apache config dump)
 ```
 ### ParserService
 ```python

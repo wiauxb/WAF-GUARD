@@ -3,6 +3,8 @@ from typing import List, Dict, Any, Optional
 import shutil
 import zipfile
 import hashlib
+import gzip
+import io
 from fastapi import UploadFile
 import logging
 
@@ -90,27 +92,51 @@ class ConfigFileStorage:
             logger.error(f"Failed to store zip for config {config_id}: {e}")
             raise IOError(f"Failed to store configuration file: {str(e)}")
     
-    def store_dump(self, config_id: int, dump_content: str) -> str:
+    def store_dump(self, config_id: int, dump_content: bytes) -> str:
         """
-        Store configuration dump file.
-        
+        Store configuration dump file (streams and decompresses gzip content to disk).
+
+        Uses chunked decompression to avoid loading entire dump into memory.
+
         Args:
             config_id: Configuration ID
-            dump_content: Dump file content
-        
+            dump_content: Gzip-compressed dump file content (binary)
+
         Returns:
             Path to dump file
+
+        Raises:
+            IOError: If storage or decompression fails
         """
         config_dir = self._get_config_dir(config_id)
         dump_path = config_dir / "dump.conf"
-        
+
         try:
-            with open(dump_path, "w", encoding="utf-8") as f:
-                f.write(dump_content)
-            
-            logger.info(f"Stored dump for config {config_id}: {dump_path}")
+            compressed_size = len(dump_content)
+
+            # Stream decompress in chunks to avoid memory overhead
+            with io.BytesIO(dump_content) as compressed_stream:
+                with gzip.open(compressed_stream, 'rb') as gz_file:
+                    with open(dump_path, "wb") as f:
+                        # Copy in 1MB chunks
+                        shutil.copyfileobj(gz_file, f, length=1024 * 1024)
+
+            # Get final decompressed size
+            decompressed_size = dump_path.stat().st_size
+            compression_ratio = (1 - compressed_size / decompressed_size) * 100
+
+            logger.info(
+                f"Stored dump for config {config_id}: {dump_path} "
+                f"({compressed_size} bytes compressed → {decompressed_size} bytes decompressed, "
+                f"{compression_ratio:.1f}% compression)"
+            )
+
             return str(dump_path)
-        
+
+        except gzip.BadGzipFile as e:
+            logger.error(f"Invalid gzip data for config {config_id}: {e}")
+            raise IOError(f"Failed to decompress dump file: invalid gzip format")
+
         except Exception as e:
             logger.error(f"Failed to store dump for config {config_id}: {e}")
             raise IOError(f"Failed to store dump file: {str(e)}")
