@@ -24,7 +24,7 @@ export function CodeEditor({
   const { theme, resolvedTheme } = useTheme()
 
   // Use resolvedTheme to get the actual theme (not 'system')
-  const editorTheme = (resolvedTheme === 'dark' || theme === 'dark') ? 'vs-dark' : 'light'
+  const editorTheme = (resolvedTheme === 'dark' || theme === 'dark') ? 'light' : 'light'
 
   return (
     <div className={`w-full h-full ${className}`} style={{ minHeight: '300px' }}>

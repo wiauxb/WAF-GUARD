@@ -14,7 +14,7 @@ from shared.database import (
     check_database_health,
     init_postgres_db
 )
-from api.routes import auth, configs, parser, chatbot
+from api.routes import auth, configs, parser, chatbot, logs
 # from api.middleware import LoggingMiddleware
 
 
@@ -95,6 +95,7 @@ app.include_router(auth.router, prefix=settings.API_V1_PREFIX)
 app.include_router(configs.router, prefix=settings.API_V1_PREFIX)
 app.include_router(parser.router, prefix=settings.API_V1_PREFIX)
 app.include_router(chatbot.router, prefix=settings.API_V1_PREFIX)
+app.include_router(logs.router, prefix=settings.API_V1_PREFIX)
 
 
 

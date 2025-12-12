@@ -65,7 +65,7 @@ export default function DashboardPage() {
       description: 'Total WAF configs',
       href: '/configs',
       color: 'text-blue-600',
-      bgColor: 'bg-blue-50 dark:bg-blue-950',
+      bgColor: 'bg-blue-50',
     },
     {
       title: 'Chat Threads',
@@ -74,7 +74,7 @@ export default function DashboardPage() {
       description: 'Active conversations',
       href: '/chatbot',
       color: 'text-purple-600',
-      bgColor: 'bg-purple-50 dark:bg-purple-950',
+      bgColor: 'bg-purple-50',
     },
     {
       title: 'Parsed Configs',
@@ -83,7 +83,7 @@ export default function DashboardPage() {
       description: 'Analyzed configurations',
       href: '/configs',
       color: 'text-green-600',
-      bgColor: 'bg-green-50 dark:bg-green-950',
+      bgColor: 'bg-green-50',
     },
     {
       title: 'Database Status',
@@ -92,7 +92,7 @@ export default function DashboardPage() {
       description: 'System operational',
       href: '/database',
       color: 'text-orange-600',
-      bgColor: 'bg-orange-50 dark:bg-orange-950',
+      bgColor: 'bg-orange-50',
     },
   ]
 
@@ -207,19 +207,19 @@ export default function DashboardPage() {
           <div className="space-y-3">
             <div className="flex items-center justify-between p-3 bg-secondary rounded-lg">
               <span className="text-sm font-medium">Neo4j Database</span>
-              <span className="text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 px-2 py-1 rounded">
+              <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
                 Connected
               </span>
             </div>
             <div className="flex items-center justify-between p-3 bg-secondary rounded-lg">
               <span className="text-sm font-medium">PostgreSQL Database</span>
-              <span className="text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 px-2 py-1 rounded">
+              <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
                 Connected
               </span>
             </div>
             <div className="flex items-center justify-between p-3 bg-secondary rounded-lg">
               <span className="text-sm font-medium">Chatbot Service</span>
-              <span className="text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 px-2 py-1 rounded">
+              <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
                 Online
               </span>
             </div>

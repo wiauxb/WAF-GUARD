@@ -100,20 +100,20 @@ export default function ServicesPage() {
   const getStatusBadge = (status: string) => {
     if (status === 'checking') {
       return (
-        <span className="text-xs bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 px-2 py-1 rounded">
+        <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">
           Checking...
         </span>
       )
     }
     if (status === 'online') {
       return (
-        <span className="text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 px-2 py-1 rounded">
+        <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
           Online
         </span>
       )
     }
     return (
-      <span className="text-xs bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 px-2 py-1 rounded">
+      <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded">
         Offline
       </span>
     )
@@ -172,11 +172,11 @@ export default function ServicesPage() {
         {services.map((service) => {
           const Icon = service.icon
           return (
-            <Card key={service.name} className={service.status === 'offline' ? 'border-red-200 dark:border-red-900' : ''}>
+            <Card key={service.name} className={service.status === 'offline' ? 'border-red-200' : ''}>
               <CardHeader>
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-lg bg-${service.color}-50 dark:bg-${service.color}-950`}>
+                    <div className={`p-2 rounded-lg bg-${service.color}-50`}>
                       <Icon className={`h-5 w-5 text-${service.color}-600`} />
                     </div>
                     <div>
@@ -205,16 +205,16 @@ export default function ServicesPage() {
 
       {/* Warning if services are down */}
       {offlineCount > 0 && (
-        <Card className="border-orange-500 bg-orange-50 dark:bg-orange-950">
+        <Card className="border-orange-200 bg-orange-50">
           <CardContent className="flex items-start gap-3 p-4">
             <AlertCircle className="h-5 w-5 text-orange-600 mt-0.5" />
             <div className="space-y-1">
-              <p className="font-semibold text-orange-900 dark:text-orange-100">
+              <p className="font-semibold text-orange-900">
                 Some services are offline
               </p>
-              <p className="text-sm text-orange-800 dark:text-orange-200">
+              <p className="text-sm text-orange-800">
                 {offlineCount} service{offlineCount > 1 ? 's are' : ' is'} currently unavailable. 
-                Please check your Docker containers are running with <code className="bg-orange-200 dark:bg-orange-900 px-1 rounded">docker ps</code>.
+                Please check your Docker containers are running with <code className="bg-orange-200 px-1 rounded">docker ps</code>.
               </p>
             </div>
           </CardContent>

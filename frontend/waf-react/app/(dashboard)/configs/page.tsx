@@ -428,7 +428,7 @@ export default function ConfigsPage() {
             </div>
             <div className="flex flex-col items-end gap-2">
               {selectedConfig.parsed && (
-                <span className="text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 px-3 py-1.5 rounded-full font-medium">
+                <span className="text-xs bg-green-100 text-green-800 px-3 py-1.5 rounded-full font-medium">
                   ✓ Analyzed
                 </span>
               )}
@@ -441,12 +441,12 @@ export default function ConfigsPage() {
       )}
 
       {!selectedConfig && (
-        <Card className="border-l-4 border-l-yellow-500 bg-yellow-50 dark:bg-yellow-950/20">
+        <Card className="border-l-4 border-l-yellow-500 bg-yellow-50">
           <CardContent className="flex items-center gap-3 p-4">
             <AlertCircle className="h-5 w-5 text-yellow-600" />
             <div>
-              <p className="font-medium text-yellow-900 dark:text-yellow-200">No Configuration Selected</p>
-              <p className="text-sm text-yellow-700 dark:text-yellow-300">
+              <p className="font-medium text-yellow-900">No Configuration Selected</p>
+              <p className="text-sm text-yellow-700">
                 Please select an analyzed configuration to work with
               </p>
             </div>
@@ -481,22 +481,22 @@ export default function ConfigsPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     {config.parsing_status === 'parsed' ? (
-                      <span className="flex items-center gap-1 text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 px-2 py-1 rounded-full">
+                      <span className="flex items-center gap-1 text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
                         <CheckCircle className="h-3 w-3" />
                         Analyzed
                       </span>
                     ) : config.parsing_status === 'parsing' ? (
-                      <span className="flex items-center gap-1 text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 px-2 py-1 rounded-full">
+                      <span className="flex items-center gap-1 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
                         <Clock className="h-3 w-3" />
                         Parsing
                       </span>
                     ) : config.parsing_status === 'error' ? (
-                      <span className="flex items-center gap-1 text-xs bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 px-2 py-1 rounded-full">
+                      <span className="flex items-center gap-1 text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full">
                         <Clock className="h-3 w-3" />
                         Error
                       </span>
                     ) : (
-                      <span className="flex items-center gap-1 text-xs bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200 px-2 py-1 rounded-full">
+                      <span className="flex items-center gap-1 text-xs bg-gray-100 text-gray-800 px-2 py-1 rounded-full">
                         <Clock className="h-3 w-3" />
                         Not Parsed
                       </span>
@@ -596,7 +596,7 @@ export default function ConfigsPage() {
                     <span className="text-sm font-medium truncate">{selectedFilePath}</span>
                     <div className="flex gap-2 flex-shrink-0">
                       {isFileModified && (
-                        <span className="text-xs bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200 px-2 py-1 rounded flex items-center gap-1">
+                        <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded flex items-center gap-1">
                           <AlertCircle className="h-3 w-3" />
                           Modified
                         </span>
@@ -612,7 +612,7 @@ export default function ConfigsPage() {
                       </Button>
                     </div>
                   </div>
-                  <div className="flex-1 border rounded overflow-hidden bg-white dark:bg-gray-950">
+                  <div className="flex-1 border rounded overflow-hidden bg-white">
                     <CodeEditor
                       value={fileContent}
                       onChange={handleFileContentChange}
@@ -622,7 +622,7 @@ export default function ConfigsPage() {
                   </div>
                 </>
               ) : (
-                <div className="flex-1 flex items-center justify-center text-muted-foreground border rounded bg-gray-50 dark:bg-gray-900">
+                <div className="flex-1 flex items-center justify-center text-muted-foreground border rounded bg-gray-50">
                   <div className="text-center">
                     <File className="h-12 w-12 mx-auto mb-2 opacity-50" />
                     <p className="font-medium">Select a file to view its contents</p>

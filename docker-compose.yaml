@@ -138,3 +138,10 @@ services:
       - "9090:8000"
     working_dir: /opt/api
     command: "fastapi dev main.py --host 0.0.0.0 --port 8000"
+
+  model:
+    image: nelver28/modernbert:latest
+    container_name: modernbert
+    ports:
+      - "8102:8102"
+    restart: always
