@@ -262,7 +262,142 @@ class ConversationHistoryResponse(BaseModel):
 ```python
 ```
 
+### LogAnalysisService
+```python
+def classify_logs(user_id: int, file: UploadFile, configuration_id: Optional[int] = None) -> LogClassificationResponse
+    # Process and classify log file
+    # Process:
+    # 1. Validate file (.san, .txt, audit.log, max 500MB)
+    # 2. Create session with UUID
+    # 3. Parse ModSecurity audit logs
+    # 4. Normalize and format logs
+    # 5. Send to ML service for classification
+    # 6. Store results in JSON file (backend/src/storage/logs/{session_id}.json)
+    # 7. Return summary with categories and counts
+    
+def get_filtered_logs(session_id: str, filters: LogFilter, include_logs: bool = False) -> FilteredLogsResponse
+    # Apply pandas filters to logs (time, columns, exact/contains/greater_than/less_than)
+    # Recalculates categories based on filtered data
+    # Returns statistics with log indices
+    
+def get_log_by_transaction(session_id: str, transaction_id: str) -> Optional[LogDetailResponse]
+    # Get detailed log entry by transaction ID
+    
+def get_category_details(session_id: str, category: str, limit: int = 100, offset: int = 0) -> CategoryDetailsResponse
+    # Get detailed logs for a specific category with pagination
+    
+def get_user_sessions(user_id: int, limit: int = 50, offset: int = 0) -> List[LogAnalysisSessionResponse]
+    # List all analysis sessions for a user
+    
+def delete_session(session_id: str, user_id: int) -> bool
+    # Delete a session JSON file (with authorization check)
+```
 
+#### Request Schemas
+```python
+class LogFilter(BaseModel):
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    columns: List[Dict[str, Any]] = []  # [{"name": "status_code", "value": 403, "type": "exact"}]
+    # Filter types: 'exact', 'contains', 'greater_than', 'less_than'
+
+class CategoryRequest(BaseModel):
+    category: str
+    log_indices: List[int]
+    limit: Optional[int] = 100
+    offset: Optional[int] = 0
+
+class UserSessionRequest(BaseModel):
+    limit: int = Field(default=50, ge=1, le=100)
+    offset: int = Field(default=0, ge=0)
+```
+
+#### Response Schemas
+```python
+class LogClassificationResponse(BaseModel):
+    session_id: str  # UUID
+    total_logs: int
+    categories: List[LogCategoryResponse]
+    columns: List[str]
+
+class LogCategoryResponse(BaseModel):
+    category: str
+    count: int
+    percentage: Optional[float]
+    log_indices: Optional[List[int]]  # Indices in DataFrame
+
+class FilteredLogsResponse(BaseModel):
+    session_id: str
+    total_logs: int  # Before filtering
+    filtered_logs: int  # After filtering
+    categories: List[LogCategoryResponse]  # Recalculated for filtered data
+    columns: List[str]
+    applied_filters: Dict[str, Any]
+    logs: Optional[List[Dict[str, Any]]]  # Full logs if include_logs=True
+
+class LogEntryResponse(BaseModel):
+    id: int = 0  # No DB ID (JSON storage)
+    transaction_id: str
+    timestamp: Optional[datetime]
+    remote_address: Optional[str]
+    remote_port: Optional[int]
+    http_method: Optional[str]
+    request_url: Optional[str]
+    user_agent: Optional[str]
+    response_status_code: Optional[int]
+    response_status: Optional[str]
+    payload: Optional[str]
+    messages: Optional[List[str]]
+    message_tags: Optional[List[str]]
+    predicted_category: Optional[str]
+    prediction_probabilities: Optional[Dict[str, float]]
+    formatted_log: Optional[str]
+
+class LogAnalysisSessionResponse(BaseModel):
+    id: int = 0
+    session_id: str  # UUID
+    user_id: int
+    configuration_id: Optional[int]
+    filename: str
+    file_size: Optional[int]
+    status: str  # "processing", "completed", "failed"
+    total_logs: Optional[int]
+    error_message: Optional[str]
+    created_at: str  # ISO format
+    completed_at: Optional[str]
+    categories: Optional[Dict[str, int]]  # Not included in list view
+
+class LogDetailResponse(BaseModel):
+    session_id: str
+    transaction_id: str
+    log: Dict[str, Any]  # Raw parsed log data
+
+class CategoryDetailsResponse(BaseModel):
+    session_id: str
+    category: str
+    total_count: int
+    logs: List[LogEntryResponse]
+```
+
+**Storage Details:**
+- Sessions stored as JSON files in `backend/src/storage/logs/{session_id}.json`
+- Each file contains: metadata, all logs, categories, and DataFrame (for filtering)
+- No database tables - pure file-based storage
+- Pandas DataFrame serialized as dict for filtering support
+
+**JSON Structure:**
+```json
+{
+  "session_id": "uuid",
+  "user_id": 1,
+  "filename": "audit.log",
+  "status": "completed",
+  "total_logs": 1500,
+  "categories": {"SQL Injection": 450, "XSS": 300},
+  "logs": [{...}],
+  "dataframe": [{...}]  // Serialized for pandas filtering
+}
+```
 
 ## API
 
@@ -466,6 +601,208 @@ class ErrorResponse(BaseModel):
 
 ---
 
+## Logs Routes (`/logs`)
+
+| Method | Endpoint | Auth | Request | Response | Description |
+|--------|----------|------|---------|----------|-------------|
+| POST | `/classify` | ✅ | File Upload + Query | `LogClassificationResponse` | Upload and classify logs |
+| GET | `/sessions` | ✅ | `UserSessionRequest` | `List[LogAnalysisSessionResponse]` | List user's sessions |
+| GET | `/sessions/{session_id}/log/{transaction_id}` | ✅ | - | `LogDetailResponse` | Get specific log detail |
+| POST | `/sessions/{session_id}/filter` | ✅ | `LogFilter` | `FilteredLogsResponse` | Filter logs with pandas |
+| POST | `/sessions/{session_id}/categories` | ✅ | `CategoryRequest` | `CategoryDetailsResponse` | Get logs by category |
+| DELETE | `/sessions/{session_id}` | ✅ | - | `SuccessResponse` | Delete session |
+
+### Request Schemas
+
+```python
+# POST /classify - File Upload (multipart/form-data)
+@router.post("/classify")
+async def classify_log_file(
+    file: UploadFile = File(..., description="Log file (.san, .txt, or audit.log)"),
+    configuration_id: Optional[int] = Query(None, description="Optional configuration context")
+):
+    # file: .san, .txt, or audit.log (max 500MB)
+    # configuration_id: Optional link to configuration
+
+class LogFilter(BaseModel):
+    """Filters for querying log entries"""
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    columns: List[Dict[str, Any]] = []
+    # Column filter format: {"name": "column_name", "value": filter_value, "type": "exact|contains|greater_than|less_than"}
+
+class CategoryRequest(BaseModel):
+    """Request for category details"""
+    category: str
+    log_indices: List[int]
+    limit: Optional[int] = 100
+    offset: Optional[int] = 0
+
+class UserSessionRequest(BaseModel):
+    """Pagination for session list"""
+    limit: int = Field(default=50, ge=1, le=100)
+    offset: int = Field(default=0, ge=0)
+```
+
+### Response Schemas
+
+```python
+class LogClassificationResponse(BaseModel):
+    """Response after log classification"""
+    session_id: str  # UUID for the analysis session
+    total_logs: int
+    categories: List[LogCategoryResponse]
+    columns: List[str]  # Available columns in the dataset
+
+class LogCategoryResponse(BaseModel):
+    """Category statistics"""
+    category: str
+    count: int
+    percentage: Optional[float] = None
+    log_indices: Optional[List[int]] = None  # DataFrame indices for filtered results
+
+class FilteredLogsResponse(BaseModel):
+    """Response for filtered log queries"""
+    session_id: str
+    total_logs: int  # Total before filtering
+    filtered_logs: int  # Total after filtering
+    categories: List[LogCategoryResponse]  # Recalculated for filtered data
+    columns: List[str]
+    applied_filters: Dict[str, Any]
+    logs: Optional[List[Dict[str, Any]]] = None  # Full logs if include_logs=True
+
+class LogEntryResponse(BaseModel):
+    """Individual log entry details"""
+    id: int = 0  # Always 0 (no DB storage)
+    transaction_id: str
+    timestamp: Optional[datetime]
+    remote_address: Optional[str]
+    remote_port: Optional[int]
+    http_method: Optional[str]
+    request_url: Optional[str]
+    user_agent: Optional[str]
+    response_status_code: Optional[int]
+    response_status: Optional[str]
+    payload: Optional[str]
+    messages: Optional[List[str]]
+    message_tags: Optional[List[str]]
+    predicted_category: Optional[str]
+    prediction_probabilities: Optional[Dict[str, float]]
+    formatted_log: Optional[str]
+
+class LogAnalysisSessionResponse(BaseModel):
+    """Log analysis session metadata"""
+    id: int = 0  # Always 0 (no DB storage)
+    session_id: str  # UUID
+    user_id: int
+    configuration_id: Optional[int]
+    filename: str
+    file_size: Optional[int]
+    status: str  # "processing", "completed", "failed"
+    total_logs: Optional[int]
+    error_message: Optional[str]
+    created_at: str  # ISO datetime string
+    completed_at: Optional[str]
+    categories: Optional[Dict[str, int]] = None  # Only included in detail view
+
+class LogDetailResponse(BaseModel):
+    """Single log detail with raw data"""
+    session_id: str
+    transaction_id: str
+    log: Dict[str, Any]  # Complete raw parsed log structure
+
+class CategoryDetailsResponse(BaseModel):
+    """Detailed logs for a specific category"""
+    session_id: str
+    category: str
+    total_count: int
+    logs: List[LogEntryResponse]
+```
+
+### Storage Implementation
+
+**File-Based Storage (JSON):**
+- Location: `backend/src/storage/logs/{session_id}.json`
+- No database tables required
+- Each session = one JSON file
+- Includes complete DataFrame for pandas filtering
+
+**Session File Structure:**
+```json
+{
+  "session_id": "550e8400-e29b-41d4-a716-446655440000",
+  "user_id": 1,
+  "configuration_id": null,
+  "filename": "audit.log",
+  "file_size": 1024000,
+  "file_hash": "sha256...",
+  "status": "completed",
+  "total_logs": 1500,
+  "error_message": null,
+  "created_at": "2024-12-10T10:30:00",
+  "completed_at": "2024-12-10T10:35:00",
+  "categories": {
+    "SQL Injection": 450,
+    "XSS": 300,
+    "Normal": 750
+  },
+  "logs": [
+    {
+      "transaction_id": "xyz123",
+      "timestamp": "2024-12-10T10:30:00Z",
+      "remote_address": "192.168.1.1",
+      "http_method": "POST",
+      "request_url": "/login",
+      "response_status_code": 403,
+      "predicted_category": "SQL Injection",
+      "prediction_probabilities": {
+        "SQL Injection": 0.95,
+        "XSS": 0.03
+      },
+      "formatted_log": "...",
+      "raw_data": {...}
+    }
+  ],
+  "dataframe": [...]  // Serialized pandas DataFrame for filtering
+}
+```
+
+### Filtering Examples
+
+**Time-based filtering:**
+```json
+POST /api/v1/logs/sessions/{session_id}/filter
+{
+  "start_time": "2024-12-01T00:00:00Z",
+  "end_time": "2024-12-31T23:59:59Z"
+}
+```
+
+**Column-based filtering:**
+```json
+POST /api/v1/logs/sessions/{session_id}/filter
+{
+  "columns": [
+    {"name": "response_status_code", "value": 403, "type": "exact"},
+    {"name": "request_url", "value": "/admin", "type": "contains"},
+    {"name": "remote_port", "value": 1024, "type": "greater_than"}
+  ]
+}
+```
+
+**Combined filtering with full logs:**
+```json
+POST /api/v1/logs/sessions/{session_id}/filter?include_logs=true
+{
+  "start_time": "2024-12-10T00:00:00Z",
+  "columns": [
+    {"name": "predicted_category", "value": "SQL Injection", "type": "exact"}
+  ]
+}
+```
+
+---
+
 
 
 ### FastAPI Implementation
@@ -504,7 +841,7 @@ async def upload_configuration(
 
 ---
 
-**Total Routes:** 19 endpoints across 3 route groups
+**Total Routes:** 25 endpoints across 4 route groups
 
 
 
