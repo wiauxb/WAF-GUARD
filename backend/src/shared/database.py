@@ -141,6 +141,19 @@ class Neo4jConnection:
 neo4j_connection = Neo4jConnection()
 
 
+# ==================== LangGraph Checkpointer Setup ====================
+
+# Convert SQLAlchemy URL format to psycopg format for LangGraph
+_psycopg_url = settings.POSTGRES_URL.replace("postgresql+psycopg://", "postgresql://")
+
+# Create LangGraph checkpointer singleton (manages its own connection pool)
+# Similar to postgres_engine, this is created once at module import
+_checkpointer_context = PostgresSaver.from_conn_string(_psycopg_url)
+langgraph_checkpointer = _checkpointer_context.__enter__()  # Get the actual PostgresSaver instance
+
+logger.info("LangGraph checkpointer initialized")
+
+
 def get_neo4j_db() -> Generator[Neo4jSession, None, None]:
     """
     FastAPI dependency that provides a Neo4j database session.
@@ -164,14 +177,20 @@ def get_neo4j_db() -> Generator[Neo4jSession, None, None]:
 
 def get_langgraph_checkpointer():
     """
-    Get LangGraph checkpointer instance.
-    Can be used as a dependency or in services.
+    Get the global LangGraph checkpointer instance.
 
-    Returns a context manager that should be used with 'with' statement.
+    The checkpointer is a module-level singleton that manages its own
+    connection pool internally, similar to postgres_engine.
+
+    Returns:
+        PostgresSaver: The global checkpointer instance
+
+    Usage:
+        checkpointer = get_langgraph_checkpointer()
+        # Use checkpointer methods directly
+        messages = checkpointer.get_tuple(config)
     """
-    # Convert SQLAlchemy URL format to psycopg format (remove +psycopg dialect)
-    psycopg_url = settings.POSTGRES_URL.replace("postgresql+psycopg://", "postgresql://")
-    return PostgresSaver.from_conn_string(psycopg_url)
+    return langgraph_checkpointer
 
 
 # ==================== Database Initialization ====================
@@ -197,11 +216,8 @@ def init_postgres_db():
         Base.metadata.create_all(bind=postgres_engine)
         logger.info("✓ Application tables created/verified successfully")
 
-        # Setup LangGraph checkpoint tables
-        # Convert SQLAlchemy URL format to psycopg format (remove +psycopg dialect)
-        psycopg_url = settings.POSTGRES_URL.replace("postgresql+psycopg://", "postgresql://")
-        with PostgresSaver.from_conn_string(psycopg_url) as checkpointer:
-            checkpointer.setup()
+        # Setup LangGraph checkpoint tables using the singleton checkpointer
+        langgraph_checkpointer.setup()
         logger.info("✓ LangGraph checkpoint tables created/verified successfully")
 
         logger.info("PostgreSQL database initialization complete")
@@ -254,12 +270,18 @@ def close_databases():
         logger.info("PostgreSQL connections closed")
     except Exception as e:
         logger.error(f"Error closing PostgreSQL: {e}")
-    
+
     try:
         neo4j_connection.close()
         logger.info("Neo4j connections closed")
     except Exception as e:
         logger.error(f"Error closing Neo4j: {e}")
+
+    try:
+        _checkpointer_context.__exit__(None, None, None)
+        logger.info("LangGraph checkpointer closed")
+    except Exception as e:
+        logger.error(f"Error closing LangGraph checkpointer: {e}")
 
 
 # ==================== Utility Functions ====================

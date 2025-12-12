@@ -73,6 +73,10 @@ class Settings(BaseSettings):
     LLM_MODEL: str = "gpt-4"
     LLM_MAX_TOKENS: int = 2000
     LLM_TEMPERATURE: float = 0.7
+
+    # Chatbot-specific LLM settings (LangGraph)
+    OPENAI_MODEL: str = "gpt-4o-mini"  # Model for chatbot agent
+    CHATBOT_TEMPERATURE: float = 0.7  # Temperature for chatbot responses
     
     # ==================== API Settings ====================
     API_V1_PREFIX: str = "/api/v1"

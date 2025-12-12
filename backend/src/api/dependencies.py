@@ -16,10 +16,11 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
-from shared.database import get_postgres_db
+from shared.database import get_postgres_db, get_langgraph_checkpointer
 from services.auth.service import AuthService
 from services.auth.schemas import UserInfo
 from services.configmanager.service import ConfigManagerService
+from services.chatbot.service import ChatbotService
 
 security = HTTPBearer()
 
@@ -30,6 +31,16 @@ def get_auth_service(db: Session = Depends(get_postgres_db)) -> AuthService:
 def get_config_manager(db: Session = Depends(get_postgres_db)) -> ConfigManagerService:
     """Get ConfigManagerService instance"""
     return ConfigManagerService(db)
+
+def get_chatbot_service(db: Session = Depends(get_postgres_db)) -> ChatbotService:
+    """
+    Get ChatbotService instance with LangGraph checkpointer.
+
+    The checkpointer is a module-level singleton with its own connection pool,
+    separate from the request-scoped SQLAlchemy session.
+    """
+    checkpointer = get_langgraph_checkpointer()
+    return ChatbotService(db, checkpointer)
 
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),

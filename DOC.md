@@ -184,26 +184,100 @@ class ParseStatusResponse(BaseModel):
 ```
 
 ### ChatbotService
+
+**Overview**: AI-powered chatbot for WAF configuration assistance using LangGraph and OpenAI.
+
+**Architecture**:
+- **LangGraph**: Manages conversational AI with ReAct agent pattern
+- **PostgresSaver**: Automatic conversation persistence (checkpointing)
+- **Tools**: 5 specialized tools for WAF configuration analysis
+- **Streaming**: Real-time response generation via Server-Sent Events (SSE)
+
 ```python
 def create_conversation(user_id: int, request: ConversationCreateRequest) -> ConversationResponse
     # Create a new conversation thread with optional configuration context
+    # Generates unique thread_id for LangGraph persistence
 
 def get_user_conversations(user_id: int, filters: Optional[ConversationListFilters] = None) -> List[ConversationResponse]
     # List user's conversations with optional filtering and pagination
 
 def send_message(thread_id: str, message_request: SendMessageRequest, user_id: int) -> ChatResponse
-    # Send message and get chatbot response (uses LangGraph + optional config context)
+    # Send message and get chatbot response (uses LangGraph + selected graph)
+    # Process:
+    # 1. Validate user ownership
+    # 2. Get graph from registry (default: "ui_graph_v1")
+    # 3. Invoke graph with checkpointer (automatic persistence)
+    # 4. Extract assistant response
+    # 5. Extract tool usage information (name, arguments, results)
+    # 6. Update conversation timestamp
+    # Returns complete response message with tools_used list
+
+async def send_message_stream(thread_id: str, message_request: SendMessageRequest, user_id: int) -> AsyncGenerator[str]
+    # Stream message response in real-time (yields content chunks)
+    # Uses LangGraph astream() with "messages" mode for token-level streaming
+    # Ideal for real-time frontend updates via Server-Sent Events (SSE)
 
 def get_conversation_history(thread_id: str, user_id: int, limit: Optional[int] = None) -> ConversationHistoryResponse
-    # Get full message history for a conversation
+    # Get full message history for a conversation from LangGraph checkpointer
+    # Messages are persisted automatically by LangGraph PostgresSaver
 
 def delete_conversation(thread_id: str, user_id: int) -> bool
-    # Delete conversation (soft delete, LangGraph checkpoints remain)
+    # Delete conversation metadata AND LangGraph checkpoints
+    # Full cleanup of both metadata and conversation history
 
 def rename_conversation(thread_id: str, new_title: str, user_id: int) -> ConversationResponse
     # Rename a conversation
-
 ```
+
+#### LangGraph Implementation
+
+**Directory Structure:**
+```
+services/chatbot/
+├── graphs/              # LangGraph implementations
+│   ├── registry.py      # Graph factory (get_graph, register_graph)
+│   ├── states.py        # State schemas (MessagesState, WAFAnalysisState)
+│   └── simple_graphs.py # build_ui_graph_v1() - ReAct agent
+├── tools/               # LangChain tool definitions
+│   ├── registry.py      # Tool categories (get_tools_for_categories)
+│   └── waf/             # WAF analysis tools (5 tools)
+│       ├── filter_rule.py
+│       ├── get_constant_info.py
+│       ├── get_directives.py
+│       ├── macro_trace.py
+│       └── removed_by.py
+├── prompts/             # System prompts per graph
+│   └── agent_prompts.py
+└── utils/               # Error handling utilities
+    └── error_handling.py
+```
+
+**Available Graphs:**
+- `ui_graph_v1`: Simple ReAct agent with 5 WAF tools (default)
+  - Uses `create_agent()` from LangChain (current non-deprecated API)
+  - Uses `prompt` parameter for system prompt injection
+  - Automatic tool calling and response generation
+  - Checkpointer handles conversation persistence
+  - Extracts and returns tool usage information (name, arguments, results)
+
+**Available Tools** (Category: "waf"):
+1. `filter_rule(location, host)` - Filter rules by location and host patterns
+2. `get_constant_info(constant_name)` - Search for constants/variables
+3. `get_directives_with_constant(constant_name)` - Find directives using a constant
+4. `get_macro_call_trace(node_id)` - Get macro call stack trace
+5. `removed_by(node_id)` - Find which directives removed a node
+
+**Note**: Tools currently return **dummy data** as backend analysis services are still in development. Real integration pending.
+
+**Tool Call Extraction**:
+- The service automatically extracts tool calls from the LangGraph response
+- Matches AIMessage tool_calls with ToolMessage results
+- Returns complete tool usage information (name, arguments, results) in ChatResponse.tools_used
+
+**Configuration** (from settings):
+- `OPENAI_MODEL`: Model for chatbot (default: "gpt-4o-mini")
+- `CHATBOT_TEMPERATURE`: Response temperature (default: 0.7)
+- `OPENAI_API_KEY`: Required for OpenAI API access
 
 #### Request Schemas
 ```python
@@ -214,6 +288,8 @@ class ConversationCreateRequest(BaseModel):
 class SendMessageRequest(BaseModel):
     message: str = Field(min_length=1, max_length=10000)
     configuration_id: Optional[int] = Field(None, gt=0)
+    graph_name: Optional[str] = Field(default="ui_graph_v1")  # LangGraph to use
+    stream: bool = Field(default=False)  # Enable streaming response
 
 class ConversationListFilters(BaseModel):
     configuration_id: Optional[int] = None
@@ -221,7 +297,7 @@ class ConversationListFilters(BaseModel):
     offset: int = Field(default=0, ge=0)
 ```
 
-#### Response Schema
+#### Response Schemas
 ```python
 class ConversationResponse(BaseModel):
     id: int
@@ -233,11 +309,17 @@ class ConversationResponse(BaseModel):
     updated_at: datetime
     configuration_name: Optional[str]  # Joined from configurations
 
+class ToolCallInfo(BaseModel):
+    name: str  # Name of the tool that was called
+    arguments: Dict[str, Any]  # Arguments passed to the tool
+    result: Any  # Result returned by the tool
+
 class ChatResponse(BaseModel):
     message: str
     thread_id: str
     configuration_id: Optional[int]
     created_at: datetime
+    tools_used: List[ToolCallInfo]  # List of tools used to generate the response
 
 class MessageResponse(BaseModel):
     role: str  # "user" or "assistant"
@@ -249,6 +331,38 @@ class ConversationHistoryResponse(BaseModel):
     messages: List[MessageResponse]
     total_messages: int
 ```
+
+#### API Endpoints
+
+**Standard (Non-Streaming):**
+```
+POST   /api/v1/chatbot/conversations/{thread_id}/messages
+```
+
+**Streaming (SSE):**
+```
+POST   /api/v1/chatbot/conversations/{thread_id}/messages/stream
+```
+Returns: `text/event-stream` with real-time response chunks
+
+**Frontend Integration Example:**
+```javascript
+// Streaming response
+const eventSource = new EventSource(
+  `/api/v1/chatbot/conversations/${threadId}/messages/stream`,
+  { headers: { Authorization: `Bearer ${token}` } }
+);
+eventSource.onmessage = (event) => {
+  console.log(event.data); // Response chunk
+};
+```
+
+#### Future Enhancements
+- **Tool Backend Integration**: Connect tools to real AnalysisService/ParserService
+- **Workflow Graphs**: Routing patterns for complex queries
+- **Multi-Agent Orchestration**: Supervisor with specialized agents (LangGraph subgraphs)
+- **Deep Agents**: Planning, file system integration, subagent spawning
+- **RAG Integration**: Vector store with ModSecurity documentation
 
 ### AnalysisService
 ```python
