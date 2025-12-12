@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, desc
 from .models import Conversation
 from .schemas import MessageResponse
+from .utils import parse_langchain_messages_to_responses
 from typing import Optional, List
 from datetime import datetime
 
@@ -146,11 +147,10 @@ class ConversationRepository:
             limit: Optional limit on number of messages
 
         Returns:
-            List of MessageResponse objects
+            List of MessageResponse objects with tool calls extracted
 
         Note:
             Returns empty list if checkpointer is not initialized.
-            Implement this when LangGraph is integrated.
         """
         if not self.checkpointer:
             # Checkpointer not initialized - return empty list
@@ -168,14 +168,8 @@ class ConversationRepository:
             checkpoint = checkpoint_tuple.checkpoint
             messages = checkpoint.get("channel_values", {}).get("messages", [])
 
-            # Convert to MessageResponse objects
-            message_responses = []
-            for msg in messages:
-                message_responses.append(MessageResponse(
-                    role="user" if msg.type == "human" else "assistant",
-                    content=msg.content,
-                    timestamp=getattr(msg, "timestamp", datetime.utcnow())
-                ))
+            # Convert to MessageResponse objects with tool extraction
+            message_responses = parse_langchain_messages_to_responses(messages)
 
             # Apply limit if specified
             if limit:

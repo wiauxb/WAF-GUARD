@@ -45,13 +45,6 @@ class ConversationResponse(BaseModel):
         from_attributes = True
 
 
-class MessageResponse(BaseModel):
-    """Individual message in a conversation"""
-    role: str  # "user" or "assistant"
-    content: str
-    timestamp: datetime
-
-
 class ToolCallInfo(BaseModel):
     """Information about a tool call made during message generation"""
     name: str = Field(description="Name of the tool that was called")
@@ -59,13 +52,15 @@ class ToolCallInfo(BaseModel):
     result: Any = Field(description="Result returned by the tool")
 
 
-class ChatResponse(BaseModel):
-    """Response after sending a message"""
-    message: str
-    thread_id: str
-    configuration_id: Optional[int]
-    created_at: datetime
-    tools_used: List[ToolCallInfo] = Field(default_factory=list, description="List of tools used to generate the response")
+class MessageResponse(BaseModel):
+    """Universal message representation for both individual responses and conversation history"""
+    role: str  # "user" or "assistant"
+    content: str
+    timestamp: datetime
+    tools_used: Optional[List[ToolCallInfo]] = Field(
+        default=None,
+        description="List of tools used to generate this message (only for assistant messages with tool usage)"
+    )
 
 
 class ConversationHistoryResponse(BaseModel):

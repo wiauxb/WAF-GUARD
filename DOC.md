@@ -192,6 +192,7 @@ class ParseStatusResponse(BaseModel):
 - **PostgresSaver**: Automatic conversation persistence (checkpointing)
 - **Tools**: 5 specialized tools for WAF configuration analysis
 - **Streaming**: Real-time response generation via Server-Sent Events (SSE)
+- **Unified Message Schema**: Single MessageResponse schema for all messages (immediate and historical)
 
 ```python
 def create_conversation(user_id: int, request: ConversationCreateRequest) -> ConversationResponse
@@ -201,16 +202,18 @@ def create_conversation(user_id: int, request: ConversationCreateRequest) -> Con
 def get_user_conversations(user_id: int, filters: Optional[ConversationListFilters] = None) -> List[ConversationResponse]
     # List user's conversations with optional filtering and pagination
 
-def send_message(thread_id: str, message_request: SendMessageRequest, user_id: int) -> ChatResponse
+def send_message(thread_id: str, message_request: SendMessageRequest, user_id: int) -> MessageResponse
     # Send message and get chatbot response (uses LangGraph + selected graph)
     # Process:
     # 1. Validate user ownership
     # 2. Get graph from registry (default: "ui_graph_v1")
-    # 3. Invoke graph with checkpointer (automatic persistence)
-    # 4. Extract assistant response
-    # 5. Extract tool usage information (name, arguments, results)
-    # 6. Update conversation timestamp
-    # Returns complete response message with tools_used list
+    # 3. Get current state to track existing message count
+    # 4. Invoke graph with checkpointer (automatic persistence)
+    # 5. Extract ONLY NEW messages from this exchange (not entire history)
+    # 6. Parse new messages and extract tool usage (name, arguments, results)
+    # 7. Combine tool calls with their resulting response into single message
+    # 8. Update conversation timestamp
+    # Returns MessageResponse with assistant's reply and associated tools_used
 
 async def send_message_stream(thread_id: str, message_request: SendMessageRequest, user_id: int) -> AsyncGenerator[str]
     # Stream message response in real-time (yields content chunks)
@@ -220,6 +223,8 @@ async def send_message_stream(thread_id: str, message_request: SendMessageReques
 def get_conversation_history(thread_id: str, user_id: int, limit: Optional[int] = None) -> ConversationHistoryResponse
     # Get full message history for a conversation from LangGraph checkpointer
     # Messages are persisted automatically by LangGraph PostgresSaver
+    # Each MessageResponse includes tools_used when applicable
+    # Tool calls are automatically associated with their resulting message content
 
 def delete_conversation(thread_id: str, user_id: int) -> bool
     # Delete conversation metadata AND LangGraph checkpoints
@@ -248,8 +253,14 @@ services/chatbot/
 │       └── removed_by.py
 ├── prompts/             # System prompts per graph
 │   └── agent_prompts.py
-└── utils/               # Error handling utilities
-    └── error_handling.py
+├── utils/               # Shared utilities
+│   ├── __init__.py      # Exports all utilities
+│   ├── error_handling.py # Tool error handling with fallbacks
+│   └── message_parser.py # LangChain → MessageResponse conversion
+├── repository.py        # Data access layer (conversations, message history)
+├── service.py           # Business logic layer
+├── schemas.py           # Pydantic schemas (unified MessageResponse)
+└── models.py            # Database models
 ```
 
 **Available Graphs:**
@@ -268,11 +279,6 @@ services/chatbot/
 5. `removed_by(node_id)` - Find which directives removed a node
 
 **Note**: Tools currently return **dummy data** as backend analysis services are still in development. Real integration pending.
-
-**Tool Call Extraction**:
-- The service automatically extracts tool calls from the LangGraph response
-- Matches AIMessage tool_calls with ToolMessage results
-- Returns complete tool usage information (name, arguments, results) in ChatResponse.tools_used
 
 **Configuration** (from settings):
 - `OPENAI_MODEL`: Model for chatbot (default: "gpt-4o-mini")
@@ -314,47 +320,17 @@ class ToolCallInfo(BaseModel):
     arguments: Dict[str, Any]  # Arguments passed to the tool
     result: Any  # Result returned by the tool
 
-class ChatResponse(BaseModel):
-    message: str
-    thread_id: str
-    configuration_id: Optional[int]
-    created_at: datetime
-    tools_used: List[ToolCallInfo]  # List of tools used to generate the response
-
 class MessageResponse(BaseModel):
+    """Universal message representation for both immediate responses and conversation history"""
     role: str  # "user" or "assistant"
     content: str
     timestamp: datetime
+    tools_used: Optional[List[ToolCallInfo]]  # Tools used to generate this message (assistant only)
 
 class ConversationHistoryResponse(BaseModel):
     conversation: ConversationResponse
-    messages: List[MessageResponse]
+    messages: List[MessageResponse]  # Each message includes tools_used when applicable
     total_messages: int
-```
-
-#### API Endpoints
-
-**Standard (Non-Streaming):**
-```
-POST   /api/v1/chatbot/conversations/{thread_id}/messages
-```
-
-**Streaming (SSE):**
-```
-POST   /api/v1/chatbot/conversations/{thread_id}/messages/stream
-```
-Returns: `text/event-stream` with real-time response chunks
-
-**Frontend Integration Example:**
-```javascript
-// Streaming response
-const eventSource = new EventSource(
-  `/api/v1/chatbot/conversations/${threadId}/messages/stream`,
-  { headers: { Authorization: `Bearer ${token}` } }
-);
-eventSource.onmessage = (event) => {
-  console.log(event.data); // Response chunk
-};
 ```
 
 #### Future Enhancements
@@ -700,6 +676,89 @@ class ParseStatusResponse(BaseModel):
 
 ---
 
+## Chatbot Routes (`/chatbot`)
+
+| Method | Endpoint | Auth | Request | Response | Description |
+|--------|----------|------|---------|----------|-------------|
+| POST | `/conversations` | ✅ | `ConversationCreateRequest` | `ConversationResponse` | Create new conversation |
+| GET | `/conversations` | ✅ | Query: configuration_id, limit, offset | `List[ConversationResponse]` | List user's conversations |
+| POST | `/conversations/{thread_id}/messages` | ✅ | `SendMessageRequest` | `MessageResponse` | Send message and get response |
+| POST | `/conversations/{thread_id}/messages/stream` | ✅ | `SendMessageRequest` | SSE Stream | Send message with streaming response |
+| GET | `/conversations/{thread_id}/history` | ✅ | Query: limit | `ConversationHistoryResponse` | Get conversation history |
+| DELETE | `/conversations/{thread_id}` | ✅ | - | `SuccessResponse` | Delete conversation |
+| PUT | `/conversations/{thread_id}/title` | ✅ | `ConversationRenameRequest` | `ConversationResponse` | Rename conversation |
+
+### Request Schemas
+
+```python
+class ConversationCreateRequest(BaseModel):
+    title: Optional[str] = Field(None, max_length=255)
+    configuration_id: Optional[int] = Field(None, gt=0)
+
+class SendMessageRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=10000)
+    configuration_id: Optional[int] = Field(None, gt=0)
+    graph_name: Optional[str] = Field(default="ui_graph_v1")  # LangGraph to use
+    stream: bool = Field(default=False)  # Enable streaming response
+
+class ConversationRenameRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+
+class ConversationListFilters(BaseModel):
+    configuration_id: Optional[int] = None
+    limit: int = Field(default=20, ge=1, le=100)
+    offset: int = Field(default=0, ge=0)
+```
+
+### Response Schemas
+
+```python
+class ConversationResponse(BaseModel):
+    id: int
+    user_id: int
+    configuration_id: Optional[int]
+    thread_id: str
+    title: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+    configuration_name: Optional[str]
+
+class ToolCallInfo(BaseModel):
+    name: str  # Tool name
+    arguments: Dict[str, Any]  # Tool arguments
+    result: Any  # Tool result
+
+class MessageResponse(BaseModel):
+    role: str  # "user" or "assistant"
+    content: str
+    timestamp: datetime
+    tools_used: Optional[List[ToolCallInfo]]  # Tools used for this message
+
+class ConversationHistoryResponse(BaseModel):
+    conversation: ConversationResponse
+    messages: List[MessageResponse]
+    total_messages: int
+```
+
+### Streaming Endpoint
+
+The `/conversations/{thread_id}/messages/stream` endpoint returns Server-Sent Events (SSE):
+
+**Response Type**: `text/event-stream`
+
+**Frontend Integration Example**:
+```javascript
+const eventSource = new EventSource(
+  `/api/v1/chatbot/conversations/${threadId}/messages/stream`,
+  { headers: { Authorization: `Bearer ${token}` } }
+);
+eventSource.onmessage = (event) => {
+  console.log(event.data); // Response chunk
+};
+```
+
+---
+
 ## Common Schemas
 
 ```python
@@ -955,7 +1014,7 @@ async def upload_configuration(
 
 ---
 
-**Total Routes:** 25 endpoints across 4 route groups
+**Total Routes:** 32 endpoints across 5 route groups (Auth: 5, Configurations: 8, Parser: 3, Chatbot: 7, Logs: 6, Common: 3)
 
 
 

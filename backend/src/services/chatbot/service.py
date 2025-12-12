@@ -4,17 +4,16 @@ from .schemas import (
     ConversationCreateRequest,
     ConversationResponse,
     SendMessageRequest,
-    ChatResponse,
     ConversationHistoryResponse,
     MessageResponse,
     ConversationListFilters,
     ToolCallInfo
 )
+from .utils import parse_langchain_messages_to_responses
 from typing import List, Optional
 from datetime import datetime
 import uuid
 import logging
-from langchain_core.messages import AIMessage, ToolMessage
 
 logger = logging.getLogger(__name__)
 
@@ -103,43 +102,12 @@ class ChatbotService:
         # For now, return without configuration_name
         return [ConversationResponse.from_orm(c) for c in conversations]
 
-    def _extract_tool_calls(self, messages: list) -> List[ToolCallInfo]:
-        """
-        Extract tool calls and their results from the message history.
-
-        Args:
-            messages: List of LangChain messages from the graph response
-
-        Returns:
-            List of ToolCallInfo objects containing tool name, arguments, and results
-        """
-        tools_used = []
-
-        # Create a map of tool call IDs to their results
-        tool_results = {}
-        for msg in messages:
-            if isinstance(msg, ToolMessage):
-                tool_results[msg.tool_call_id] = msg.content
-
-        # Extract tool calls from AI messages and match with results
-        for msg in messages:
-            if isinstance(msg, AIMessage) and hasattr(msg, 'tool_calls') and msg.tool_calls:
-                for tool_call in msg.tool_calls:
-                    tool_info = ToolCallInfo(
-                        name=tool_call.get('name', 'unknown'),
-                        arguments=tool_call.get('args', {}),
-                        result=tool_results.get(tool_call.get('id'), None)
-                    )
-                    tools_used.append(tool_info)
-
-        return tools_used
-
     def send_message(
         self,
         thread_id: str,
         message_request: SendMessageRequest,
         user_id: int
-    ) -> ChatResponse:
+    ) -> MessageResponse:
         """
         Send message and get chatbot response.
 
@@ -155,7 +123,7 @@ class ChatbotService:
             user_id: User sending the message
 
         Returns:
-            ChatResponse with assistant's reply
+            MessageResponse with assistant's reply
 
         Raises:
             ValueError: If thread not found or user doesn't own conversation
@@ -189,26 +157,34 @@ class ChatbotService:
 
         # Invoke graph (this automatically writes to checkpointer)
         config = {"configurable": {"thread_id": thread_id}}
+
+        # Get current state to track existing messages count
+        current_state = graph.get_state(config)
+        existing_message_count = len(current_state.values.get("messages", []))
+
         response = graph.invoke(input_data, config)
 
-        # Extract assistant's response (last message)
-        assistant_message = response["messages"][-1].content
+        # Extract only NEW messages (from this exchange)
+        all_messages = response["messages"]
+        new_messages = all_messages[existing_message_count:]
 
-        # Extract tool calls and results from the conversation
-        tools_used = self._extract_tool_calls(response["messages"])
+        # Parse new messages to MessageResponse objects (with tool extraction)
+        parsed_messages = parse_langchain_messages_to_responses(new_messages)
+
+        # The last parsed message should be the assistant's response
+        assistant_response = parsed_messages[-1] if parsed_messages else MessageResponse(
+            role="assistant",
+            content=all_messages[-1].content,
+            timestamp=datetime.utcnow(),
+            tools_used=None
+        )
 
         # Update conversation timestamp via repository
         self.conversation_repo.update_timestamp(conversation)
 
         logger.info(f"Sent message to conversation {thread_id} using graph {graph_name}")
 
-        return ChatResponse(
-            message=assistant_message,
-            thread_id=thread_id,
-            configuration_id=message_request.configuration_id or conversation.configuration_id,
-            created_at=datetime.utcnow(),
-            tools_used=tools_used
-        )
+        return assistant_response
 
     def get_conversation_history(
         self,

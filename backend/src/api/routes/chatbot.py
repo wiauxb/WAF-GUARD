@@ -6,7 +6,7 @@ from services.chatbot.schemas import (
     ConversationCreateRequest,
     ConversationResponse,
     SendMessageRequest,
-    ChatResponse,
+    MessageResponse,
     ConversationHistoryResponse,
     ConversationListFilters,
     ConversationRenameRequest
@@ -62,7 +62,7 @@ async def list_conversations(
     return chatbot_service.get_user_conversations(current_user.id, filters)
 
 
-@router.post("/conversations/{thread_id}/messages", response_model=ChatResponse)
+@router.post("/conversations/{thread_id}/messages", response_model=MessageResponse)
 async def send_message(
     thread_id: str,
     request: SendMessageRequest,
@@ -77,7 +77,7 @@ async def send_message(
     - **configuration_id**: Optional configuration context for this message
 
     Uses LangGraph for conversation state management.
-    Returns assistant's response.
+    Returns assistant's message response with role, content, timestamp, and tools_used.
     """
     try:
         return chatbot_service.send_message(thread_id, request, current_user.id)
