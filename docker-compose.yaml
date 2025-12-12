@@ -94,20 +94,20 @@ services:
         condition: service_started
         restart: true
     
-  # react:
-  #   container_name: react
-  #   build: ./frontend
-  #   volumes:
-  #     - ${PWD}/frontend/waf-react:/app/waf-react
-  #     - /app/waf-react/node_modules
-  #   ports:
-  #     - "8002:8002"
-  #   working_dir: /app/waf-react
-  #   command: "npm run dev"
-  #   depends_on:
-  #     backend:
-  #       condition: service_started
-  #       restart: true
+  react:
+    container_name: react
+    build: ./frontend
+    volumes:
+      - ${PWD}/frontend/waf-react:/app/waf-react
+      - /app/waf-react/node_modules
+    ports:
+      - "8002:8002"
+    working_dir: /app/waf-react
+    command: "npm run dev"
+    depends_on:
+      backend:
+        condition: service_started
+        restart: true
 
 
   # streamlit:
