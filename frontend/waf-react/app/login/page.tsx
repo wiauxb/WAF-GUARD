@@ -6,10 +6,11 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { webAppApi } from '@/lib/api'
+import { api } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
 import toast from 'react-hot-toast'
 import { Lock, User, Shield } from 'lucide-react'
+import { TokenResponse } from '@/types'
 
 export default function LoginPage() {
   const [username, setUsername] = useState('')
@@ -23,13 +24,19 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      const response = await webAppApi.post('/api/v1/auth/login', {
+      const response = await api.post<TokenResponse>('/auth/login', {
         username,
         password,
       })
 
+      const userInfoResponse = await api.get('/auth/me', {
+        headers: {
+          Authorization: `Bearer ${response.data.access_token}`,
+        },
+      })
+
       const { access_token } = response.data
-      setAuth({ username }, access_token)
+      setAuth(userInfoResponse.data, access_token)
       toast.success('Login successful!')
       router.push('/dashboard')
     } catch (error: any) {

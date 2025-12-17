@@ -1,10 +1,10 @@
 import { create } from 'zustand'
-import { User } from '@/types'
+import { UserInfo } from '@/types'
 
 interface AuthStore {
-  user: User | null
+  user: UserInfo | null
   token: string | null
-  setAuth: (user: User, token: string) => void
+  setAuth: (user: UserInfo, token: string) => void
   logout: () => void
   isAuthenticated: boolean
 }
