@@ -175,13 +175,13 @@ export default function ChatbotPage() {
 
   return (
     <div className="flex h-[calc(100vh-8rem)] gap-4">
-      <Card className="w-80 flex flex-col bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-950/20 dark:to-blue-950/20 border-purple-200 dark:border-purple-800">
-        <div className="p-4 border-b border-purple-200 dark:border-purple-800 flex items-center justify-between bg-gradient-to-r from-purple-500 to-blue-500 text-white">
+      <Card className="w-80 flex flex-col bg-gradient-to-br from-purple-50 to-blue-50 border-purple-200">
+        <div className="p-4 border-b flex items-center justify-between">
           <h2 className="font-semibold flex items-center gap-2">
             <MessageSquare className="h-5 w-5" />
             Conversations
           </h2>
-          <Button size="sm" onClick={() => createConversationMutation.mutate()} disabled={createConversationMutation.isPending} className="bg-white/20 hover:bg-white/30 text-white border-white/30">
+          <Button size="sm" onClick={() => createConversationMutation.mutate()} disabled={createConversationMutation.isPending} className="bg-blue-300 hover:bg-white/30 text-purple-700 border-purple-700">
             <Plus className="h-4 w-4" />
           </Button>
         </div>
@@ -198,7 +198,7 @@ export default function ChatbotPage() {
                   className={`p-3 rounded-lg cursor-pointer transition-all duration-200 ${
                     currentThreadId === conversation.thread_id 
                       ? 'bg-gradient-to-r from-purple-500 to-blue-500 text-white shadow-lg scale-105' 
-                      : 'hover:bg-white/60 dark:hover:bg-white/10 hover:shadow-md hover:scale-102'
+                      : 'hover:bg-white/60 hover:shadow-md hover:scale-102'
                   }`}
                   onClick={() => setCurrentThreadId(conversation.thread_id)}
                 >
@@ -238,13 +238,13 @@ export default function ChatbotPage() {
         </div>
       </Card>
 
-      <Card className="flex-1 flex flex-col bg-gradient-to-br from-slate-50 to-gray-100 dark:from-slate-950 dark:to-gray-950 border-slate-200 dark:border-slate-800">
+      <Card className="flex-1 flex flex-col bg-gradient-to-br from-slate-50 to-gray-100 border-slate-200">
         {!currentThreadId ? (
-          <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-50 dark:from-purple-950/20 dark:via-blue-950/20 dark:to-indigo-950/20">
+          <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-50">
             <div className="text-center space-y-4">
               <div className="relative">
                 <div className="absolute inset-0 bg-gradient-to-r from-purple-500 to-blue-500 blur-xl opacity-30 animate-pulse"></div>
-                <Bot className="h-16 w-16 mx-auto text-purple-600 dark:text-purple-400 relative z-10" />
+                <Bot className="h-16 w-16 mx-auto text-purple-600 relative z-10" />
               </div>
               <div>
                 <h3 className="text-lg font-semibold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">Welcome to WAF-GUARD Assistant</h3>
@@ -269,7 +269,7 @@ export default function ChatbotPage() {
                   <div className={`max-w-[70%] rounded-lg p-3 shadow-md ${
                     message.role === 'user' 
                       ? 'bg-gradient-to-br from-blue-500 to-indigo-500 text-white' 
-                      : 'bg-white dark:bg-slate-800 border-2 border-purple-200 dark:border-purple-800'
+                      : 'bg-white border-2 border-purple-200'
                   }`}>
                     <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                     {message.tools_used && message.tools_used.length > 0 && (
@@ -299,7 +299,7 @@ export default function ChatbotPage() {
                   <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center shadow-lg">
                     <Bot className="h-5 w-5 text-white" />
                   </div>
-                  <div className="bg-white dark:bg-slate-800 border-2 border-purple-200 dark:border-purple-800 rounded-lg p-3 shadow-md">
+                  <div className="bg-white  border-2 border-purple-200 rounded-lg p-3 shadow-md">
                     <div className="flex gap-1">
                       <div className="w-2 h-2 rounded-full bg-purple-500 animate-bounce" />
                       <div className="w-2 h-2 rounded-full bg-blue-500 animate-bounce delay-100" />
@@ -311,7 +311,7 @@ export default function ChatbotPage() {
               <div ref={messagesEndRef} />
             </div>
 
-            <div className="p-4 border-t border-purple-200 dark:border-purple-800 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-950/20 dark:to-blue-950/20">
+            <div className="p-4 border-t border-purple-200 bg-gradient-to-r from-purple-50 to-blue-50">
               <div className="flex gap-2">
                 <Input 
                   value={messageInput} 
@@ -319,7 +319,7 @@ export default function ChatbotPage() {
                   onKeyPress={handleKeyPress} 
                   placeholder="Type your message..." 
                   disabled={sendMessageMutation.isPending} 
-                  className="border-purple-200 dark:border-purple-800 focus:ring-purple-500 focus:border-purple-500"
+                  className="border-purple-200 focus:ring-purple-500 focus:border-purple-500"
                 />
                 <Button 
                   onClick={handleSendMessage} 
@@ -330,7 +330,7 @@ export default function ChatbotPage() {
                 </Button>
               </div>
               {selectedConfig && (
-                <p className="text-xs text-purple-600 dark:text-purple-400 mt-2 flex items-center gap-1">
+                <p className="text-xs text-purple-600 mt-2 flex items-center gap-1">
                   <span className="inline-block w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
                   Using configuration: <span className="font-semibold">{selectedConfig.name}</span>
                 </p>
