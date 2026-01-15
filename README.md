@@ -68,6 +68,13 @@ Create a `.env` file with the following content:
    # OpenAI API Key
    OPENAI_API_KEY=<your-api-key>
 
+   # Azure OpenAI Configuration
+   AZURE_DEPLOYMENT=your-deployment-name
+   AZURE_API_VERSION=api-version
+   AZURE_OPENAI_API_KEY=your-azure-openai-api-key
+   AZURE_OPENAI_ENDPOINT=https://your-azure-openai-endpoint/
+
+
    # Configuration
    DELETE_BATCH_SIZE = 1000
 

@@ -5,7 +5,7 @@ from langchain_core.tools import tool, StructuredTool, InjectedToolCallId
 from langgraph.graph import START, StateGraph
 from langgraph.graph.message import AnyMessage, add_messages
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
-from langchain_openai import ChatOpenAI
+from langchain_openai import ChatOpenAI, AzureChatOpenAI
 from langgraph.prebuilt import create_react_agent
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_neo4j import GraphCypherQAChain, Neo4jGraph
@@ -36,6 +36,9 @@ DB_PASSWORD = os.getenv("POSTGRES_PASSWORD")
 
 
 API_URL = os.getenv("API_URL")
+ENVIRONMENT = os.getenv("ENVIRONMENT")
+AZURE_DEPLOYMENT = os.getenv("AZURE_DEPLOYMENT")
+AZURE_API_VERSION = os.getenv("AZURE_API_VERSION")
 
 class UIGraph(BaseLangGraph):
 
@@ -248,7 +251,13 @@ class UIGraph(BaseLangGraph):
             [("system", prompt,),("placeholder", "{messages}"),]
         )
         try:
-            llm = ChatOpenAI(model="o3-mini-2025-01-31")
+            if ENVIRONMENT == "dev":
+                llm = AzureChatOpenAI(
+                    azure_deployment=AZURE_DEPLOYMENT,
+                    api_version=AZURE_API_VERSION,
+                )
+            else:
+                llm = ChatOpenAI(model="o3-mini-2025-01-31")
             agent=llmprompt|llm.bind_tools(UIGraph.get_tools())
             response = agent.invoke({"messages":messages})
             return {"messages": [response]}  # add the response to the messages using LangGraph reducer paradigm
