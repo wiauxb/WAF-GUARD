@@ -1,0 +1,6 @@
+services:
+  modsecurity-waf:
+    build: ./container
+    ports:
+      - "8086:8080"  # Apache/WAF
+      - "9000:9000"  # Management API

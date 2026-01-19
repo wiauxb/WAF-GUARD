@@ -1,0 +1,25 @@
+# OWASP ModSecurity Core Rule Set Configuration
+# Only include this if you're using CRS
+
+# Anomaly Scoring
+SecAction \
+    "id:900000,\
+    phase:1,\
+    nolog,\
+    pass,\
+    t:none,\
+    setvar:tx.inbound_anomaly_score_threshold=${ANOMALY_INBOUND},\
+    setvar:tx.outbound_anomaly_score_threshold=${ANOMALY_OUTBOUND}"
+
+# Paranoia Level
+SecAction \
+    "id:900001,\
+    phase:1,\
+    nolog,\
+    pass,\
+    t:none,\
+    setvar:tx.blocking_paranoia_level=${BLOCKING_PARANOIA}"
+
+# Default actions with tag
+SecDefaultAction "${MODSEC_DEFAULT_PHASE1_ACTION}"
+SecDefaultAction "${MODSEC_DEFAULT_PHASE2_ACTION}"
