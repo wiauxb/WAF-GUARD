@@ -1,0 +1,213 @@
+services:
+
+  neo4j:
+    container_name: neo4j
+    image: neo4j:latest
+    volumes:
+      - ${DOCKER_DATA_PATH}/neo4j/logs:/logs
+      - ${DOCKER_DATA_PATH}/neo4j/config:/config
+      - ${DOCKER_DATA_PATH}/neo4j/data:/data
+      - ${DOCKER_DATA_PATH}/neo4j/import:/import
+      - ${EXPORT_DIR}:/import/exports
+    environment:
+      - NEO4J_AUTH=${NEO4J_USER}/${NEO4J_PASSWORD}
+      - NEO4J_PLUGINS=["apoc"]
+      - NEO4J_dbms_security_procedures_unrestricted=apoc.*
+      - NEO4J_apoc_export_file_enabled=true
+      - NEO4J_apoc_import_file_enabled=true
+      - NEO4J_apoc_import_file_use__neo4j__config=true
+
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    healthcheck:
+      test: wget -O /dev/null "http://localhost:7474/" || exit 1
+      interval: 5s
+      timeout: 2s
+      retries: 10
+      start_period: 30s
+
+  postgres:
+    container_name: postgres
+    image: postgres:latest
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - ${DOCKER_DATA_PATH}/postgres:/var/lib/postgresql
+      - ${EXPORT_DIR}:/exports
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}"]
+      interval: 1s
+      timeout: 5s
+      retries: 10
+    
+  adminer:
+    container_name: adminer
+    image: adminer
+    ports:
+      - 8080:8080
+    depends_on:
+      postgres:
+        condition: service_healthy
+        restart: true
+
+
+  backend:
+    container_name: backend
+    build: ./backend
+    volumes:
+      - ${BACKEND_PATH}:/app
+      - ${DOCKER_DATA_PATH}/shared:/shared
+      - ${EXPORT_DIR}:/exports
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT}
+      - NEO4J_URL=${NEO4J_URL}
+      - NEO4J_URL_PROD=${NEO4J_URL_PROD}
+      - NEO4J_USER=${NEO4J_USER}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD}
+      - POSTGRES_HOST=${POSTGRES_HOST}
+      - POSTGRES_PORT=${POSTGRES_PORT}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - WAF_URL=${WAF_URL}
+      - DELETE_BATCH_SIZE=${DELETE_BATCH_SIZE}
+      - EXPORT_DIR=${EXPORT_DIR}
+      - POSTGRES_DB_CWAF=${POSTGRES_DB}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    working_dir: /app
+    ports:
+      - "8000:8000"
+    command: "fastapi dev main.py --host 0.0.0.0 --port 8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+        restart: true
+      neo4j:
+        condition: service_healthy
+        restart: true
+      waf:
+        condition: service_started
+        restart: true
+    
+  react:
+    container_name: react
+    build: ./frontend
+    volumes:
+      - ${PWD}/frontend/waf-react:/app/waf-react
+      - /app/waf-react/node_modules
+    ports:
+      - "8002:8002"
+    working_dir: /app/waf-react
+    command: "npm run dev"
+    depends_on:
+      backend:
+        condition: service_started
+        restart: true
+
+
+  # streamlit:
+  #   container_name: streamlit
+  #   build: ./streamlit
+  #   volumes:
+  #     - ${WEB_APP_PATH}:/app
+  #     - ${DOCKER_DATA_PATH}/shared:/shared
+  #   environment:
+  #     - API_URL=${API_URL}
+  #     - CHAT_URL=${CHAT_URL}
+  #   working_dir: /app
+  #   ports:
+  #     - "8501:8501"
+  #   entrypoint: "streamlit run Interactions.py --server.port=8501 --server.address=0.0.0.0"
+  #   depends_on:
+  #     fastapi:
+  #       condition: service_started
+  #       restart: true
+
+  waf:
+    container_name: waf
+    build: ./waf
+    privileged: true
+    volumes:
+      - ${PWD}/waf/src:/opt/api
+    ports:
+      - "9090:8000"
+    working_dir: /opt/api
+    command: "fastapi dev main.py --host 0.0.0.0 --port 8000"
+
+  model:
+    image: nelver28/modernbert:latest
+    container_name: modernbert
+    ports:
+      - "8102:8102"
+    restart: always
+
+
+  modsec2-apache:
+    container_name: modsec2-apache
+    image: owasp/modsecurity-crs:apache
+    # user: root  # Uncomment on Linux if needed
+    environment:
+      SERVERNAME: modsec2-apache
+      BACKEND: http://dvwa:80    # Points to DVWA container
+      PORT: "80"
+      MODSEC_RULE_ENGINE: DetectionOnly
+      BLOCKING_PARANOIA: 2
+      TZ: "${TZ}"
+      ERRORLOG: "/var/log/error.log"
+      ACCESSLOG: "/var/log/access.log"
+      MODSEC_AUDIT_LOG_FORMAT: Native
+      MODSEC_AUDIT_LOG_TYPE: Serial
+      MODSEC_AUDIT_LOG: "/var/log/modsec_audit.log"
+      MODSEC_TMP_DIR: "/tmp"
+      MODSEC_RESP_BODY_ACCESS: "On"
+      MODSEC_RESP_BODY_MIMETYPE: "text/plain text/html text/xml application/json"
+      COMBINED_FILE_SIZES: "65535"
+    volumes:
+      - ./logs:/var/log    # Optional: persist logs for analysis
+    ports:
+      - "80:80"
+    depends_on:
+      - dvwa
+    networks:
+      - dvwa-net
+
+  # DVWA Backend (no external port exposure)
+  dvwa:
+    container_name: dvwa-backend
+    image: ghcr.io/digininja/dvwa:latest
+    environment:
+      - DB_SERVER=db
+      - DB_DATABASE=dvwa
+      - DB_USER=dvwa
+      - DB_PASSWORD=p@ssw0rd
+    depends_on:
+      - db
+    networks:
+      - dvwa-net
+    # No ports exposed - only accessible via modsec2-apache
+
+  # Database
+  db:
+    container_name: dvwa-db
+    image: mariadb:10
+    environment:
+      - MYSQL_ROOT_PASSWORD=dvwa
+      - MYSQL_DATABASE=dvwa
+      - MYSQL_USER=dvwa
+      - MYSQL_PASSWORD=p@ssw0rd
+    volumes:
+      - dvwa-db:/var/lib/mysql
+    networks:
+      - dvwa-net
+
+networks:
+  dvwa-net:
+    driver: bridge
+
+volumes:
+  dvwa-db:
