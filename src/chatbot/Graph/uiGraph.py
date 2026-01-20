@@ -251,7 +251,7 @@ class UIGraph(BaseLangGraph):
             [("system", prompt,),("placeholder", "{messages}"),]
         )
         try:
-            if ENVIRONMENT == "dev":
+            if ENVIRONMENT == "prod":
                 llm = AzureChatOpenAI(
                     azure_deployment=AZURE_DEPLOYMENT,
                     api_version=AZURE_API_VERSION,
