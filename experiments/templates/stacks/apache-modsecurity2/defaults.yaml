@@ -100,12 +100,12 @@ MODSEC_UPLOAD_KEEP_FILES: RelevantOnly
 
 # ModSecurity Audit
 MODSEC_AUDIT_ENGINE: RelevantOnly
-MODSEC_AUDIT_LOG: /var/log/modsec_audit.log
+MODSEC_AUDIT_LOG: /var/log/apache2/modsec_audit.log
 MODSEC_AUDIT_LOG_FORMAT: JSON
-MODSEC_AUDIT_LOG_PARTS: ABIJDEFHZ
+MODSEC_AUDIT_LOG_PARTS: ABIJDEFHKZ
 MODSEC_AUDIT_LOG_RELEVANT_STATUS: "^(?:5|4(?!04))"
 MODSEC_AUDIT_LOG_TYPE: Serial
-MODSEC_AUDIT_STORAGE_DIR: /var/log/modsecurity/audit/
+MODSEC_AUDIT_STORAGE_DIR: /var/log/apache2/audit/
 
 # ModSecurity Debug
 MODSEC_DEBUG_LOG: /dev/null
