@@ -2,6 +2,7 @@ import json
 import io
 import os
 import asyncio
+import gzip
 from pathlib import Path
 import traceback
 from typing import List
@@ -31,7 +32,7 @@ async def store_config(file: UploadFile = File(...), config_nickname: str = Form
         """, (config_nickname, ))
         response = cursor.fetchone()
         if response is None:
-            return {"error": "Failed to store config"}
+            return {"error": "Failed to config entry in db"}
         config_id = response[0]
         files_conn.commit()
 
@@ -68,21 +69,23 @@ async def store_config(file: UploadFile = File(...), config_nickname: str = Form
 
 async def get_dump_function(file: UploadFile = File(...)):
     try:
-        
         await file.seek(0)
-        
+
         response = await asyncio.to_thread(
             requests.post,
-            f"{WAF_URL}/get_dump", 
+            f"{WAF_URL}/get_dump",
             files={"file": (file.filename, file.file, file.content_type)},
             timeout=60
         )
         if response.status_code != 200:
-            raise ValueError("Failed to get config dump" + response.text)
-        
-        result = await asyncio.to_thread(response.json)
+            raise ValueError("Failed to get config dump: " + response.text)
+
+        # Decompress the gzip response and decode to string
+        decompressed_data = gzip.decompress(response.content)
+        dump = decompressed_data.decode('utf-8')
+
         print(f"Successfully got dump result")
-        return result
+        return {"dump": dump}
     except Exception as e:
         traceback.print_exc()
         raise ValueError(f"Failed to get config dump: {str(e)}")
@@ -170,9 +173,12 @@ async def update_config(config_id: int, fileContent: FileContent):
 async def get_dump(file: UploadFile = File(...)):
     response = requests.post(f"{WAF_URL}/get_dump", files={"file": (file.filename, file.file, file.content_type)})
     if response.status_code != 200:
-        raise HTTPException(status_code=500, detail="Failed to get config dump" + response.text)
-    else:
-        return response.json()
+        raise HTTPException(status_code=500, detail="Failed to get config dump: " + response.text)
+
+    # Decompress the gzip response and decode to string
+    decompressed_data = gzip.decompress(response.content)
+    dump = decompressed_data.decode('utf-8')
+    return {"dump": dump}
 
 
 @router.post("/store_dump")

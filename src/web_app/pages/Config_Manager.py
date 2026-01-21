@@ -23,8 +23,8 @@ def process_config_archive(uploaded_file, nickname=None):
         return False
     new_config_id = response.json()["config_id"]
 
-    if not dump_config(new_config_id, uploaded_file):
-        return False
+    # if not dump_config(new_config_id, uploaded_file):
+    #     return False
 
     return True
 

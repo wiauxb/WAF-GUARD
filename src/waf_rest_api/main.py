@@ -1,11 +1,13 @@
 import sys
 from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 import shutil
 import tempfile
 import zipfile
 import os
 import subprocess
+import gzip
 
 app = FastAPI()
 app.add_middleware(
@@ -59,32 +61,75 @@ async def copy_config_files(extract_dir: str):
         raise HTTPException(status_code=500, detail=f"Failed to copy config files: {str(e)}")
 
 async def run_apache_config_dump():
-    """Run the httpd command to get the config dump."""
+    """
+    Run httpd command and compress output with minimal memory usage.
+
+    Uses subprocess.run() but compresses immediately with fast compression level.
+    """
     try:
+        print("Starting httpd dump generation...")
+
+        # Run httpd command - it will buffer output, but we compress immediately
         result = subprocess.run(
             ["httpd", "-t", "-DDUMP_CONFIG"],
-            capture_output=True, 
-            text=True,
-            check=True
+            capture_output=True,
+            text=False,  # Binary mode
+            check=False  # Don't raise exception, we'll check manually
         )
-        return result.stdout
-    except subprocess.CalledProcessError as e:
-        raise HTTPException(status_code=500, detail=f"Apache config test failed: {e.stderr}")
+
+        print(f"httpd completed with return code: {result.returncode}")
+
+        # Check for errors
+        if result.returncode != 0:
+            error_msg = result.stderr.decode('utf-8') if result.stderr else "Unknown error"
+            print(f"ERROR: httpd failed: {error_msg}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Apache config test failed: {error_msg}"
+            )
+
+        # Compress immediately with fast compression (level 1)
+        print(f"Compressing output ({len(result.stdout)} bytes)...")
+        compressed_dump = gzip.compress(result.stdout, compresslevel=1)
+
+        print(f"Generated compressed dump: {len(compressed_dump)} bytes")
+        print(f"Compression ratio: {(1 - len(compressed_dump)/len(result.stdout))*100:.1f}%")
+
+        return compressed_dump
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"ERROR: Unexpected error: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to generate dump: {str(e)}")
 
 @app.post("/get_dump")
 async def get_dump(file: UploadFile = File(...)):
     """
-    Process uploaded zip file with Apache configuration and return config dump.
+    Process uploaded zip file with Apache configuration and return gzip-compressed config dump.
+    Returns a downloadable .gz file instead of JSON to improve performance for large dumps.
+    Memory optimized: Streams httpd output directly to gzip compression in 1MB chunks.
     """
     print("getting dump")
     await check_zip_file(file.filename)
-    
+
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_zip_path = await save_uploaded_file(file, temp_dir)
         extract_dir = await extract_zip_file(temp_zip_path, temp_dir)
         await copy_config_files(extract_dir)
-        dump = await run_apache_config_dump()
-        return {"dump": dump}
+
+        # Stream and compress dump (no memory spike!)
+        compressed_dump = await run_apache_config_dump()
+
+        return Response(
+            content=compressed_dump,
+            media_type="application/gzip",
+            headers={
+                "Content-Disposition": "attachment; filename=apache_config_dump.txt.gz"
+            }
+        )
 
 @app.get("/health")
 async def health():

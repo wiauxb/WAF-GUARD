@@ -69,8 +69,16 @@ def get_thread_messages(thread_id):
         # st.error(f"Error fetching thread messages: {e}")
         return []
 
-def create_new_thread():
-    """Create a new thread and update session state."""
+def create_new_thread(rerun=True):
+    """Create a new thread and update session state.
+
+    Args:
+        rerun: If True, triggers st.rerun() after creation. Set to False when
+               auto-creating a thread before sending a message.
+
+    Returns:
+        The thread_id if successful, None otherwise.
+    """
     try:
         token = st.session_state.get("token")
         headers = {"Authorization": f"Bearer {token}"}
@@ -80,12 +88,16 @@ def create_new_thread():
             st.session_state["selected_thread"] = thread_id
             st.session_state["messages"] = []
             st.toast("New thread created", icon="🆕")
-            st.rerun()
+            if rerun:
+                st.rerun()
+            return thread_id
         else:
             st.error("Error creating thread.")
+            return None
     except Exception as e:
         st.error(f"Error creating thread: {e}")
         print(f"Error creating thread: {e}", flush=True)
+        return None
 
 def delete_thread(thread_id):
     """Delete a thread by its ID and update session state accordingly."""
@@ -286,8 +298,17 @@ for msg in st.session_state.get("messages", []):
 
 # Handle new user input
 if prompt := st.chat_input("Ask your question here..."):
+    # Auto-create a thread if none exists
+    if "selected_thread" not in st.session_state or st.session_state.selected_thread is None:
+        thread_id = create_new_thread(rerun=False)
+        if thread_id is None:
+            st.error("Failed to create a thread. Please try again.")
+            st.stop()
+
     st.chat_message("user").markdown(prompt)
     msg = HumanMessage(content=prompt)
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
     st.session_state.messages.append(msg)
     payload = {"messages": [message_to_dict(msg)], "config": {"thread_id": st.session_state.selected_thread}}
     with st.spinner("Analyzing..."):
