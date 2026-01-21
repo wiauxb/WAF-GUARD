@@ -38,13 +38,14 @@ def zip_config(config_dir: str = "config") -> bytes:
     return buffer.getvalue()
 
 
-def send_config(api_url: str = "http://localhost:9000", config_dir: str = "config") -> dict:
+def send_config(api_url: str = "http://localhost:9000", config_dir: str = "config", config_id: str | None = None) -> dict:
     """
     Zip and send configuration to the WAF container API.
 
     Args:
         api_url: Base URL of the WAF API
         config_dir: Path to the config directory
+        config_id: Optional configuration identifier
 
     Returns:
         dict: Response from the API
@@ -53,7 +54,8 @@ def send_config(api_url: str = "http://localhost:9000", config_dir: str = "confi
 
     try:
         files = {"file": ("config.zip", zip_content, "application/zip")}
-        response = requests.post(f"{api_url}/config", files=files, timeout=30)
+        params = {"config_id": config_id} if config_id else None
+        response = requests.post(f"{api_url}/config", files=files, params=params, timeout=30)
     except requests.exceptions.ConnectionError:
         raise Exception(f"Connection failed: Is the API running at {api_url}?")
     except requests.exceptions.Timeout:
@@ -83,6 +85,11 @@ if __name__ == "__main__":
         default="config",
         help="Config directory path (default: config)"
     )
+    parser.add_argument(
+        "--config-id",
+        default=None,
+        help="Optional configuration identifier"
+    )
 
     args = parser.parse_args()
     result = generate_config(
@@ -95,7 +102,7 @@ if __name__ == "__main__":
     print(f"Sending config from '{args.config}' to {args.url}...")
 
     try:
-        result = send_config(api_url=args.url, config_dir=args.config)
+        result = send_config(api_url=args.url, config_dir=args.config, config_id=args.config_id)
         print(f"Result: {result['status']}")
     except Exception as e:
         print(f"Error: {e}")
