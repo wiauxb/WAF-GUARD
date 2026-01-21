@@ -22,7 +22,6 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     LOG_LEVEL: str = "INFO"
 
-    EXPORT_DIR: str
     WAF_URL: str
 
     

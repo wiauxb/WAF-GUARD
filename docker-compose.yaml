@@ -4,11 +4,7 @@ services:
     container_name: neo4j
     image: neo4j:latest
     volumes:
-      - ${DOCKER_DATA_PATH}/neo4j/logs:/logs
-      - ${DOCKER_DATA_PATH}/neo4j/config:/config
-      - ${DOCKER_DATA_PATH}/neo4j/data:/data
-      - ${DOCKER_DATA_PATH}/neo4j/import:/import
-      - ${EXPORT_DIR}:/import/exports
+      - neo4j-data:/data
     environment:
       - NEO4J_AUTH=${NEO4J_USER}/${NEO4J_PASSWORD}
       - NEO4J_PLUGINS=["apoc"]
@@ -37,8 +33,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - ${DOCKER_DATA_PATH}/postgres:/var/lib/postgresql
-      - ${EXPORT_DIR}:/exports
+      - postgres-data:/var/lib/postgresql
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}"]
       interval: 1s
@@ -61,8 +56,6 @@ services:
     build: ./backend
     volumes:
       - ${BACKEND_PATH}:/app
-      - ${DOCKER_DATA_PATH}/shared:/shared
-      - ${EXPORT_DIR}:/exports
     environment:
       - ENVIRONMENT=${ENVIRONMENT}
       - NEO4J_URL=${NEO4J_URL}
@@ -73,9 +66,9 @@ services:
       - POSTGRES_PORT=${POSTGRES_PORT}
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - WAF_URL=${WAF_URL}
+      - WAF_URL=${WAF_URL}  ######## to remove
       - DELETE_BATCH_SIZE=${DELETE_BATCH_SIZE}
-      - EXPORT_DIR=${EXPORT_DIR}
+      # - EXPORT_DIR=${EXPORT_DIR}
       - POSTGRES_DB_CWAF=${POSTGRES_DB}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
@@ -89,9 +82,6 @@ services:
         restart: true
       neo4j:
         condition: service_healthy
-        restart: true
-      waf:
-        condition: service_started
         restart: true
     
   react:
@@ -128,16 +118,17 @@ services:
   #       condition: service_started
   #       restart: true
 
-  waf:
-    container_name: waf
-    build: ./waf
-    privileged: true
-    volumes:
-      - ${PWD}/waf/src:/opt/api
-    ports:
-      - "9090:8000"
-    working_dir: /opt/api
-    command: "fastapi dev main.py --host 0.0.0.0 --port 8000"
+
+  # waf:
+  #   container_name: waf
+  #   build: ./waf
+  #   privileged: true
+  #   volumes:
+  #     - ${PWD}/waf/src:/opt/api
+  #   ports:
+  #     - "9090:8000"
+  #   working_dir: /opt/api
+  #   command: "fastapi dev main.py --host 0.0.0.0 --port 8000"
 
   model:
     image: nelver28/modernbert:latest
@@ -148,13 +139,15 @@ services:
 
 
 
-  modsecurity-waf:
-    image: lwilliot/apache-modsecurity2:latest
+
+  apache-modsecurity2:
+    container_name: modsec2-apache
+    build: ./apache-modsecurity2
     ports:
       - "8080:8080"  # Apache/WAF
       - "9000:9000"  # Management API
     networks:
-      - dvwa-net
+      - testing-net
 
 
   # DVWA Backend (no external port exposure)
@@ -169,7 +162,7 @@ services:
     depends_on:
       - db
     networks:
-      - dvwa-net
+      - testing-net
     # No ports exposed - only accessible via modsec2-apache
 
   # Database
@@ -184,11 +177,13 @@ services:
     volumes:
       - dvwa-db:/var/lib/mysql
     networks:
-      - dvwa-net
+      - testing-net
 
 networks:
-  dvwa-net:
+  testing-net:
     driver: bridge
 
 volumes:
   dvwa-db:
+  neo4j-data:
+  postgres-data:
