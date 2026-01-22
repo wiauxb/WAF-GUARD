@@ -12,3 +12,4 @@ src/web_app/lib
 tmp.html
 dump.txt
 backend/src/storage/*
+frontend/waf-react/package-lock.json
