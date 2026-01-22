@@ -26,8 +26,10 @@ import {
   Plus,
   ChevronRight,
   ChevronLeft,
-  Code,
-  Settings
+  ChevronDown,
+  Settings,
+  RotateCcw,
+  Sliders
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Config, ConfigContent, ConfigTreeResponse, ConfigTreeNode } from '@/types'
@@ -67,7 +69,6 @@ export default function ConfigsPage() {
       cpanel: false,
       xenforo: false,
     },
-    customRules: '',
   })
 
   // Mock data - will be fetched from backend
@@ -95,6 +96,206 @@ export default function ConfigsPage() {
     { key: 'cpanel', label: 'cPanel', description: 'Web hosting control panel exclusion rules' },
     { key: 'xenforo', label: 'XenForo', description: 'Forum software exclusion rules' },
   ] as const
+
+  // Types for stack configuration variables
+  type ConfigVariable = {
+    key: string
+    value: string
+    description?: string
+    isMain: boolean
+  }
+
+  type ConfigCategory = {
+    name: string
+    variables: ConfigVariable[]
+  }
+
+  type StackDefaults = {
+    apache: ConfigCategory[]
+    modsecurity: ConfigCategory[]
+    crs: ConfigCategory[]
+  }
+
+  // Mock data for Apache + ModSecurity stack defaults (will be fetched from backend)
+  const APACHE_MODSECURITY_DEFAULTS: StackDefaults = {
+    apache: [
+      {
+        name: "Server",
+        variables: [
+          { key: "PORT", value: "8080", description: "HTTP port", isMain: true },
+          { key: "TIMEOUT", value: "60", description: "Request timeout in seconds", isMain: true },
+          { key: "SERVER_NAME", value: "localhost", description: "Server hostname", isMain: true },
+          { key: "LOGLEVEL", value: "warn", description: "Apache log level", isMain: true },
+          { key: "WORKER_CONNECTIONS", value: "400", description: "Max worker connections", isMain: false },
+          { key: "SERVER_ADMIN", value: "root@localhost", description: "Admin email", isMain: false },
+          { key: "SERVER_SIGNATURE", value: "Off", description: "Server signature in responses", isMain: false },
+          { key: "SERVER_TOKENS", value: "Full", description: "Server tokens detail level", isMain: false },
+        ]
+      },
+      {
+        name: "Backend/Proxy",
+        variables: [
+          { key: "BACKEND", value: "http://localhost:80", description: "Backend server URL", isMain: true },
+          { key: "PROXY_TIMEOUT", value: "60", description: "Proxy timeout in seconds", isMain: false },
+          { key: "PROXY_PRESERVE_HOST", value: "on", description: "Preserve original host header", isMain: false },
+          { key: "PROXY_ERROR_OVERRIDE", value: "on", description: "Override backend error pages", isMain: false },
+        ]
+      },
+      {
+        name: "SSL/TLS",
+        variables: [
+          { key: "SSL_ENGINE", value: "on", description: "Enable SSL", isMain: true },
+          { key: "SSL_PORT", value: "8443", description: "HTTPS port", isMain: true },
+          { key: "SSL_PROTOCOLS", value: "all -SSLv3 -TLSv1 -TLSv1.1", description: "Allowed SSL protocols", isMain: false },
+          { key: "SSL_CIPHERS", value: "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256", description: "SSL cipher suites", isMain: false },
+          { key: "SSL_HONOR_CIPHER_ORDER", value: "off", description: "Server cipher preference", isMain: false },
+        ]
+      },
+      {
+        name: "Logging",
+        variables: [
+          { key: "ACCESSLOG", value: "/var/log/apache2/access.log", description: "Access log path", isMain: false },
+          { key: "ERRORLOG", value: "/var/log/apache2/error.log", description: "Error log path", isMain: false },
+        ]
+      }
+    ],
+    modsecurity: [
+      {
+        name: "General",
+        variables: [
+          { key: "MODSEC_RULE_ENGINE", value: "DetectionOnly", description: "Rule engine mode (On/Off/DetectionOnly)", isMain: true },
+          { key: "MODSEC_REQ_BODY_ACCESS", value: "on", description: "Inspect request bodies", isMain: true },
+          { key: "MODSEC_RESP_BODY_ACCESS", value: "on", description: "Inspect response bodies", isMain: true },
+          { key: "MODSEC_TAG", value: "modsecurity", description: "Default tag for rules", isMain: false },
+          { key: "MODSEC_STATUS_ENGINE", value: "Off", description: "Status engine", isMain: false },
+        ]
+      },
+      {
+        name: "Request Body",
+        variables: [
+          { key: "MODSEC_REQ_BODY_LIMIT", value: "13107200", description: "Max request body size (bytes)", isMain: false },
+          { key: "MODSEC_REQ_BODY_NOFILES_LIMIT", value: "131072", description: "Max body size without files", isMain: false },
+          { key: "MODSEC_REQ_BODY_LIMIT_ACTION", value: "Reject", description: "Action when limit exceeded", isMain: false },
+        ]
+      },
+      {
+        name: "Response Body",
+        variables: [
+          { key: "MODSEC_RESP_BODY_LIMIT", value: "1048576", description: "Max response body size", isMain: false },
+          { key: "MODSEC_RESP_BODY_MIMETYPE", value: "text/plain text/html text/xml", description: "MIME types to inspect", isMain: false },
+        ]
+      },
+      {
+        name: "Audit Logging",
+        variables: [
+          { key: "MODSEC_AUDIT_ENGINE", value: "RelevantOnly", description: "Audit logging mode", isMain: true },
+          { key: "MODSEC_AUDIT_LOG_FORMAT", value: "JSON", description: "Audit log format", isMain: true },
+          { key: "MODSEC_AUDIT_LOG", value: "/var/log/apache2/modsec_audit.log", description: "Audit log path", isMain: false },
+          { key: "MODSEC_AUDIT_LOG_PARTS", value: "ABIJDEFHKZ", description: "Log parts to include", isMain: false },
+          { key: "MODSEC_AUDIT_LOG_TYPE", value: "Serial", description: "Log type (Serial/Concurrent)", isMain: false },
+        ]
+      },
+      {
+        name: "Directories",
+        variables: [
+          { key: "MODSEC_DATA_DIR", value: "/tmp/modsecurity/data", description: "Data directory", isMain: false },
+          { key: "MODSEC_TMP_DIR", value: "/tmp/modsecurity/tmp", description: "Temp directory", isMain: false },
+          { key: "MODSEC_UPLOAD_DIR", value: "/tmp/modsecurity/upload", description: "Upload directory", isMain: false },
+        ]
+      }
+    ],
+    crs: [
+      {
+        name: "Core Rule Set",
+        variables: [
+          { key: "ANOMALY_INBOUND", value: "5", description: "Inbound anomaly score threshold", isMain: true },
+          { key: "ANOMALY_OUTBOUND", value: "4", description: "Outbound anomaly score threshold", isMain: true },
+          { key: "BLOCKING_PARANOIA", value: "2", description: "Paranoia level (1-4)", isMain: true },
+          { key: "COMBINED_FILE_SIZES", value: "65535", description: "Max combined file sizes", isMain: false },
+        ]
+      }
+    ]
+  }
+
+  // State for advanced settings visibility per tab
+  const [showAdvanced, setShowAdvanced] = useState<Record<string, boolean>>({
+    apache: false,
+    modsecurity: false,
+    crs: false,
+  })
+
+  // State for current config variables (all values, modified or not)
+  const [configVariables, setConfigVariables] = useState<Record<string, string>>({})
+
+  // Reference to original defaults for comparison
+  const [originalDefaults, setOriginalDefaults] = useState<Record<string, string>>({})
+
+  // Get stack defaults based on selected stack
+  const getStackDefaults = (stack: string): StackDefaults | null => {
+    // For now, only apache-modsecurity has mock data
+    if (stack === 'apache-modsecurity') {
+      return APACHE_MODSECURITY_DEFAULTS
+    }
+    return null
+  }
+
+  // Initialize config variables from stack defaults
+  const initializeConfigVariables = (stack: string) => {
+    const defaults = getStackDefaults(stack)
+    if (!defaults) return
+
+    const variables: Record<string, string> = {}
+
+    // Flatten all variables from all categories
+    const allCategories = [...defaults.apache, ...defaults.modsecurity, ...defaults.crs]
+    allCategories.forEach(category => {
+      category.variables.forEach(variable => {
+        variables[variable.key] = variable.value
+      })
+    })
+
+    setConfigVariables(variables)
+    setOriginalDefaults(variables)
+  }
+
+  // Get modified variables (only those different from defaults)
+  const getModifiedVariables = (): Record<string, string> => {
+    const modified: Record<string, string> = {}
+    Object.entries(configVariables).forEach(([key, value]) => {
+      if (originalDefaults[key] !== value) {
+        modified[key] = value
+      }
+    })
+    return modified
+  }
+
+  // Count of modified variables
+  const getModifiedCount = (): number => {
+    return Object.keys(getModifiedVariables()).length
+  }
+
+  // Handle variable change
+  const handleVariableChange = (key: string, value: string) => {
+    setConfigVariables(prev => ({
+      ...prev,
+      [key]: value
+    }))
+  }
+
+  // Reset variable to default
+  const handleResetVariable = (key: string) => {
+    if (originalDefaults[key] !== undefined) {
+      setConfigVariables(prev => ({
+        ...prev,
+        [key]: originalDefaults[key]
+      }))
+    }
+  }
+
+  // Check if a variable is modified
+  const isVariableModified = (key: string): boolean => {
+    return configVariables[key] !== originalDefaults[key]
+  }
 
   // Fetch configs
   const { data: configsData, isLoading } = useQuery({
@@ -241,7 +442,7 @@ export default function ConfigsPage() {
         stack: createFormData.stack,
         crs_version: createFormData.crsVersion,
         apps: createFormData.apps,
-        custom_rules: createFormData.customRules,
+        config_overrides: getModifiedVariables(), // Only send modified values
       })
       return response.data
     },
@@ -271,8 +472,11 @@ export default function ConfigsPage() {
         cpanel: false,
         xenforo: false,
       },
-      customRules: '',
     })
+    // Reset config variables state
+    setConfigVariables({})
+    setOriginalDefaults({})
+    setShowAdvanced({ apache: false, modsecurity: false, crs: false })
   }
 
   const handleAppToggle = (appKey: string) => {
@@ -297,6 +501,10 @@ export default function ConfigsPage() {
     if (createStep === 2 && (!createFormData.stack || !createFormData.crsVersion)) {
       toast.error('Please select a stack and CRS version')
       return
+    }
+    // Initialize config variables when entering step 3
+    if (createStep === 2) {
+      initializeConfigVariables(createFormData.stack)
     }
     if (createStep < 4) {
       setCreateStep(prev => prev + 1)
@@ -741,25 +949,299 @@ export default function ConfigsPage() {
             </div>
           )}
 
-          {/* Step 3: Custom Rules */}
+          {/* Step 3: Configuration Variables */}
           {createStep === 3 && (
             <div className="space-y-4">
-              <div className="flex items-center gap-2 mb-4">
-                <Code className="h-5 w-5 text-primary" />
-                <h3 className="text-lg font-semibold">Custom Rules (Optional)</h3>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Sliders className="h-5 w-5 text-primary" />
+                  <h3 className="text-lg font-semibold">Configuration Variables</h3>
+                </div>
+                {getModifiedCount() > 0 && (
+                  <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded-full">
+                    {getModifiedCount()} modified
+                  </span>
+                )}
               </div>
               <p className="text-sm text-muted-foreground">
-                Add custom ModSecurity rules below. Leave empty to use only the standard rules selected in the previous step.
+                Customize configuration variables. Only modified values will be applied.
               </p>
-              <textarea
-                className="w-full min-h-[250px] px-3 py-2 border border-input rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring"
-                placeholder={`# Example custom rule:
-SecRule REQUEST_URI "@contains /admin" "id:100001,phase:1,deny,status:403,msg:'Admin access blocked'"
 
-# Add your custom ModSecurity rules here...`}
-                value={createFormData.customRules}
-                onChange={(e) => setCreateFormData(prev => ({ ...prev, customRules: e.target.value }))}
-              />
+              {getStackDefaults(createFormData.stack) ? (
+                <Tabs defaultValue="apache" className="w-full">
+                  <TabsList className="grid w-full grid-cols-3">
+                    <TabsTrigger value="apache">Apache</TabsTrigger>
+                    <TabsTrigger value="modsecurity">ModSecurity</TabsTrigger>
+                    <TabsTrigger value="crs">CRS</TabsTrigger>
+                  </TabsList>
+
+                  {/* Apache Tab */}
+                  <TabsContent value="apache" className="space-y-4 max-h-[350px] overflow-y-auto pr-2">
+                    {getStackDefaults(createFormData.stack)?.apache.map((category) => {
+                      const mainVars = category.variables.filter(v => v.isMain)
+                      const advancedVars = category.variables.filter(v => !v.isMain)
+
+                      // Skip empty categories when advanced mode is off
+                      if (mainVars.length === 0 && !showAdvanced.apache) {
+                        return null
+                      }
+
+                      return (
+                        <div key={category.name} className="space-y-3">
+                          <h4 className="text-sm font-semibold text-gray-700 border-b pb-1">{category.name}</h4>
+                          {/* Main variables - always visible */}
+                          {mainVars.map((variable) => (
+                            <div key={variable.key} className="flex items-center gap-2">
+                              <div className="flex-1">
+                                <label className="text-xs font-medium text-gray-600">{variable.key}</label>
+                                {variable.description && (
+                                  <p className="text-xs text-muted-foreground">{variable.description}</p>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Input
+                                  value={configVariables[variable.key] || ''}
+                                  onChange={(e) => handleVariableChange(variable.key, e.target.value)}
+                                  className={`w-48 h-8 text-sm ${isVariableModified(variable.key) ? 'border-orange-400 bg-orange-50' : ''}`}
+                                />
+                                {isVariableModified(variable.key) && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-8 w-8 p-0"
+                                    onClick={() => handleResetVariable(variable.key)}
+                                    title="Reset to default"
+                                  >
+                                    <RotateCcw className="h-3 w-3" />
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                          {/* Advanced variables - collapsible */}
+                          {advancedVars.length > 0 && (
+                            <>
+                              {showAdvanced.apache && advancedVars.map((variable) => (
+                                <div key={variable.key} className="flex items-center gap-2 pl-4 border-l-2 border-gray-200">
+                                  <div className="flex-1">
+                                    <label className="text-xs font-medium text-gray-500">{variable.key}</label>
+                                    {variable.description && (
+                                      <p className="text-xs text-muted-foreground">{variable.description}</p>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <Input
+                                      value={configVariables[variable.key] || ''}
+                                      onChange={(e) => handleVariableChange(variable.key, e.target.value)}
+                                      className={`w-48 h-8 text-sm ${isVariableModified(variable.key) ? 'border-orange-400 bg-orange-50' : ''}`}
+                                    />
+                                    {isVariableModified(variable.key) && (
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-8 w-8 p-0"
+                                        onClick={() => handleResetVariable(variable.key)}
+                                        title="Reset to default"
+                                      >
+                                        <RotateCcw className="h-3 w-3" />
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </>
+                          )}
+                        </div>
+                      )
+                    })}
+                    {/* Show Advanced toggle for Apache */}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full text-xs text-muted-foreground"
+                      onClick={() => setShowAdvanced(prev => ({ ...prev, apache: !prev.apache }))}
+                    >
+                      <ChevronDown className={`h-4 w-4 mr-1 transition-transform ${showAdvanced.apache ? 'rotate-180' : ''}`} />
+                      {showAdvanced.apache ? 'Hide Advanced Settings' : 'Show Advanced Settings'}
+                    </Button>
+                  </TabsContent>
+
+                  {/* ModSecurity Tab */}
+                  <TabsContent value="modsecurity" className="space-y-4 max-h-[350px] overflow-y-auto pr-2">
+                    {getStackDefaults(createFormData.stack)?.modsecurity.map((category) => {
+                      const mainVars = category.variables.filter(v => v.isMain)
+                      const advancedVars = category.variables.filter(v => !v.isMain)
+
+                                            // Skip empty categories when advanced mode is off
+                      if (mainVars.length === 0 && !showAdvanced.modsecurity) {
+                        return null
+                      }
+
+                      return (
+                        <div key={category.name} className="space-y-3">
+                          <h4 className="text-sm font-semibold text-gray-700 border-b pb-1">{category.name}</h4>
+                          {mainVars.map((variable) => (
+                            <div key={variable.key} className="flex items-center gap-2">
+                              <div className="flex-1">
+                                <label className="text-xs font-medium text-gray-600">{variable.key}</label>
+                                {variable.description && (
+                                  <p className="text-xs text-muted-foreground">{variable.description}</p>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Input
+                                  value={configVariables[variable.key] || ''}
+                                  onChange={(e) => handleVariableChange(variable.key, e.target.value)}
+                                  className={`w-48 h-8 text-sm ${isVariableModified(variable.key) ? 'border-orange-400 bg-orange-50' : ''}`}
+                                />
+                                {isVariableModified(variable.key) && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-8 w-8 p-0"
+                                    onClick={() => handleResetVariable(variable.key)}
+                                    title="Reset to default"
+                                  >
+                                    <RotateCcw className="h-3 w-3" />
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                          {advancedVars.length > 0 && showAdvanced.modsecurity && advancedVars.map((variable) => (
+                            <div key={variable.key} className="flex items-center gap-2 pl-4 border-l-2 border-gray-200">
+                              <div className="flex-1">
+                                <label className="text-xs font-medium text-gray-500">{variable.key}</label>
+                                {variable.description && (
+                                  <p className="text-xs text-muted-foreground">{variable.description}</p>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Input
+                                  value={configVariables[variable.key] || ''}
+                                  onChange={(e) => handleVariableChange(variable.key, e.target.value)}
+                                  className={`w-48 h-8 text-sm ${isVariableModified(variable.key) ? 'border-orange-400 bg-orange-50' : ''}`}
+                                />
+                                {isVariableModified(variable.key) && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-8 w-8 p-0"
+                                    onClick={() => handleResetVariable(variable.key)}
+                                    title="Reset to default"
+                                  >
+                                    <RotateCcw className="h-3 w-3" />
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )
+                    })}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full text-xs text-muted-foreground"
+                      onClick={() => setShowAdvanced(prev => ({ ...prev, modsecurity: !prev.modsecurity }))}
+                    >
+                      <ChevronDown className={`h-4 w-4 mr-1 transition-transform ${showAdvanced.modsecurity ? 'rotate-180' : ''}`} />
+                      {showAdvanced.modsecurity ? 'Hide Advanced Settings' : 'Show Advanced Settings'}
+                    </Button>
+                  </TabsContent>
+
+                  {/* CRS Tab */}
+                  <TabsContent value="crs" className="space-y-4 max-h-[350px] overflow-y-auto pr-2">
+                    {getStackDefaults(createFormData.stack)?.crs.map((category) => {
+                      const mainVars = category.variables.filter(v => v.isMain)
+                      const advancedVars = category.variables.filter(v => !v.isMain)
+
+                                            // Skip empty categories when advanced mode is off
+                      if (mainVars.length === 0 && !showAdvanced.crs) {
+                        return null
+                      }
+
+                      return (
+                        <div key={category.name} className="space-y-3">
+                          <h4 className="text-sm font-semibold text-gray-700 border-b pb-1">{category.name}</h4>
+                          {mainVars.map((variable) => (
+                            <div key={variable.key} className="flex items-center gap-2">
+                              <div className="flex-1">
+                                <label className="text-xs font-medium text-gray-600">{variable.key}</label>
+                                {variable.description && (
+                                  <p className="text-xs text-muted-foreground">{variable.description}</p>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Input
+                                  value={configVariables[variable.key] || ''}
+                                  onChange={(e) => handleVariableChange(variable.key, e.target.value)}
+                                  className={`w-48 h-8 text-sm ${isVariableModified(variable.key) ? 'border-orange-400 bg-orange-50' : ''}`}
+                                />
+                                {isVariableModified(variable.key) && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-8 w-8 p-0"
+                                    onClick={() => handleResetVariable(variable.key)}
+                                    title="Reset to default"
+                                  >
+                                    <RotateCcw className="h-3 w-3" />
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                          {advancedVars.length > 0 && showAdvanced.crs && advancedVars.map((variable) => (
+                            <div key={variable.key} className="flex items-center gap-2 pl-4 border-l-2 border-gray-200">
+                              <div className="flex-1">
+                                <label className="text-xs font-medium text-gray-500">{variable.key}</label>
+                                {variable.description && (
+                                  <p className="text-xs text-muted-foreground">{variable.description}</p>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Input
+                                  value={configVariables[variable.key] || ''}
+                                  onChange={(e) => handleVariableChange(variable.key, e.target.value)}
+                                  className={`w-48 h-8 text-sm ${isVariableModified(variable.key) ? 'border-orange-400 bg-orange-50' : ''}`}
+                                />
+                                {isVariableModified(variable.key) && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-8 w-8 p-0"
+                                    onClick={() => handleResetVariable(variable.key)}
+                                    title="Reset to default"
+                                  >
+                                    <RotateCcw className="h-3 w-3" />
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )
+                    })}
+                    {getStackDefaults(createFormData.stack)?.crs.some(c => c.variables.some(v => !v.isMain)) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-full text-xs text-muted-foreground"
+                        onClick={() => setShowAdvanced(prev => ({ ...prev, crs: !prev.crs }))}
+                      >
+                        <ChevronDown className={`h-4 w-4 mr-1 transition-transform ${showAdvanced.crs ? 'rotate-180' : ''}`} />
+                        {showAdvanced.crs ? 'Hide Advanced Settings' : 'Show Advanced Settings'}
+                      </Button>
+                    )}
+                  </TabsContent>
+                </Tabs>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <p>No configuration template available for this stack.</p>
+                  <p className="text-sm mt-2">Default values will be used.</p>
+                </div>
+              )}
             </div>
           )}
 
@@ -770,7 +1252,7 @@ SecRule REQUEST_URI "@contains /admin" "id:100001,phase:1,deny,status:403,msg:'A
                 <CheckCircle className="h-5 w-5 text-primary" />
                 <h3 className="text-lg font-semibold">Review Configuration</h3>
               </div>
-              <div className="space-y-4 bg-gray-50 p-4 rounded-lg">
+              <div className="space-y-4 bg-gray-50 p-4 rounded-lg max-h-[400px] overflow-y-auto">
                 <div>
                   <p className="text-xs text-muted-foreground uppercase tracking-wide">Name</p>
                   <p className="font-medium">{createFormData.name}</p>
@@ -802,12 +1284,25 @@ SecRule REQUEST_URI "@contains /admin" "id:100001,phase:1,deny,status:403,msg:'A
                     )}
                   </div>
                 </div>
-                {createFormData.customRules && (
-                  <div>
-                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Custom Rules</p>
-                    <p className="text-sm text-green-600">{createFormData.customRules.split('\n').filter(l => l.trim() && !l.trim().startsWith('#')).length} custom rule(s) defined</p>
-                  </div>
-                )}
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Configuration Overrides</p>
+                  {getModifiedCount() > 0 ? (
+                    <div className="space-y-2">
+                      <p className="text-sm text-orange-600 font-medium">{getModifiedCount()} variable(s) modified</p>
+                      <div className="space-y-1 text-xs">
+                        {Object.entries(getModifiedVariables()).map(([key, value]) => (
+                          <div key={key} className="flex items-center gap-2 bg-orange-50 px-2 py-1 rounded">
+                            <span className="font-mono font-medium">{key}</span>
+                            <span className="text-muted-foreground">→</span>
+                            <span className="font-mono text-orange-700 truncate max-w-[200px]">{value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Using all default values</span>
+                  )}
+                </div>
               </div>
             </div>
           )}
