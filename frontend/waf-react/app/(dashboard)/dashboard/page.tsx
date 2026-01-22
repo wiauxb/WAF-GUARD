@@ -4,19 +4,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { FileCode, MessageSquare, Database, Shield, Activity, TrendingUp } from 'lucide-react'
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
-import { webAppApi, chatbotApi } from '@/lib/api'
+import { api } from '@/lib/api'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { useConfigStore } from '@/stores/config'
-import { useEffect } from 'react'
-import { Config, ConfigArray } from '@/types'
-
-// Helper function to convert array to Config object
-const parseConfigArray = (arr: ConfigArray): Config => ({
-  id: arr[0],
-  nickname: arr[1],
-  parsed: arr[2],
-  created_at: arr[3],
-})
+import { ConfigurationResponse, ConversationResponse } from '@/types'
 
 export default function DashboardPage() {
   const { selectedConfigId, setConfigs, setSelectedConfig } = useConfigStore()
@@ -24,35 +15,25 @@ export default function DashboardPage() {
   const { data: configsData, isLoading: configsLoading } = useQuery({
     queryKey: ['configs'],
     queryFn: async () => {
-      const response = await webAppApi.get<{ configs: ConfigArray[] }>('/configs')
-      // Convert array format to object format
-      const parsedConfigs = response.data.configs.map(parseConfigArray)
-      setConfigs(parsedConfigs)
+      const response = await api.get<ConfigurationResponse[]>('/configurations')
+      setConfigs(response.data)
       
       // Restore selected config from localStorage
       if (selectedConfigId) {
-        const selected = parsedConfigs.find((c) => c.id === selectedConfigId)
+        const selected = response.data.find((c) => c.id === selectedConfigId)
         if (selected) {
           setSelectedConfig(selected)
         }
       }
       
-      return { configs: parsedConfigs }
+      return { configs: response.data }
     },
   })
 
-  const { data: selectedConfigData } = useQuery({
-    queryKey: ['selected-config'],
+  const { data: conversationsData } = useQuery({
+    queryKey: ['conversations'],
     queryFn: async () => {
-      const response = await webAppApi.get('/configs/selected')
-      return response.data
-    },
-  })
-
-  const { data: threadsData } = useQuery({
-    queryKey: ['threads'],
-    queryFn: async () => {
-      const response = await chatbotApi.get('/chat/threads')
+      const response = await api.get<ConversationResponse[]>('/chatbot/conversations')
       return response.data
     },
   })
@@ -68,8 +49,8 @@ export default function DashboardPage() {
       bgColor: 'bg-blue-50',
     },
     {
-      title: 'Chat Threads',
-      value: threadsData?.length || 0,
+      title: 'Chat Conversations',
+      value: conversationsData?.length || 0,
       icon: MessageSquare,
       description: 'Active conversations',
       href: '/chatbot',
@@ -78,7 +59,7 @@ export default function DashboardPage() {
     },
     {
       title: 'Parsed Configs',
-      value: configsData?.configs?.filter((c: Config) => c.parsed).length || 0,
+      value: configsData?.configs?.filter((c: ConfigurationResponse) => c.parsing_status === 'parsed').length || 0,
       icon: Activity,
       description: 'Analyzed configurations',
       href: '/configs',
@@ -90,7 +71,7 @@ export default function DashboardPage() {
       value: 'Active',
       icon: Database,
       description: 'System operational',
-      href: '/database',
+      href: '/services',
       color: 'text-orange-600',
       bgColor: 'bg-orange-50',
     },

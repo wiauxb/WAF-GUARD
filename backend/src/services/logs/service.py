@@ -115,9 +115,11 @@ class LogAnalysisService:
             categories = {}
             
             for i, prediction in enumerate(predictions['predictions']):
-                category = prediction.get("labels", "Unknown")[0]
-                probabilities = prediction["probabilities"]
-                prediction["probabilities"] = pretty_probabilities(probabilities[0])
+                category = " ,".join(prediction.get("labels", ["unknown"])) if len(prediction.get("labels", [])) > 0 else "unknown"
+                
+                probabilities = prediction.get("probabilities", [])
+                predictions['predictions'][i]["probabilities"] = probabilities
+                predictions['predictions'][i]["labels"] = ["unknown"] if category == "unknown" else prediction.get("labels", [])
 
                 if category not in categories:
                     categories[category] = {
@@ -131,12 +133,10 @@ class LogAnalysisService:
             normalized_df['new_categories'] = predictions['predictions']
             df_columns = normalized_df.columns.tolist()
             
-            # Convert DataFrame to dict for storage (for filtering support)
             dataframe_dict = normalized_df.to_dict(orient='records')
             
             self.storage.add_logs(session_id, parsed_logs, categories, dataframe_dict)
             
-            # Update session status
             self.storage.update_session_status(
                 session_id,
                 status="completed",
@@ -292,9 +292,9 @@ class LogAnalysisService:
         if category_column:
             for idx, row in df.iterrows():
                 if category_column == 'new_categories' and isinstance(row[category_column], dict):
-                    category = row[category_column].get("labels", ["Unknown"])[0]
+                    category = " ,".join(row[category_column].get("labels", ["unknown"]))
                 else:
-                    category = row[category_column]
+                    category = row[category_column] if row[category_column] else "unknown"
                 
                 if category not in filtered_categories:
                     filtered_categories[category] = {

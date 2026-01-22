@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { webAppApi } from '@/lib/api'
+import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -32,15 +32,17 @@ import {
   Sliders
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { Config, ConfigContent, ConfigTreeResponse, ConfigTreeNode } from '@/types'
+import { ConfigurationResponse, ConfigContent, ConfigTreeResponse, ConfigTreeNode } from '@/types'
 import { useConfigStore } from '@/stores/config'
 import { formatDate } from '@/lib/utils'
 
 export default function ConfigsPage() {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
-  const [configNickname, setConfigNickname] = useState('')
+  const [configName, setConfigName] = useState('')
+  const [configDescription, setConfigDescription] = useState('')
+  const [wafUrl, setWafUrl] = useState('http://waf:80')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [selectedConfigForView, setSelectedConfigForView] = useState<Config | null>(null)
+  const [selectedConfigForView, setSelectedConfigForView] = useState<ConfigurationResponse | null>(null)
   const [viewDialogOpen, setViewDialogOpen] = useState(false)
   const [selectedFilePath, setSelectedFilePath] = useState<string>('')
   const [currentPath, setCurrentPath] = useState<string>('')
@@ -301,7 +303,7 @@ export default function ConfigsPage() {
   const { data: configsData, isLoading } = useQuery({
     queryKey: ['configs'],
     queryFn: async () => {
-      const response = await webAppApi.get<Config[]>('/api/v1/configurations')
+      const response = await api.get<ConfigurationResponse[]>('/configurations')
       setConfigs(response.data)
 
       // Restore selected config from localStorage
@@ -320,7 +322,7 @@ export default function ConfigsPage() {
   const { data: userInfo } = useQuery({
     queryKey: ['user-info'],
     queryFn: async () => {
-      const response = await webAppApi.get('/api/v1/auth/me')
+      const response = await api.get('/auth/me')
       if (response.data.active_configuration_id) {
         const selected = configs.find((c) => c.id === response.data.active_configuration_id)
         if (selected) {
@@ -337,8 +339,11 @@ export default function ConfigsPage() {
     mutationFn: async () => {
       const formData = new FormData()
       formData.append('file', selectedFile!)
-      formData.append('name', configNickname)
-      const response = await webAppApi.post('/api/v1/configurations', formData, {
+      formData.append('name', configName)
+      if (configDescription) {
+        formData.append('description', configDescription)
+      }
+      const response = await api.post('/configurations', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
       return response.data
@@ -347,7 +352,8 @@ export default function ConfigsPage() {
       toast.success('Configuration uploaded successfully!')
       queryClient.invalidateQueries({ queryKey: ['configs'] })
       setUploadDialogOpen(false)
-      setConfigNickname('')
+      setConfigName('')
+      setConfigDescription('')
       setSelectedFile(null)
       if (fileInputRef.current) fileInputRef.current.value = ''
     },
@@ -363,7 +369,7 @@ export default function ConfigsPage() {
       if (config?.parsing_status !== 'parsed') {
         throw new Error('Only analyzed configurations can be selected')
       }
-      const response = await webAppApi.put('/api/v1/auth/me/active-config', {
+      const response = await api.put('/auth/me/active-config', {
         configuration_id: configId
       })
       return response.data
@@ -382,7 +388,7 @@ export default function ConfigsPage() {
   // Delete config mutation
   const deleteMutation = useMutation({
     mutationFn: async (configId: number) => {
-      const response = await webAppApi.delete(`/api/v1/configurations/${configId}`)
+      const response = await api.delete(`/configurations/${configId}`)
       return response.data
     },
     onSuccess: () => {
@@ -394,18 +400,18 @@ export default function ConfigsPage() {
     },
   })
 
-  // Analyze config mutation
-  const analyzeMutation = useMutation({
+  // Parse config mutation
+  const parseMutation = useMutation({
     mutationFn: async (configId: number) => {
-      const response = await webAppApi.post(`/configs/analyze/${configId}`)
+      const response = await api.post(`/parser/parse/${configId}`)
       return response.data
     },
     onSuccess: () => {
-      toast.success('Analysis started! This may take a while.')
+      toast.success('Parsing started! This may take a while.')
       queryClient.invalidateQueries({ queryKey: ['configs'] })
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Failed to start analysis')
+      toast.error(error.response?.data?.detail || 'Failed to start parsing')
     },
   })
 
@@ -415,8 +421,8 @@ export default function ConfigsPage() {
       if (!selectedConfigForView || !selectedFilePath) {
         throw new Error('No file selected')
       }
-      const response = await webAppApi.put(
-        `/api/v1/configurations/${selectedConfigForView.id}/files/${selectedFilePath}`,
+      const response = await api.put(
+        `/configurations/${selectedConfigForView.id}/files/${encodeURIComponent(selectedFilePath)}`,
         {
           content: fileContent,
         }
@@ -522,14 +528,14 @@ export default function ConfigsPage() {
   }
 
   const handleUpload = () => {
-    if (!selectedFile || !configNickname) {
-      toast.error('Please provide both file and nickname')
+    if (!selectedFile || !configName) {
+      toast.error('Please provide both file and name')
       return
     }
     uploadMutation.mutate()
   }
 
-  const handleViewConfig = async (config: Config) => {
+  const handleViewConfig = async (config: ConfigurationResponse) => {
     setSelectedConfigForView(config)
     setViewDialogOpen(true)
     setSelectedFilePath('')
@@ -546,8 +552,8 @@ export default function ConfigsPage() {
   const loadConfigFiles = async (configId: number, path: string) => {
     setIsLoadingFiles(true)
     try {
-      const response = await webAppApi.get<ConfigTreeResponse>(
-        `/api/v1/configurations/${configId}/tree`,
+      const response = await api.get<ConfigTreeResponse>(
+        `/configurations/${configId}/tree`,
         {
           params: { path: path || '/' }
         }
@@ -588,8 +594,8 @@ export default function ConfigsPage() {
       // Load file content
       setIsLoadingFiles(true)
       try {
-        const response = await webAppApi.get<ConfigTreeResponse>(
-          `/api/v1/configurations/${selectedConfigForView.id}/tree`,
+        const response = await api.get<ConfigTreeResponse>(
+          `/configurations/${selectedConfigForView.id}/tree`,
           {
             params: { path: newPath }
           }
@@ -796,19 +802,27 @@ export default function ConfigsPage() {
             </DialogHeader>
             <div className="space-y-4 mt-4">
               <div>
-                <label className="text-sm font-medium mb-2 block">Configuration Nickname</label>
+                <label className="text-sm font-medium mb-2 block">Configuration Name</label>
                 <Input
                   placeholder="e.g., Production WAF Config"
-                  value={configNickname}
-                  onChange={(e) => setConfigNickname(e.target.value)}
+                  value={configName}
+                  onChange={(e) => setConfigName(e.target.value)}
                 />
               </div>
               <div>
-                <label className="text-sm font-medium mb-2 block">Configuration File (ZIP/TAR)</label>
+                <label className="text-sm font-medium mb-2 block">Description (Optional)</label>
+                <Input
+                  placeholder="e.g., Production environment configuration"
+                  value={configDescription}
+                  onChange={(e) => setConfigDescription(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-2 block">Configuration File (ZIP)</label>
                 <Input
                   ref={fileInputRef}
                   type="file"
-                  accept=".zip,.tar,.tar.gz"
+                  accept=".zip"
                   onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
                 />
               </div>
@@ -1345,7 +1359,7 @@ export default function ConfigsPage() {
         <LoadingSpinner />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {configsData?.configs?.map((config: Config) => (
+          {configsData?.configs?.map((config: ConfigurationResponse) => (
             <Card 
               key={config.id} 
               className={`hover:shadow-lg transition-all relative ${
@@ -1412,15 +1426,15 @@ export default function ConfigsPage() {
                       'Select'
                     )}
                   </Button>
-                  {config.parsing_status !== 'parsed' && (
+                  {config.parsing_status !== 'parsed' && config.parsing_status !== 'parsing' && (
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => analyzeMutation.mutate(config.id)}
-                      disabled={analyzeMutation.isPending}
+                      onClick={() => parseMutation.mutate(config.id)}
+                      disabled={parseMutation.isPending}
                     >
                       <Play className="h-4 w-4 mr-1" />
-                      Analyze
+                      Parse
                     </Button>
                   )}
                   <Button

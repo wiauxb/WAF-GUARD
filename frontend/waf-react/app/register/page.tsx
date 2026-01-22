@@ -6,10 +6,11 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { webAppApi } from '@/lib/api'
+import { api } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
 import toast from 'react-hot-toast'
 import { Lock, User, Shield } from 'lucide-react'
+import { UserInfo } from '@/types'
 
 export default function RegisterPage() {
   const [username, setUsername] = useState('')
@@ -30,14 +31,20 @@ export default function RegisterPage() {
     setLoading(true)
 
     try {
-      const response = await webAppApi.post('/api/v1/auth/register', {
+      // Register user
+      const registerResponse = await api.post<UserInfo>('/auth/register', {
         username,
         password,
-        password_confirm: confirmPassword,
       })
 
-      const { access_token } = response.data
-      setAuth({ username }, access_token)
+      // Login automatically after registration
+      const loginResponse = await api.post('/auth/login', {
+        username,
+        password,
+      })
+
+      const { access_token, user } = loginResponse.data
+      setAuth(user, access_token)
       toast.success('Registration successful!')
       router.push('/dashboard')
     } catch (error: any) {

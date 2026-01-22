@@ -51,7 +51,7 @@ async def classify_log_file(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
-@router.get("/sessions", response_model=List[LogAnalysisSessionResponse])
+@router.post("/sessions", response_model=List[LogAnalysisSessionResponse])
 async def list_user_sessions(
     user_session: UserSessionRequest,
     current_user: UserInfo = Depends(get_current_user)

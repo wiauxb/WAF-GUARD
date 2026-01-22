@@ -1,14 +1,14 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { Config } from '@/types'
+import { ConfigurationResponse } from '@/types'
 
 interface ConfigStore {
-  selectedConfig: Config | null
+  selectedConfig: ConfigurationResponse | null
   selectedConfigId: number | null
-  configs: Config[]
-  setSelectedConfig: (config: Config | null) => void
+  configs: ConfigurationResponse[]
+  setSelectedConfig: (config: ConfigurationResponse | null) => void
   setSelectedConfigId: (id: number | null) => void
-  setConfigs: (configs: Config[]) => void
+  setConfigs: (configs: ConfigurationResponse[]) => void
 }
 
 export const useConfigStore = create<ConfigStore>()(

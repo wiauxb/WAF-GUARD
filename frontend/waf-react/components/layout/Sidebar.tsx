@@ -12,7 +12,8 @@ import {
   LogOut,
   Menu,
   X,
-  Activity
+  Activity,
+  FileText
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -22,10 +23,10 @@ import { useState } from 'react'
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/configs', label: 'Configurations', icon: FileCode },
+  { href: '/logs', label: 'Logs', icon: FileText },
   { href: '/chatbot', label: 'Chatbot', icon: MessageSquare },
   { href: '/cypher', label: 'Query Graph', icon: Database },
-  { href: '/directives', label: 'Directives', icon: Search },
-  { href: '/services', label: 'Services', icon: Activity },
+  { href: '/directives', label: 'Directives', icon: Search }
 ]
 
 export function Sidebar() {
@@ -91,7 +92,6 @@ export function Sidebar() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate">{user?.username || 'User'}</p>
-                <p className="text-xs text-muted-foreground truncate">{user?.email || ''}</p>
               </div>
             </div>
             <Button
