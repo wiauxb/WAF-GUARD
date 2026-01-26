@@ -89,7 +89,6 @@ services:
     build: ./frontend
     volumes:
       - ${PWD}/frontend/waf-react:/app/waf-react
-      - /app/waf-react/node_modules
     ports:
       - "8002:8002"
     working_dir: /app/waf-react

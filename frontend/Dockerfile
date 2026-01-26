@@ -10,7 +10,10 @@ COPY . .
 WORKDIR /app/waf-react
  
 # Install dependencies
-RUN npm install
+
+# Commented out to avoid reinstalling node_modules on dev setup.
+# Uncomment for production builds and remove volume mapping in docker-compose.yaml 
+#RUN npm install
 
 # Keep container running for debugging (remove this in production)
 # CMD ["sleep", "infinity"]
