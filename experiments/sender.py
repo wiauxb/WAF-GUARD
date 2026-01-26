@@ -94,9 +94,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
     result = generate_config(
         overwrite=True,
-        apps=["wordpress"],
+        apps=[],
         crs_version="4.22.0",
-        variables={"PORT": 8080, "MODSEC_RULE_ENGINE": "DetectionOnly", "BACKEND": "http://dvwa:80"}
+        variables={"PORT": 8080, "MODSEC_RULE_ENGINE": "On", "BACKEND": "http://dvwa:80", "MODSEC_AUDIT_LOG_FORMAT":"JSON","MODSEC_AUDIT_LOG_PARTS":"ABCFHKZ"}
     )
 
     print(f"Sending config from '{args.config}' to {args.url}...")

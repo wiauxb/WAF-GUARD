@@ -8,8 +8,9 @@ db_dump/*
 docker/docker_data/*
 waf/scripts/*
 src/web_app/lib
-.venv
+**.venv**
 tmp.html
 dump.txt
 backend/src/storage/*
 frontend/waf-react/package-lock.json
+experiments/config

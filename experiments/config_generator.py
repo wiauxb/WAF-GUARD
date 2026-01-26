@@ -453,7 +453,7 @@ if __name__ == "__main__":
             overwrite=True,
             apps=["wordpress"],
             crs_version=crs_versions[0]["version"] if crs_versions else None,
-            variables={"PORT": 80, "MODSEC_RULE_ENGINE": "On", "BACKEND": "http://dvwa:80"}
+            variables={"PORT": 80, "MODSEC_RULE_ENGINE": "On","MODSEC_AUDIT_LOG_FORMAT":"Native", "BACKEND": "http://dvwa:80"}
         )
         print("\n[Generation Result]")
         print(f"  Directories created: {result['directories_created']}")
