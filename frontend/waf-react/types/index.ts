@@ -17,6 +17,7 @@ export interface TokenResponse {
 export interface RegisterRequest {
   username: string
   password: string
+  password_confirm: string
 }
 
 export interface LoginRequest {

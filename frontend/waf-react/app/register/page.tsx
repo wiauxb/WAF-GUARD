@@ -35,6 +35,7 @@ export default function RegisterPage() {
       const registerResponse = await api.post<UserInfo>('/auth/register', {
         username,
         password,
+        password_confirm: confirmPassword,
       })
 
       // Login automatically after registration
