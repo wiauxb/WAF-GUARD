@@ -75,11 +75,8 @@ export default function ConfigsPage() {
 
   // Mock data - will be fetched from backend
   const STACKS = [
-    { value: 'apache-modsecurity', label: 'Apache + ModSecurity' },
-    { value: 'nginx-modsecurity', label: 'Nginx + ModSecurity' },
-    { value: 'nginx-naxsi', label: 'Nginx + NAXSI' },
-    { value: 'haproxy', label: 'HAProxy' },
-    { value: 'cloudflare', label: 'Cloudflare WAF' },
+    { value: 'apache-modsecurity', label: 'Apache + ModSecurity2' },
+    { value: 'nginx-modsecurity', label: 'Nginx + ModSecurity3' },
   ] as const
 
   const CRS_VERSIONS = [

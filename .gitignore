@@ -14,3 +14,4 @@ dump.txt
 backend/src/storage/*
 frontend/waf-react/package-lock.json
 experiments/config
+experiments/logs
