@@ -1,4 +1,5 @@
 import os
+import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
@@ -20,17 +21,22 @@ async def export_database(config_name: str):
         Dict with status and download URL
     """
     try:
-        # Check if export already exists
+        # Check if export already exists (sentinel file, not just the directory,
+        # to avoid false-positives from partial/failed previous exports)
         export_path = Path(f"/exports/{config_name}")
-        if export_path.exists():
+        if (export_path / "neo4j_export.graphml").exists():
             return {"status": "success", "message": f"Export for {config_name} already exists."}
 
         # Create export directory
         export_path.mkdir(parents=True, exist_ok=True)
-        
-        # Ensure the export directory has the right permissions for Neo4j
-        os.system(f"chown -R 7474:7474 {export_path}")
-        os.system(f"chmod -R 755 {export_path}")
+
+        # Ensure the export directory has the right permissions for Neo4j.
+        # chown requires root; wrap so it degrades gracefully in non-root environments (e.g. Azure).
+        try:
+            os.system(f"chown -R 7474:7474 {export_path}")
+        except Exception:
+            pass
+        export_path.chmod(0o755)
 
         # Export Neo4j database using APOC
         with neo4j_driver.session() as session:
@@ -68,9 +74,7 @@ async def export_database(config_name: str):
     except Exception as e:
         # remove the export directory if it was created for atomicity
         if export_path.exists():
-            # for item in export_path.iterdir():
-            #     item.unlink()
-            export_path.rmdir()
+            shutil.rmtree(export_path, ignore_errors=True)
         raise HTTPException(status_code=500, detail=f"Failed to export database: {str(e)}")
 
 

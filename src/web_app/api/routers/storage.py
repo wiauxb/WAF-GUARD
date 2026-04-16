@@ -1,4 +1,3 @@
-import json
 import io
 import os
 import asyncio
@@ -36,18 +35,18 @@ async def store_config(file: UploadFile = File(...), config_nickname: str = Form
         config_id = response[0]
         files_conn.commit()
 
-        config_path = extract_config(file.file, config_id=config_id, name=config_nickname)
+        config_path = extract_config(file.file, name=config_nickname)
 
         # Process each file in the extracted directory
         for file_path in config_path.glob('**/*'):
             if file_path.is_file():
                 # Get the relative path from the config_path
                 relative_path = str(file_path.relative_to(config_path))
-                
+
                 # Read file content as binary
                 with open(file_path, 'rb') as f:
                     file_content = f.read()
-                
+
                 # Insert file info into the database
                 cursor.execute("""
                     INSERT INTO public.files (config_id, path, content)
@@ -55,6 +54,10 @@ async def store_config(file: UploadFile = File(...), config_nickname: str = Form
                 """, (config_id, relative_path, file_content))
         # Commit the transaction
         files_conn.commit()
+
+        # All files are now in the DB — the extracted directory is no longer needed
+        import shutil
+        shutil.rmtree(config_path, ignore_errors=True)
        
         await file.seek(0)
         response = await get_dump_function(file)
@@ -114,27 +117,43 @@ async def store_dump_function(config_id: int, dump: str):
 @router.post("/config_tree/{config_id}")
 async def config_tree(config_id: int, path: str = Form(...)) -> List[ConfigContent]:
     try:
-        info_path = f"/tmp/config_{config_id}_info.json"
-        with open(info_path, "r") as info_file:
-            config_info = json.load(info_file)
-        config_path = config_info["path"]
-        if not config_path:
-            raise HTTPException(status_code=404, detail="Config not found")
-        
-        #list dir and files in config_path
-        full_path = Path(config_path) / path
-        if not full_path.exists():
-            raise HTTPException(status_code=500, detail="Path doesn't exist")
-        file_content = ""
-        config_contents = []
-        if full_path.is_file():
-            with open(full_path, "r") as file:
-                file_content = file.read()
-            config_contents.append(ConfigContent(filename=path, is_folder=False, file_content=file_content))
-        else:
-            for item in full_path.iterdir():
-                config_contents.append(ConfigContent(filename=item.name, is_folder=item.is_dir()))
-        return config_contents
+        cursor = files_conn.cursor()
+
+        # If an exact path is given, check whether it's a known file
+        if path:
+            cursor.execute(
+                "SELECT content FROM files WHERE config_id = %s AND path = %s",
+                (config_id, path)
+            )
+            row = cursor.fetchone()
+            if row:
+                raw = row[0]
+                file_content = raw.decode("utf-8") if isinstance(raw, (bytes, memoryview)) else raw
+                return [ConfigContent(filename=path, is_folder=False, file_content=file_content)]
+
+        # Otherwise list immediate children under the given directory prefix
+        cursor.execute("SELECT path FROM files WHERE config_id = %s", (config_id,))
+        all_paths = [r[0] for r in cursor.fetchall()]
+
+        prefix = path + "/" if path else ""
+        children: dict[str, bool] = {}  # name → is_folder
+        for p in all_paths:
+            if not p.startswith(prefix):
+                continue
+            remainder = p[len(prefix):]
+            parts = remainder.split("/", 1)
+            # Only mark as folder if there is a deeper path component
+            children[parts[0]] = children.get(parts[0], False) or len(parts) > 1
+
+        if not children:
+            raise HTTPException(status_code=404, detail="Path not found")
+
+        return [
+            ConfigContent(filename=name, is_folder=is_folder)
+            for name, is_folder in sorted(children.items())
+        ]
+    except HTTPException:
+        raise
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to get config tree: {str(e)}")
@@ -152,16 +171,6 @@ async def update_config(config_id: int, fileContent: FileContent):
             WHERE config_id = %s AND path = %s
         """, (fileContent.content.encode(), config_id, fileContent.path))
         files_conn.commit()
-
-        info_path = f"/tmp/config_{config_id}_info.json"
-        with open(info_path, "r") as info_file:
-            config_info = json.load(info_file)
-        config_path = config_info["path"]
-        if not config_path:
-            raise HTTPException(status_code=404, detail="Config not found")
-        full_path = Path(config_path) / fileContent.path
-        with open(full_path, "w") as file:
-            file.write(fileContent.content)
         return {"status": "success"}
     except Exception as e:
         traceback.print_exc()

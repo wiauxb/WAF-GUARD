@@ -43,7 +43,7 @@ with tab_rqst:
 
     # Button to submit HTTP request
     if st.button("Submit HTTP Request"):
-        response = requests.post(f"{API_URL}/parse_http_request", json={"location": location+".*", "host": host+".*"})
+        response = requests.post(f"{API_URL}/parse_http_request", json={"location": f".*{location}.*", "host": f".*{host}.*"})
         if response.status_code != 200:
             st.error(response.content.decode())
         else:

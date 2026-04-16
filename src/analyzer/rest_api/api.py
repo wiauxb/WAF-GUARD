@@ -105,4 +105,6 @@ async def process_config(id: int):
     get_dump_from_db(id, f"/tmp/{id}/dump.txt")
     print(f"Running analyzer")
     run_analyzer(id)
+    print(f"Cleaning up temporary directory")
+    clean_directory(f"/tmp/{id}")
     return {"status": "success"}

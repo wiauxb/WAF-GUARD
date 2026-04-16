@@ -24,14 +24,14 @@ async def get_selected_config():
     """Get the currently selected configuration."""
     cursor = files_conn.cursor()
 
-    # Get the currently selected config
-    cursor.execute("SELECT * FROM selected_config ORDER BY id DESC LIMIT 1")
+    # Get the currently selected config (singleton row with id = 1)
+    cursor.execute("SELECT config_id FROM selected_config WHERE id = 1")
     selected = cursor.fetchone()
-    
+
     if not selected:
         return {"selected_config": None}
-    
-    return {"selected_config": selected}
+
+    return {"selected_config": selected[0]}
 
 
 @router.post("/select/{config_id}")
@@ -45,15 +45,14 @@ async def select_config(config_id: int):
     if not config:
         raise HTTPException(status_code=404, detail="Config does not exist")
 
-    # Check if selected_config table is empty
-    cursor.execute("SELECT * FROM selected_config")
-    selected = cursor.fetchone()
-    if not selected:
-        # Insert new row if table is empty
-        cursor.execute("INSERT INTO selected_config (config_id) VALUES (%s)", (config_id,))
-    else:
-        # Update existing row
-        cursor.execute("UPDATE selected_config SET config_id = %s", (config_id,))
+    # Atomic upsert into the singleton row (id = 1 is the only permitted row)
+    cursor.execute(
+        """
+        INSERT INTO selected_config (id, config_id) VALUES (1, %s)
+        ON CONFLICT (id) DO UPDATE SET config_id = EXCLUDED.config_id
+        """,
+        (config_id,)
+    )
     files_conn.commit()
     return {"message": "Config selected successfully"}
 

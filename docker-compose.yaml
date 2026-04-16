@@ -4,19 +4,28 @@ services:
     container_name: neo4j
     image: neo4j:latest
     volumes:
-      - ${DOCKER_DATA_PATH}/neo4j/logs:/logs
-      - ${DOCKER_DATA_PATH}/neo4j/config:/config
-      - ${DOCKER_DATA_PATH}/neo4j/data:/data
-      # - ${DOCKER_DATA_PATH}/neo4j/plugins:/plugins
-      - ${DOCKER_DATA_PATH}/neo4j/import:/import
-      - ${EXPORT_DIR}:/import/exports
+      - type: bind
+        source: ${DOCKER_DATA_PATH}/neo4j/data
+        target: /data
+        bind:
+          create_host_path: true
+      - type: bind
+        source: ${DOCKER_DATA_PATH}/neo4j/import
+        target: /import
+        bind:
+          create_host_path: true
+      - type: bind
+        source: ${EXPORT_DIR}
+        target: /exports
+        bind:
+          create_host_path: true
     environment:
       - NEO4J_AUTH=${NEO4J_USER}/${NEO4J_PASSWORD}
       - NEO4J_PLUGINS=["apoc"]
       - NEO4J_dbms_security_procedures_unrestricted=apoc.*
       - NEO4J_apoc_export_file_enabled=true
       - NEO4J_apoc_import_file_enabled=true
-      - NEO4J_apoc_import_file_use__neo4j__config=true
+      - NEO4J_apoc_import_file_use__neo4j__config=false
 
     ports:
       - "7474:7474"
@@ -31,8 +40,8 @@ services:
   postgres:
     container_name: postgres
     build:
-      context: ./docker
-      dockerfile: postgres_dockerfile
+      context: .
+      dockerfile: docker/postgres_dockerfile
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -43,8 +52,11 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - ${DOCKER_DATA_PATH}/postgres:/var/lib/postgresql
-      - ${EXPORT_DIR}:/exports
+      - type: bind
+        source: ${DOCKER_DATA_PATH}/postgres
+        target: /var/lib/postgresql
+        bind:
+          create_host_path: true
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -d $${POSTGRES_DB_CWAF} -U $${POSTGRES_USER}"]
       interval: 1s
@@ -64,13 +76,16 @@ services:
 
   fastapi:
     container_name: fastapi
-    build: 
-      dockerfile: fastapi_dockerfile
-      context: ./docker
+    build:
+      dockerfile: docker/fastapi_dockerfile
+      context: .
     volumes:
       - ${WEB_APP_PATH}:/app
-      - ${DOCKER_DATA_PATH}/shared:/shared
-      - ${EXPORT_DIR}:/exports
+      - type: bind
+        source: ${EXPORT_DIR}
+        target: /exports
+        bind:
+          create_host_path: true
     environment:
       - ENVIRONMENT=${ENVIRONMENT}
       - NEO4J_URL=${NEO4J_URL}
@@ -104,12 +119,11 @@ services:
 
   streamlit:
     container_name: streamlit
-    build: 
-      dockerfile: streamlit_dockerfile
-      context: ./docker
+    build:
+      dockerfile: docker/streamlit_dockerfile
+      context: .
     volumes:
       - ${WEB_APP_PATH}:/app
-      - ${DOCKER_DATA_PATH}/shared:/shared
     environment:
       - API_URL=${API_URL}
       - CHAT_URL=${CHAT_URL}
@@ -125,8 +139,8 @@ services:
   waf:
     container_name: waf
     build:
-      dockerfile: waf_dockerfile
-      context: ./docker
+      dockerfile: docker/waf_dockerfile
+      context: .
     privileged: true
     volumes:
       - ${SRC_PATH}/waf_rest_api:/opt/api
@@ -138,8 +152,8 @@ services:
   analyzer:
     container_name: analyzer
     build:
-      dockerfile: analyzer_dockerfile
-      context: ./docker
+      dockerfile: docker/analyzer_dockerfile
+      context: .
     environment:
       - RUNNING_IN_DOCKER=true
       - ENVIRONMENT=${ENVIRONMENT}
@@ -169,12 +183,16 @@ services:
 
   chatbot:
     container_name: chatbot
-    build: 
-      dockerfile: chatbot_dockerfile
-      context: ./docker
+    build:
+      dockerfile: docker/chatbot_dockerfile
+      context: .
     volumes:
       - ${CHATBOT_PATH}:/app
-      - ${DOCKER_DATA_PATH}/chromadb:/chromadb
+      - type: bind
+        source: ${DOCKER_DATA_PATH}/chromadb
+        target: /chromadb
+        bind:
+          create_host_path: true
     working_dir: /app
     ports:
       - "8005:8005"

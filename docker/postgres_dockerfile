@@ -1,13 +1,12 @@
 FROM postgres:17.6
 
 # Copy SQL files for database initialization
-COPY scripts/cwaf_db.sql /init/
-COPY scripts/files_db.sql /init/
-COPY scripts/chatbot_db.sql /init/
+COPY docker/scripts/cwaf_db.sql /init/
+COPY docker/scripts/files_db.sql /init/
+COPY docker/scripts/chatbot_db.sql /init/
 
 # Copy initialization script
-COPY scripts/init-databases.sh /docker-entrypoint-initdb.d/
+COPY docker/scripts/init-databases.sh /docker-entrypoint-initdb.d/
 
 # Make the initialization script executable
 RUN chmod +x /docker-entrypoint-initdb.d/init-databases.sh
-

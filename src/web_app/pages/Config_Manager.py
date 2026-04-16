@@ -12,7 +12,6 @@ import requests
 import os
 
 
-UPLOADED_LOCATION = "/shared/uploaded"
 API_URL = os.getenv("API_URL")
 
 def process_config_archive(uploaded_file, nickname=None):
@@ -97,9 +96,7 @@ def get_selected_config_id():
     if response.status_code == 200:
         selected_config = response.json()["selected_config"]
         if selected_config is not None:
-            selected_config = selected_config[1]
-            if selected_config is not None:
-                return selected_config
+            return selected_config
     return None
 
 def show_existing_configs():
@@ -144,15 +141,13 @@ def dump_config(config_id, uploaded_file):
 
 def analyze_config(config_id):
     selected_config = get_selected_config_id()
-    if select_config is None:
-        st.error("Failed to fetch selected config.")
-        st.error(response.content.decode())
-        return 
-    response = requests.post(f"{API_URL}/database/export/{selected_config}")
-    if response.status_code != 200:
-        st.error("Failed to export database.")
-        st.error(response.content.decode())
-        return
+    # Only export the current state if there is already an active config to snapshot
+    if selected_config is not None:
+        response = requests.post(f"{API_URL}/database/export/{selected_config}")
+        if response.status_code != 200:
+            st.error("Failed to export database.")
+            st.error(response.content.decode())
+            return
     response = requests.post(f"{API_URL}/configs/analyze/{config_id}")
     if response.status_code == 200:
         select_config(config_id)

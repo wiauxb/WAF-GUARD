@@ -2,13 +2,12 @@ FROM rockylinux:9
 
 RUN dnf install -y sudo
 
-COPY docker_data/waf/waf_inst /opt/waf_inst
+COPY docker/docker_data/waf/waf_inst /opt/waf_inst
 WORKDIR /opt/waf_inst
 RUN chmod a+x *.sh && ./install.sh
 RUN systemctl disable firewalld
 
-COPY docker_data/waf/modules/* /usr/local/lib64/httpd/modules/
-
+COPY docker/docker_data/waf/modules/* /usr/local/lib64/httpd/modules/
 
 # --------------------------------------------
 # REST API
@@ -16,3 +15,8 @@ COPY docker_data/waf/modules/* /usr/local/lib64/httpd/modules/
 
 RUN dnf install -y python3 python3-pip
 RUN pip3 install fastapi[standard]
+
+COPY src/waf_rest_api /opt/api
+WORKDIR /opt/api
+
+CMD ["fastapi", "run", "main.py", "--host", "0.0.0.0", "--port", "8000"]

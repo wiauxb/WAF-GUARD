@@ -1,6 +1,8 @@
-# app/Dockerfile
-
 FROM python:3.9-alpine
 
-RUN pip3 install fastapi[standard] neo4j python-dotenv pydantic psycopg2-binary dotenv pyvis requests pandas
+RUN pip3 install fastapi[standard] neo4j python-dotenv pydantic psycopg2-binary pyvis requests pandas
 
+WORKDIR /app
+COPY src/web_app /app
+
+CMD ["fastapi", "run", "api/api.py", "--host", "0.0.0.0", "--port", "8000"]

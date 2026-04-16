@@ -45,13 +45,13 @@ CREATE TABLE "public"."files" (
 
 
 DROP TABLE IF EXISTS "selected_config";
-DROP SEQUENCE IF EXISTS selected_config_id_seq;
-CREATE SEQUENCE selected_config_id_seq INCREMENT 1 MINVALUE 1 MAXVALUE 2147483647 START 5 CACHE 1;
 
+-- Singleton table: only one row (id = 1) is ever written via UPSERT
 CREATE TABLE "public"."selected_config" (
-    "id" integer DEFAULT nextval('selected_config_id_seq') NOT NULL,
+    "id" integer NOT NULL,
     "config_id" integer,
-    CONSTRAINT "selected_config_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "selected_config_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "selected_config_singleton" CHECK (id = 1)
 ) WITH (oids = false);
 
 
