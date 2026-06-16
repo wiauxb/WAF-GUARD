@@ -148,13 +148,29 @@ def analyze_config(config_id):
             st.error("Failed to export database.")
             st.error(response.content.decode())
             return
+
     response = requests.post(f"{API_URL}/configs/analyze/{config_id}")
-    if response.status_code == 200:
-        select_config(config_id)
-        st.success("Config analyzed successfully.")
-    else:
-        st.error("Failed to parse config.")
+    if response.status_code != 200:
+        st.error("Failed to start analysis.")
         st.error(response.content.decode())
+        return
+
+    task_id = response.json().get("task_id")
+
+    with st.spinner("Analyzing config..."):
+        while True:
+            time.sleep(3)
+            check = requests.get(f"{API_URL}/analysis_progress/{task_id}")
+            if check.status_code == 200:
+                status = check.json().get("status")
+                if status == "completed":
+                    break
+                elif status == "failed":
+                    st.error("Analysis failed.")
+                    return
+
+    select_config(config_id)
+    st.success("Config analyzed successfully.")
     
 
 @st.dialog("Delete Config")

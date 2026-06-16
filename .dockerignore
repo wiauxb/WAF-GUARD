@@ -1,0 +1,13 @@
+# Runtime data directories — owned by container users, not needed in build context
+docker/docker_data/postgres/
+docker/docker_data/neo4j/
+docker/docker_data/chromadb/
+docker/docker_data/db_exports/
+
+# React frontend (not part of any Docker image)
+waf-react/
+
+# Local dev artifacts
+**/__pycache__/
+**/*.pyc
+**/.env

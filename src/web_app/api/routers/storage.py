@@ -211,7 +211,7 @@ async def get_analysis_progress(task_id: str):
     """Get the progress of an analysis task."""
     cursor = files_conn.cursor()
     cursor.execute(
-        "SELECT status, progress FROM analysis_tasks WHERE task_id = %s",
+        "SELECT status, progress FROM analysis_tasks WHERE id = %s",
         (task_id,)
     )
     result = cursor.fetchone()

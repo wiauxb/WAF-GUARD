@@ -13,10 +13,7 @@ from ..main import main
 # Environment detection
 ENVIRONMENT = os.getenv("ENVIRONMENT", "dev")
 
-if os.getenv("RUNNING_IN_DOCKER"):
-    pstgr_url = "postgres"
-else:
-    pstgr_url = os.getenv("POSTGRES_HOST")
+pstgr_url = os.getenv("POSTGRES_HOST")
 pstgr_user = os.getenv("POSTGRES_USER")
 pstgr_pass = os.getenv("POSTGRES_PASSWORD")
 pstgr_db_files = os.getenv("POSTGRES_DB_FILES", "files")
