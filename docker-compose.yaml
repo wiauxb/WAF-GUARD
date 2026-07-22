@@ -1,14 +1,15 @@
 services:
 
-  neo4j:
-    container_name: neo4j
+  neo4j_na:
+    container_name: neo4j_na
     image: neo4j:latest
-    volumes:
-      - ${DOCKER_DATA_PATH}/neo4j/logs:/logs
-      - ${DOCKER_DATA_PATH}/neo4j/config:/config
-      - ${DOCKER_DATA_PATH}/neo4j/data:/data
-      - ${DOCKER_DATA_PATH}/neo4j/import:/import
-      - ${EXPORT_DIR}:/import/exports
+    # volumes:
+      # - ${DOCKER_DATA_PATH}/neo4j/logs:/logs
+      # - ${DOCKER_DATA_PATH}/neo4j/config:/config
+      # - ${DOCKER_DATA_PATH}/neo4j/data:/data
+      # - ${DOCKER_DATA_PATH}/neo4j/import:/import
+      # - ${EXPORT_DIR}:/import/exports
+      # - neo4j_data:/neo4j/
     environment:
       - NEO4J_AUTH=${NEO4J_USER}/${NEO4J_PASSWORD}
       - NEO4J_PLUGINS=["apoc"]
@@ -27,8 +28,8 @@ services:
       retries: 10
       start_period: 30s
 
-  postgres:
-    container_name: postgres
+  postgres_na:
+    container_name: postgres_na
     image: postgres:latest
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -37,32 +38,33 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - ${DOCKER_DATA_PATH}/postgres:/var/lib/postgresql
-      - ${EXPORT_DIR}:/exports
+      # - ${DOCKER_DATA_PATH}/postgres:/var/lib/postgresql
+      # - ${EXPORT_DIR}:/exports
+      - postgres_data:/var/lib/postgresql
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}"]
       interval: 1s
       timeout: 5s
       retries: 10
     
-  adminer:
-    container_name: adminer
+  adminer_na:
+    container_name: adminer_na
     image: adminer
     ports:
       - 8080:8080
     depends_on:
-      postgres:
+      postgres_na:
         condition: service_healthy
         restart: true
 
 
-  backend:
-    container_name: backend
+  backend_na:
+    container_name: backend_na
     build: ./backend
     volumes:
-      - ${BACKEND_PATH}:/app
-      - ${DOCKER_DATA_PATH}/shared:/shared
-      - ${EXPORT_DIR}:/exports
+      - ./backend/src:/app
+      # - ${DOCKER_DATA_PATH}/shared:/shared
+      # - ${EXPORT_DIR}:/exports
     environment:
       - ENVIRONMENT=${ENVIRONMENT}
       - NEO4J_URL=${NEO4J_URL}
@@ -84,28 +86,27 @@ services:
       - "8000:8000"
     command: "fastapi dev main.py --host 0.0.0.0 --port 8000"
     depends_on:
-      postgres:
+      postgres_na:
         condition: service_healthy
         restart: true
-      neo4j:
+      neo4j_na:
         condition: service_healthy
         restart: true
-      waf:
+      waf_na:
         condition: service_started
         restart: true
     
-  react:
-    container_name: react
+  react_na:
+    container_name: react_na
     build: ./frontend
     volumes:
       - ${PWD}/frontend/waf-react:/app/waf-react
-      - /app/waf-react/node_modules
     ports:
       - "8002:8002"
     working_dir: /app/waf-react
     command: "npm run dev"
     depends_on:
-      backend:
+      backend_na:
         condition: service_started
         restart: true
 
@@ -128,8 +129,8 @@ services:
   #       condition: service_started
   #       restart: true
 
-  waf:
-    container_name: waf
+  waf_na:
+    container_name: waf_na
     build: ./waf
     privileged: true
     volumes:
@@ -139,9 +140,14 @@ services:
     working_dir: /opt/api
     command: "fastapi dev main.py --host 0.0.0.0 --port 8000"
 
-  model:
-    image: nelver28/modernbert:latest
-    container_name: modernbert
-    ports:
-      - "8102:8102"
-    restart: always
+  # model_na:
+  #   image: nelver28/modernbert:latest
+  #   container_name: modernbert
+  #   ports:
+  #     - "8102:8102"
+  #   restart: always
+
+volumes:
+  neo4j_data:
+  postgres_data:
+
