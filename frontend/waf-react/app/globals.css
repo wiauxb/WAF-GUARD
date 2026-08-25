@@ -1,5 +1,44 @@
 @import "tailwindcss";
 
+/**
+ * Map the design tokens below onto Tailwind colour utilities.
+ *
+ * Tailwind v4 has no tailwind.config.js: a utility like `bg-popover` only exists if a
+ * matching `--color-popover` is declared in an `@theme` block. Without this, every
+ * semantic class in the component library (`bg-card`, `bg-popover`, `bg-primary`,
+ * `text-muted-foreground`, `border-input`, …) compiled to nothing — which is why
+ * dropdown menus rendered with no background at all.
+ *
+ * `inline` keeps the utilities referencing the variables rather than baking their
+ * values, so the `.dark` overrides below still apply.
+ */
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;

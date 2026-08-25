@@ -77,7 +77,8 @@ class DirectiveResponse(BaseModel):
     msg: Optional[str] = None
     constants: List[str] = Field(default_factory=list)
     variables: List[str] = Field(default_factory=list)
-    context: Optional[str] = None          # "file:line", or the macro chain
+    # No `context` field: the parser's denormalised provenance string was truncated on
+    # ~98.5% of directives and duplicated symbol_table. Use GET /nodes/{id}/metadata.
 
 
 class DirectiveListResponse(BaseModel):

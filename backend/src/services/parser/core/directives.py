@@ -85,7 +85,12 @@ class Directive:
             'conditions': self.conditions,
             'constants': self.constants,
             'variables': self.variables,
-            'Context': str(self.Context)
+            # PORT CHANGE: 'Context': str(self.Context) removed. It was a denormalised
+            # copy of the directive's provenance, and str(MacroContext) truncates it to
+            # "line N of " on ~98.5% of directives (PARSER.md defect #2). The same
+            # information is recorded correctly in symbol_table / macro_calls and served
+            # by GET /nodes/{id}/metadata, so the property was redundant as well as wrong.
+            # Nothing ever matched or filtered on it.
         }
         if hasattr(self, 'id'):
             prop['id'] = self.id

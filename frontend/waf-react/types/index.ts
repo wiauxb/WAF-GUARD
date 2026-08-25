@@ -319,47 +319,114 @@ export interface CategoryDetailsResponse {
   logs: LogEntryResponse[]
 }
 
-// ==================== Node and Directive Types ====================
-export interface Node {
+// ==================== Analysis Types ====================
+// Mirrors backend/src/services/analysis/schemas.py exactly.
+//
+// TWO IDENTIFIER SPACES, never conflated and never named bare `id`:
+//   node_id  - assigned by the parser, on EVERY directive, unique per configuration
+//   rule_id  - the ModSecurity `id:NNN`, only where declared, one-to-many
+//              (a chained SecRule spans several directives sharing one rule_id)
+// Their numeric ranges overlap, so which one you mean must always be explicit.
+
+export interface DirectiveResponse {
   node_id: number
-  [key: string]: any
+  type: string                 // lowercased directive name == the Neo4j label
+  args: string
+  location: string | null      // empty for ~99% until parser defect #1 is fixed
+  virtual_host: string | null
+  if_level: number
+  conditions: string[]
+  phase: number | null
+  rule_id: number | null       // ModSecurity id:NNN — NOT the node_id
+  tags: string[]
+  msg: string | null
+  constants: string[]
+  variables: string[]
+  // No `context`: provenance comes from getNodeMetadata(node_id) instead.
 }
 
-export interface Directive {
-  node_id: number
-  labels?: string[]
-  [key: string]: any
+export interface Paginated {
+  total_count: number          // FULL match count, not the page size
+  limit: number
+  offset: number
 }
 
-export interface NodeMetadata {
-  macro_name: string
+export interface DirectiveListResponse extends Paginated {
+  configuration_id: number
+  directives: DirectiveResponse[]
+}
+
+export interface RemoverEntry {
+  criterion_type: string       // "Id" (a rule_id) | "Regex" (a tag pattern)
+  criterion_value: number | string
+  directive: DirectiveResponse // the SecRuleRemoveBy* that did it
+}
+
+export interface RemoverListResponse extends Paginated {
+  configuration_id: number
+  node_id: number              // the victim — a parser node_id
+  removers: RemoverEntry[]
+}
+
+export interface SymbolMatch {
+  name: string
+  value: string | null
+  labels: string[]             // Constant | Variable | Collection
+}
+
+export interface SymbolSearchResponse extends Paginated {
+  configuration_id: number
+  query: string
+  matches: SymbolMatch[]
+}
+
+export interface NodeMetadataEntry {
+  macro_name: string           // "/" for the frame sitting directly in a file
   file_path: string
   line_number: number
 }
 
-// Cypher types
-export interface CypherQuery {
-  query: string
+export interface NodeMetadataResponse {
+  configuration_id: number
+  node_id: number
+  frames: NodeMetadataEntry[]  // innermost call first, defining file last
 }
 
-export interface CypherResult {
-  html?: string
-  df?: any[]
+export interface MacroTraceFrame {
+  macro_name: string
+  file_path: string
+  line_number: number
+  content: string              // the <Macro> body, or the `Use` line
 }
 
-// File types
-export interface ConfigTreeNode {
+export interface MacroTraceResponse {
+  configuration_id: number
+  node_id: number
+  frames: MacroTraceFrame[]
+  formatted: string            // pre-rendered text
+}
+
+// --- request bodies ---
+
+export interface HttpRequestFilter {
+  location: string             // regex
+  host: string                 // regex
+}
+
+export interface ConstantQuery {
   name: string
-  type: 'file' | 'directory'
-  size?: number | null
+  // omitted/null matches the node with NO value set — not "any value"
+  value?: string | null
 }
 
-export interface ConfigTreeResponse {
-  is_file: boolean
-  path: string
-  children?: ConfigTreeNode[] | null  // For directories
-  content?: string | null  // For files
-  size?: number | null
+export interface SourceLocationQuery {
+  file_path: string
+  line_number: number
+}
+
+export interface PageParams {
+  limit?: number
+  offset?: number
 }
 
 // ==================== Common Response Types ====================
@@ -382,28 +449,3 @@ export interface ConfigContent {
   file_content?: string | null
 }
 
-export interface FileContext {
-  file_path: string
-  line_num: number
-}
-
-export interface ConstantQuery {
-  var_name: string
-  var_value?: string | null
-}
-
-export interface HttpRequest {
-  host: string
-  location: string
-}
-
-// Database types
-export interface ExportResponse {
-  status: string
-  message?: string
-}
-
-export interface ImportResponse {
-  status: string
-  message?: string
-}

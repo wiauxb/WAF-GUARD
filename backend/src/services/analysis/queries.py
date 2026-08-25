@@ -11,10 +11,10 @@ Two id spaces appear here and must not be confused:
   - rule_id  : the ModSecurity `id:NNN`, present only on directives that declare one,
                one-to-many (a chained SecRule spans several directives sharing an id).
                Stored as the `id` property, and as (:Id {value}) nodes.
-Both are INTEGER in Neo4j — binding them as strings matches nothing.
+Both are INTEGER in Neo4j -- binding them as strings matches nothing.
 
-DIRECTIVE_FIELDS is the projection every directive-returning query ends with, so the
-repository can map rows to DirectiveResponse uniformly.
+Every list query comes as a PAIR: `<NAME>_PAGE` and `<NAME>_COUNT`. They share one MATCH
+clause but are executed separately -- see _page() for why.
 """
 
 # Projection shared by every query that returns directive nodes.
@@ -32,33 +32,50 @@ DIRECTIVE_FIELDS = """
     n.tags         AS tags,
     n.msg          AS msg,
     n.constants    AS constants,
-    n.variables    AS variables,
-    n.Context      AS context
+    n.variables    AS variables
 """
+# NOTE: n.Context is deliberately NOT projected. It was the parser's denormalised string
+# form of a directive's provenance -- truncated to "line N of " on 98.5% of directives by
+# a precedence bug, and redundant with symbol_table. Provenance is served accurately by
+# /nodes/{id}/metadata. See PARSER.md.
 
-# Deterministic ordering for every paginated list, so limit/offset can walk a
-# result set without repeats or gaps.
+# Deterministic ordering so limit/offset can walk a result set without repeats or gaps.
 ORDER_BY_NODE_ID = "ORDER BY n.node_id"
 
+# The order Apache/ModSecurity actually evaluates directives in.
+ORDER_BY_EXECUTION = "ORDER BY n.phase, n.IfLevel, n.Location, n.VirtualHost, n.node_id"
 
-def _paginated(match_clause: str) -> str:
-    """Wrap a MATCH into a counted, ordered, paginated projection."""
+
+def _page(match_clause: str, order_by: str = ORDER_BY_NODE_ID) -> str:
+    """
+    One page of directives.
+
+    Streams: DISTINCT + ORDER BY + SKIP/LIMIT lets Neo4j discard rows as it goes. The
+    previous form collected every match into a list just to size it, materialising all
+    properties (args reaches 10 KB) -- 1.45 GB on a 12k-directive configuration, against
+    a 2.6 GiB transaction cap. The count now comes from _count() instead.
+    Measured: 1.45 GB -> 1.4 MB, and flat at deep offsets.
+    """
     return f"""
     {match_clause}
-    WITH collect(DISTINCT n) AS nodes
-    WITH nodes, size(nodes) AS total_count
-    UNWIND nodes AS n
-    WITH n, total_count
-    {ORDER_BY_NODE_ID}
+    WITH DISTINCT n
+    {order_by}
     SKIP $skip LIMIT $limit
-    RETURN total_count, {DIRECTIVE_FIELDS}
+    RETURN {DIRECTIVE_FIELDS}
+    """
+
+
+def _count(match_clause: str) -> str:
+    """Total match count. Touches no properties, so it stays cheap at any size."""
+    return f"""
+    {match_clause}
+    RETURN count(DISTINCT n) AS total_count
     """
 
 
 # ==================== Staleness guard ====================
 
 # Cheap existence check backing the "marked parsed but the graph is empty" 409.
-# Uses the per-label configuration_id indexes created by the parser.
 HAS_ANY_NODE = """
 MATCH (n {configuration_id: $cid})
 RETURN count(n) > 0 AS has_nodes
@@ -69,41 +86,37 @@ LIMIT 1
 # ==================== Directive lookup ====================
 
 # <- GET /directives/id/{nodeid}   (parser node_id)
-DIRECTIVE_BY_NODE_ID = _paginated(
-    "MATCH (n {configuration_id: $cid, node_id: $node_id})"
-)
+_BY_NODE_ID = "MATCH (n {configuration_id: $cid, node_id: $node_id})"
+DIRECTIVE_BY_NODE_ID_PAGE = _page(_BY_NODE_ID)
+DIRECTIVE_BY_NODE_ID_COUNT = _count(_BY_NODE_ID)
 
 # <- GET /directives/id   (ModSecurity rule id)
-DIRECTIVES_BY_RULE_ID = _paginated(
-    """MATCH (n {configuration_id: $cid})-[:Has]->
-             (:Id {value: $rule_id, configuration_id: $cid})"""
-)
+_BY_RULE_ID = """MATCH (n {configuration_id: $cid})-[:Has]->
+                       (:Id {value: $rule_id, configuration_id: $cid})"""
+DIRECTIVES_BY_RULE_ID_PAGE = _page(_BY_RULE_ID)
+DIRECTIVES_BY_RULE_ID_COUNT = _count(_BY_RULE_ID)
 
 # <- GET /directives/tag
-DIRECTIVES_BY_TAG = _paginated(
-    """MATCH (n {configuration_id: $cid})-[:Has]->
-             (:Tag {value: $tag, configuration_id: $cid})"""
-)
+_BY_TAG = """MATCH (n {configuration_id: $cid})-[:Has]->
+                   (:Tag {value: $tag, configuration_id: $cid})"""
+DIRECTIVES_BY_TAG_PAGE = _page(_BY_TAG)
+DIRECTIVES_BY_TAG_COUNT = _count(_BY_TAG)
+
+# <- POST /get_node_ids (second half): Postgres resolves the ids, this fetches the nodes.
+_BY_NODE_IDS = "MATCH (n {configuration_id: $cid}) WHERE n.node_id IN $node_ids"
+DIRECTIVES_BY_NODE_IDS_PAGE = _page(_BY_NODE_IDS)
+DIRECTIVES_BY_NODE_IDS_COUNT = _count(_BY_NODE_IDS)
 
 
 # ==================== Request simulation ====================
 
 # <- POST /parse_http_request + POST /cypher/to_json, collapsed into one call.
 # location/host are regexes applied with =~ (bound as parameters, not interpolated).
-# Ordering is execution order: phase, then IfLevel, then Location/VirtualHost
-# specificity, then node_id -- matching the old query's ORDER BY.
-DIRECTIVES_BY_REQUEST = f"""
-MATCH (vh:VirtualHost {{configuration_id: $cid}})<-[:InVirtualHost]-(n)
-      -[:AtLocation]->(l:Location {{configuration_id: $cid}})
-WHERE vh.value =~ $host AND l.value =~ $location
-WITH collect(DISTINCT n) AS nodes
-WITH nodes, size(nodes) AS total_count
-UNWIND nodes AS n
-WITH n, total_count
-ORDER BY n.phase, n.IfLevel, n.Location, n.VirtualHost, n.node_id
-SKIP $skip LIMIT $limit
-RETURN total_count, {DIRECTIVE_FIELDS}
-"""
+_BY_REQUEST = """MATCH (vh:VirtualHost {configuration_id: $cid})<-[:InVirtualHost]-(n)
+                       -[:AtLocation]->(l:Location {configuration_id: $cid})
+                 WHERE vh.value =~ $host AND l.value =~ $location"""
+DIRECTIVES_BY_REQUEST_PAGE = _page(_BY_REQUEST, ORDER_BY_EXECUTION)
+DIRECTIVES_BY_REQUEST_COUNT = _count(_BY_REQUEST)
 
 
 # ==================== Removal analysis ====================
@@ -114,36 +127,40 @@ RETURN total_count, {DIRECTIVE_FIELDS}
 # rule id, or a (:Regex) that Matches a (:Tag).
 # `n.node_id > a.node_id` keeps only removers declared after the victim -- a directive
 # cannot remove something declared later.
-REMOVERS_OF_NODE = f"""
-MATCH (n {{configuration_id: $cid}})-[:DoesRemove]->(crt)-[*..2]-
-      (a {{node_id: $node_id, configuration_id: $cid}})
-WHERE n.node_id > a.node_id
+_REMOVERS = """MATCH (n {configuration_id: $cid})-[:DoesRemove]->(crt)-[*..2]-
+                     (a {node_id: $node_id, configuration_id: $cid})
+               WHERE n.node_id > a.node_id"""
+
+# Carries the criterion alongside the directive, so it cannot reuse _page().
+REMOVERS_OF_NODE_PAGE = f"""
+{_REMOVERS}
 WITH DISTINCT n, crt
-WITH collect({{n: n, crt: crt}}) AS rows
-WITH rows, size(rows) AS total_count
-UNWIND rows AS row
-WITH row.n AS n, row.crt AS crt, total_count
 ORDER BY n.node_id
 SKIP $skip LIMIT $limit
-RETURN total_count,
-       labels(crt)[0] AS criterion_type,
+RETURN labels(crt)[0] AS criterion_type,
        crt.value      AS criterion_value,
        {DIRECTIVE_FIELDS}
 """
 
+REMOVERS_OF_NODE_COUNT = f"""
+{_REMOVERS}
+WITH DISTINCT n, crt
+RETURN count(*) AS total_count
+"""
+
 # <- GET /directives/remove_by/id   (ModSecurity rule id)
-DIRECTIVES_REMOVING_RULE_ID = _paginated(
-    """MATCH (n:secruleremovebyid {configuration_id: $cid})-[:DoesRemove]->
-             (:Id {value: $rule_id, configuration_id: $cid})"""
-)
+_REMOVING_RULE_ID = """MATCH (n:secruleremovebyid {configuration_id: $cid})-[:DoesRemove]->
+                             (:Id {value: $rule_id, configuration_id: $cid})"""
+DIRECTIVES_REMOVING_RULE_ID_PAGE = _page(_REMOVING_RULE_ID)
+DIRECTIVES_REMOVING_RULE_ID_COUNT = _count(_REMOVING_RULE_ID)
 
 # <- GET /directives/remove_by/tag
 # Two hops: RemoveByTag stores a pattern as (:Regex), and the parser pre-computes
 # (:Regex)-[:Match]->(:Tag) at write time.
-DIRECTIVES_REMOVING_TAG = _paginated(
-    """MATCH (n:secruleremovebytag {configuration_id: $cid})-[*..2]->
-             (:Tag {value: $tag, configuration_id: $cid})"""
-)
+_REMOVING_TAG = """MATCH (n:secruleremovebytag {configuration_id: $cid})-[*..2]->
+                         (:Tag {value: $tag, configuration_id: $cid})"""
+DIRECTIVES_REMOVING_TAG_PAGE = _page(_REMOVING_TAG)
+DIRECTIVES_REMOVING_TAG_COUNT = _count(_REMOVING_TAG)
 
 
 # ==================== Constant / variable analysis ====================
@@ -151,41 +168,33 @@ DIRECTIVES_REMOVING_TAG = _paginated(
 # <- GET /search_var/{var_name}
 # cstIndex is a GLOBAL fulltext index with no configuration_id, so results MUST be
 # filtered afterwards or symbols from other configurations leak through.
-SEARCH_SYMBOLS = """
+SEARCH_SYMBOLS_PAGE = """
 CALL db.index.fulltext.queryNodes('cstIndex', $query) YIELD node, score
 WHERE node.configuration_id = $cid
 WITH node, score
-ORDER BY score DESC
-WITH collect({node: node, score: score}) AS rows
-WITH rows, size(rows) AS total_count
-UNWIND rows AS row
-WITH row.node AS node, total_count
+ORDER BY score DESC, node.name
 SKIP $skip LIMIT $limit
-RETURN total_count,
-       node.name  AS name,
-       node.value AS value,
+RETURN node.name    AS name,
+       node.value   AS value,
        labels(node) AS labels
+"""
+
+SEARCH_SYMBOLS_COUNT = """
+CALL db.index.fulltext.queryNodes('cstIndex', $query) YIELD node
+WHERE node.configuration_id = $cid
+RETURN count(node) AS total_count
 """
 
 # <- POST /use_node
 # value IS NULL means "the node that has no value", not "any value" -- preserved from
 # the old semantics.
-DIRECTIVES_USING_CONSTANT = _paginated(
-    """MATCH (c {name: $name, configuration_id: $cid})<-[:Uses]-(n)
-       WHERE ($value IS NULL AND c.value IS NULL) OR c.value = $value"""
-)
+_USING = """MATCH (c {name: $name, configuration_id: $cid})<-[:Uses]-(n)
+            WHERE ($value IS NULL AND c.value IS NULL) OR c.value = $value"""
+DIRECTIVES_USING_CONSTANT_PAGE = _page(_USING)
+DIRECTIVES_USING_CONSTANT_COUNT = _count(_USING)
 
 # <- POST /get_setnode
-DIRECTIVES_SETTING_CONSTANT = _paginated(
-    """MATCH (c {name: $name, configuration_id: $cid})<-[:Sets|Define]-(n)
-       WHERE ($value IS NULL AND c.value IS NULL) OR c.value = $value"""
-)
-
-
-# ==================== Source mapping ====================
-
-# <- POST /get_node_ids (second half)
-# Postgres resolves the node_ids; this fetches the matching graph nodes.
-DIRECTIVES_BY_NODE_IDS = _paginated(
-    "MATCH (n {configuration_id: $cid}) WHERE n.node_id IN $node_ids"
-)
+_SETTING = """MATCH (c {name: $name, configuration_id: $cid})<-[:Sets|Define]-(n)
+              WHERE ($value IS NULL AND c.value IS NULL) OR c.value = $value"""
+DIRECTIVES_SETTING_CONSTANT_PAGE = _page(_SETTING)
+DIRECTIVES_SETTING_CONSTANT_COUNT = _count(_SETTING)

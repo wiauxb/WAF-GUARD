@@ -18,6 +18,7 @@ import {
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { useAuthStore } from '@/stores/auth'
+import { ConfigSwitcher } from '@/components/layout/ConfigSwitcher'
 import { useState } from 'react'
 
 const navItems = [
@@ -58,6 +59,9 @@ export function Sidebar() {
               WAF-GUARD
             </h1>
           </div>
+
+          {/* Active configuration — every analysis query depends on it */}
+          <ConfigSwitcher />
 
           {/* Navigation */}
           <nav className="flex-1 space-y-1 p-4">

@@ -53,51 +53,83 @@ class GraphQueryRepository:
 
     # ---------- generic paginated fetch ----------
 
-    def fetch_directives(
-        self, cypher: str, params: Dict[str, Any], limit: int, offset: int
+    def fetch_page(
+        self,
+        page_cypher: str,
+        count_cypher: str,
+        params: Dict[str, Any],
+        limit: int,
+        offset: int,
     ) -> tuple[List[Dict[str, Any]], int]:
-        """Run a paginated directive query, returning (rows, total_count)."""
-        rows = self._run(cypher, {**params, "limit": limit, "skip": offset})
-        total = rows[0]["total_count"] if rows else 0
+        """
+        Run a list query as two statements: one page, one count.
+
+        They are deliberately separate. Computing the total inside the page query means
+        collecting every match to size it, which materialises all node properties --
+        1.45 GB on a 12k-directive configuration, enough to exceed Neo4j's transaction
+        memory cap. Split, the page streams (~1.4 MB, flat at any offset) and the count
+        touches no properties (~0.4 MB).
+        """
+        rows = self._run(page_cypher, {**params, "limit": limit, "skip": offset})
+        count_rows = self._run(count_cypher, params)
+        total = count_rows[0]["total_count"] if count_rows else 0
         return rows, total
 
     # ---------- directive lookup ----------
 
     def directive_by_node_id(self, node_id: int, limit: int, offset: int):
-        return self.fetch_directives(Q.DIRECTIVE_BY_NODE_ID, {"node_id": node_id}, limit, offset)
+        return self.fetch_page(
+            Q.DIRECTIVE_BY_NODE_ID_PAGE, Q.DIRECTIVE_BY_NODE_ID_COUNT,
+            {"node_id": node_id}, limit, offset,
+        )
 
     def directives_by_rule_id(self, rule_id: int, limit: int, offset: int):
-        return self.fetch_directives(Q.DIRECTIVES_BY_RULE_ID, {"rule_id": rule_id}, limit, offset)
+        return self.fetch_page(
+            Q.DIRECTIVES_BY_RULE_ID_PAGE, Q.DIRECTIVES_BY_RULE_ID_COUNT,
+            {"rule_id": rule_id}, limit, offset,
+        )
 
     def directives_by_tag(self, tag: str, limit: int, offset: int):
-        return self.fetch_directives(Q.DIRECTIVES_BY_TAG, {"tag": tag}, limit, offset)
+        return self.fetch_page(
+            Q.DIRECTIVES_BY_TAG_PAGE, Q.DIRECTIVES_BY_TAG_COUNT,
+            {"tag": tag}, limit, offset,
+        )
 
     def directives_by_node_ids(self, node_ids: List[int], limit: int, offset: int):
         if not node_ids:
             return [], 0
-        return self.fetch_directives(
-            Q.DIRECTIVES_BY_NODE_IDS, {"node_ids": node_ids}, limit, offset
+        return self.fetch_page(
+            Q.DIRECTIVES_BY_NODE_IDS_PAGE, Q.DIRECTIVES_BY_NODE_IDS_COUNT,
+            {"node_ids": node_ids}, limit, offset,
         )
 
     # ---------- request simulation ----------
 
     def directives_by_request(self, location: str, host: str, limit: int, offset: int):
-        return self.fetch_directives(
-            Q.DIRECTIVES_BY_REQUEST, {"location": location, "host": host}, limit, offset
+        return self.fetch_page(
+            Q.DIRECTIVES_BY_REQUEST_PAGE, Q.DIRECTIVES_BY_REQUEST_COUNT,
+            {"location": location, "host": host}, limit, offset,
         )
 
     # ---------- removal analysis ----------
 
     def removers_of_node(self, node_id: int, limit: int, offset: int):
-        return self.fetch_directives(Q.REMOVERS_OF_NODE, {"node_id": node_id}, limit, offset)
+        return self.fetch_page(
+            Q.REMOVERS_OF_NODE_PAGE, Q.REMOVERS_OF_NODE_COUNT,
+            {"node_id": node_id}, limit, offset,
+        )
 
     def directives_removing_rule_id(self, rule_id: int, limit: int, offset: int):
-        return self.fetch_directives(
-            Q.DIRECTIVES_REMOVING_RULE_ID, {"rule_id": rule_id}, limit, offset
+        return self.fetch_page(
+            Q.DIRECTIVES_REMOVING_RULE_ID_PAGE, Q.DIRECTIVES_REMOVING_RULE_ID_COUNT,
+            {"rule_id": rule_id}, limit, offset,
         )
 
     def directives_removing_tag(self, tag: str, limit: int, offset: int):
-        return self.fetch_directives(Q.DIRECTIVES_REMOVING_TAG, {"tag": tag}, limit, offset)
+        return self.fetch_page(
+            Q.DIRECTIVES_REMOVING_TAG_PAGE, Q.DIRECTIVES_REMOVING_TAG_COUNT,
+            {"tag": tag}, limit, offset,
+        )
 
     # ---------- symbols ----------
 
@@ -105,22 +137,24 @@ class GraphQueryRepository:
         """
         Fulltext search over constants / variables / collections.
 
-        cstIndex is a GLOBAL index with no configuration_id, so the query filters
-        results by configuration afterwards — otherwise other configurations' symbols
-        leak through.
+        cstIndex is a GLOBAL index with no configuration_id, so both statements filter
+        results by configuration -- otherwise other configurations' symbols leak through.
         """
-        rows = self._run(Q.SEARCH_SYMBOLS, {"query": query, "limit": limit, "skip": offset})
-        total = rows[0]["total_count"] if rows else 0
-        return rows, total
+        return self.fetch_page(
+            Q.SEARCH_SYMBOLS_PAGE, Q.SEARCH_SYMBOLS_COUNT,
+            {"query": query}, limit, offset,
+        )
 
     def directives_using_constant(self, name: str, value: Optional[str], limit: int, offset: int):
-        return self.fetch_directives(
-            Q.DIRECTIVES_USING_CONSTANT, {"name": name, "value": value}, limit, offset
+        return self.fetch_page(
+            Q.DIRECTIVES_USING_CONSTANT_PAGE, Q.DIRECTIVES_USING_CONSTANT_COUNT,
+            {"name": name, "value": value}, limit, offset,
         )
 
     def directives_setting_constant(self, name: str, value: Optional[str], limit: int, offset: int):
-        return self.fetch_directives(
-            Q.DIRECTIVES_SETTING_CONSTANT, {"name": name, "value": value}, limit, offset
+        return self.fetch_page(
+            Q.DIRECTIVES_SETTING_CONSTANT_PAGE, Q.DIRECTIVES_SETTING_CONSTANT_COUNT,
+            {"name": name, "value": value}, limit, offset,
         )
 
 

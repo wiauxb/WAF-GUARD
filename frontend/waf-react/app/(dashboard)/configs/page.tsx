@@ -61,7 +61,7 @@ export default function ConfigsPage() {
         }
       }
 
-      return { configs: response.data }
+      return response.data
     },
   })
 
@@ -476,7 +476,7 @@ export default function ConfigsPage() {
         <LoadingSpinner />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {configsData?.configs?.map((config: ConfigurationResponse) => (
+          {configsData?.map((config: ConfigurationResponse) => (
             <Card 
               key={config.id} 
               className={`hover:shadow-lg transition-all relative ${
@@ -655,7 +655,7 @@ export default function ConfigsPage() {
       </Dialog>
 
       {/* Empty State */}
-      {!isLoading && configsData?.configs?.length === 0 && (
+      {!isLoading && configsData?.length === 0 && (
         <Card className="p-12 text-center">
           <FileCode className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
           <h3 className="text-xl font-semibold mb-2">No Configurations Yet</h3>

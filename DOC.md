@@ -23,8 +23,12 @@ separate track and are out of scope for this document.
 
 **Route totals:** all 43 implemented. See [Route Totals](#route-totals).
 
-**Critical path:** ~~ParserService~~ ✅ → ~~AnalysisService~~ ✅ → swap the chatbot's dummy
-tools for real calls → re-point the `/directives` and `/cypher` frontend pages.
+**Critical path:** ~~ParserService~~ ✅ → ~~AnalysisService~~ ✅ →
+~~re-point the `/directives` page~~ ✅ → swap the chatbot's dummy tools for real calls.
+
+> The `/cypher` page is still wired to the dropped free-Cypher endpoints and 404s on every
+> action. It remains in the sidebar; either rebuild it on `/analysis/directives/filter` or
+> remove the nav entry.
 
 > ⚠️ **Schema migration required on existing databases.** `symbol_table.node_id` must be
 > nullable — only the innermost frame of a directive's context chain carries a node_id.
@@ -723,7 +727,10 @@ class DirectiveResponse(BaseModel):
     msg: Optional[str]
     constants: List[str]
     variables: List[str]
-    context: str                       # "file:line" or the macro chain
+
+# NOTE: there is deliberately no `context` field. The parser's denormalised provenance
+# string was truncated on ~98.5% of directives and duplicated symbol_table; it was removed.
+# Use GET /analysis/nodes/{node_id}/metadata for a directive's source chain.
 
 class DirectiveListResponse(BaseModel):
     configuration_id: int
@@ -1119,9 +1126,13 @@ class ConfigTreeResponse(BaseModel):
 > [configs/page.tsx:153](frontend/waf-react/app/(dashboard)/configs/page.tsx#L153)'s
 > "Analyze" button now works.
 >
-> 🔴 **TODO (frontend)** — the page fires `POST /parser/parse/{id}` and shows a toast, but
-> never polls `GET /parser/status/{id}`, so the row keeps showing `parsing` until manually
-> refreshed.
+> ✅ Status polling is implemented in
+> [ConfigGuard](frontend/waf-react/components/analysis/ConfigGuard.tsx), which starts a
+> parse and polls `GET /parser/status/{id}` until it leaves `parsing`.
+>
+> 🔴 **TODO (frontend)** — the *configs* page still fires a parse without polling, so its
+> row keeps showing `parsing` until manually refreshed. The polling hook in ConfigGuard
+> can be reused there.
 
 | Method | Endpoint | Auth | Request | Response | Description |
 |--------|----------|------|---------|----------|-------------|
@@ -1154,7 +1165,9 @@ See the **ParserService → Response Schemas** section above for `ParseResponse`
 ## Analysis Routes (`/analysis`)
 
 > ✅ **DONE** — 13/13 implemented in
-> [api/routes/analysis.py](backend/src/api/routes/analysis.py).
+> [api/routes/analysis.py](backend/src/api/routes/analysis.py), and all 13 are consumed by
+> the [directives page](frontend/waf-react/app/(dashboard)/directives/page.tsx) through the
+> typed client in [lib/analysis.ts](frontend/waf-react/lib/analysis.ts).
 
 All routes are authenticated and paginated (`limit`, default 100, max 1000; `offset`).
 `total_count` always reports the **full** match count, not the page size.
@@ -1965,7 +1978,6 @@ Each directive becomes **one node whose label is the lowercased directive name**
 | `conditions` | list[string] | The enclosing `<If>` expressions |
 | `constants` | list[string] | Constants referenced, from taint recovery |
 | `variables` | list[string] | Flattened `[collection, name, ...]` pairs |
-| `Context` | string | `"file:line"`, or the macro chain |
 | `id` | int | *optional* — ModSecurity `id:NNN` |
 | `tags` | list[string] | *optional* — ModSecurity `tag:` values |
 | `phase` | int | *optional* — ModSecurity `phase:N` |

@@ -60,6 +60,8 @@ class AnalysisService:
         `rule_id` comes from the node's `id` property (ModSecurity's id:NNN) and is kept
         separate from `node_id` (the parser's). List properties can be absent on older
         nodes, so they default to [].
+
+        Provenance is deliberately absent here -- see get_node_metadata().
         """
         return DirectiveResponse(
             node_id=row["node_id"],
@@ -75,7 +77,6 @@ class AnalysisService:
             msg=row.get("msg"),
             constants=row.get("constants") or [],
             variables=row.get("variables") or [],
-            context=row.get("context"),
         )
 
     def _directive_list(

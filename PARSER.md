@@ -319,7 +319,7 @@ grep -c '<Location '     backend/src/storage/configs/config_5/dump.conf   # 217
 
 ---
 
-### 🔴 #2 — Macro context is truncated on 98.5% of directives
+### ✅ #2 — Macro context truncated on 98.5% of directives — RESOLVED by removal
 
 **The code.** `context.py:54`:
 
@@ -356,14 +356,26 @@ line 7 of [secrule](/etc/httpd/conf/common/macros/aaa-security.conf:58) used on 
 
 Every file, every line, every macro name — thrown away and replaced with `line 7 of `.
 
-The underlying data is *not* lost: `symbol_table` and `macro_calls` still record the chain
-correctly, which is why `get_macro_call_trace` can rebuild it. Only the denormalised
-convenience string on the graph node is corrupt. That limits the damage, but it also means
-the `Context` property is currently worthless for display or search.
+**Resolution (2026-08-25): the field was removed rather than repaired.**
 
-> A related nit visible above: the correct rendering prints `used on line 1 of line 1 of`
-> because the frame prints `self.use.line_num` and then `str(self.use)`, which repeats it.
-> Worth cleaning up whenever this is fixed.
+The underlying data was never lost — `symbol_table` and `macro_calls` record the chain
+correctly, which is why `get_macro_call_trace` can rebuild it. The `Context` property was
+only ever a denormalised copy of that, and a broken one. Since
+`GET /nodes/{id}/metadata` serves the same provenance accurately for 100% of directives,
+the property earned nothing:
+
+- `core/directives.py` no longer writes `Context` in `node_properties()`
+- `analysis/queries.py` no longer projects it, and `DirectiveResponse` has no `context`
+- Verified write-only beforehand: nothing matched, filtered or joined on it
+
+No re-parse is required — existing graphs keep a vestigial property nothing reads, and it
+disappears on the next parse.
+
+`MacroContext.__str__` still carries the precedence bug, but it now only reaches parser
+stderr messages (`directives.py` prints `from {context}` on malformed rules), not stored
+data. A related nit if it is ever fixed: the correct rendering prints
+`used on line 1 of line 1 of`, because the frame prints `self.use.line_num` and then
+`str(self.use)`, which repeats it.
 
 ---
 
@@ -596,7 +608,7 @@ Sorting the set before iterating fixes it in one line.
 | # | Defect | Severity | Measured blast radius | Recommendation |
 |---|--------|----------|----------------------|----------------|
 | 1 | `<LocationMatch>` / `<Directory>` / `<Proxy>` untracked | 🔴 Critical | 74,131 directives (80.2%), 40,290 SecRules | **Fix first.** Blocks meaningful request filtering |
-| 2 | Macro `Context` string truncated | 🔴 Critical | 91,032 directives (98.5%) | **Fix first.** One-line precedence fix; underlying data intact |
+| 2 | Macro `Context` string truncated | ✅ Resolved | was 91,032 directives (98.5%) | **Done** — field removed; provenance served by `/nodes/{id}/metadata` |
 | 3 | `RemoveById` ranges produce no edges | 🟠 High | All range-only removals | Fix with #4 |
 | 4 | Tag-removal edges resolved too early | 🟠 High | Up to 10,000 directives per run | Fix with #3, as a post-pass |
 | 5 | `msg:` regex character class | 🟡 Medium | 131 SecRules | Cheap, fix opportunistically |
@@ -608,9 +620,9 @@ Sorting the set before iterating fixes it in one line.
 | 11 | Output not reproducible across runs | ⚪ Low | 561 directives (0.6%) | One-line fix: sort the set |
 | 12 | Counting, spelling, `continue` | ⚪ Cosmetic | None | Whenever touching the code |
 
-**Suggested first tranche: #1 and #2.** Together they are the difference between an
-analysis layer that describes your configuration and one that describes 20% of it with
-unreadable provenance. #3 and #4 are a natural second tranche since both live in the
+**#2 is resolved.** **#1 is now the top of the list** — the difference between an analysis
+layer that describes your configuration and one that describes 20% of it. The
+`location` column in the directives UI is already built and waiting for it. #3 and #4 are a natural second tranche since both live in the
 removal path. #7 and #8 are pure wins with no semantic risk.
 
 None of these are fixed by the port. They are reproduced exactly, so that fixing them is a

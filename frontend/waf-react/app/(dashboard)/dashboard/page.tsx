@@ -26,7 +26,7 @@ export default function DashboardPage() {
         }
       }
       
-      return { configs: response.data }
+      return response.data
     },
   })
 
@@ -41,7 +41,7 @@ export default function DashboardPage() {
   const stats = [
     {
       title: 'Configurations',
-      value: configsData?.configs?.length || 0,
+      value: configsData?.length || 0,
       icon: FileCode,
       description: 'Total WAF configs',
       href: '/configs',
@@ -59,7 +59,7 @@ export default function DashboardPage() {
     },
     {
       title: 'Parsed Configs',
-      value: configsData?.configs?.filter((c: ConfigurationResponse) => c.parsing_status === 'parsed').length || 0,
+      value: configsData?.filter((c: ConfigurationResponse) => c.parsing_status === 'parsed').length || 0,
       icon: Activity,
       description: 'Analyzed configurations',
       href: '/configs',
