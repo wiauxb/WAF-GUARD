@@ -4,6 +4,8 @@ Database configuration and connection management.
 Supports both PostgreSQL (SQLAlchemy) and Neo4j (Neo4j Python Driver).
 """
 
+from fastapi import HTTPException
+from fastapi.exceptions import RequestValidationError
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
@@ -70,6 +72,11 @@ def get_postgres_db() -> Generator[Session, None, None]:
     try:
         yield db
         db.commit()  # Commit if no exceptions
+    except (HTTPException, RequestValidationError):
+        # A deliberate 4xx from a route or dependency, or a request-validation failure,
+        # is control flow -- not a database error. Roll back but don't log it as one.
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()  # Rollback on error
         logger.error(f"Database error: {e}")
@@ -168,6 +175,9 @@ def get_neo4j_db() -> Generator[Neo4jSession, None, None]:
     session = neo4j_connection.get_session()
     try:
         yield session
+    except (HTTPException, RequestValidationError):
+        # Deliberate 4xx or a request-validation failure -- not a Neo4j failure.
+        raise
     except Exception as e:
         logger.error(f"Neo4j error: {e}")
         raise

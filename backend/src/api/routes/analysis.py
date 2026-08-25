@@ -1,0 +1,262 @@
+"""
+Analysis routes — read-only queries over a parsed configuration.
+
+Every endpoint accepts an optional `?configuration_id=`; when omitted it falls back to
+the caller's active configuration (see get_analysis_configuration_id, which also returns
+400/404/409 when the target is missing or not queryable).
+
+Two identifier spaces appear in these paths and must not be confused:
+  {node_id}  - the PARSER id, present on every directive
+  {rule_id}  - the MODSECURITY id:NNN, present only where declared, one-to-many
+"""
+
+from fastapi import APIRouter, Depends, Path, Query, status
+
+from api.dependencies import get_analysis_configuration_id, get_analysis_service
+from services.analysis.schemas import (
+    ConstantQuery,
+    DEFAULT_LIMIT,
+    DirectiveListResponse,
+    HttpRequestFilter,
+    MacroTraceResponse,
+    MAX_LIMIT,
+    NodeMetadataResponse,
+    RemoverListResponse,
+    SourceLocationQuery,
+    SymbolSearchResponse,
+)
+from services.analysis.service import AnalysisService
+
+router = APIRouter(prefix="/analysis", tags=["analysis"])
+
+
+def _limit(
+    limit: int = Query(DEFAULT_LIMIT, ge=1, le=MAX_LIMIT, description="Max results per page"),
+) -> int:
+    return limit
+
+
+def _offset(offset: int = Query(0, ge=0, description="Results to skip")) -> int:
+    return offset
+
+
+# ==========================================================================
+# Directive lookup
+#
+# ORDERING MATTERS: the literal-prefix routes (/by-rule-id, /by-tag, /filter)
+# MUST be declared before /directives/{node_id}. FastAPI matches in declaration
+# order, and with node_id typed as int a request to /directives/by-rule-id/5
+# would otherwise hit the {node_id} route and fail validation with 422.
+# ==========================================================================
+
+@router.get("/directives/by-rule-id/{rule_id}", response_model=DirectiveListResponse)
+async def get_directives_by_rule_id(
+    rule_id: int = Path(..., description="ModSecurity rule id (id:NNN) — NOT the node_id"),
+    configuration_id: int = Depends(get_analysis_configuration_id),
+    limit: int = Depends(_limit),
+    offset: int = Depends(_offset),
+    analysis: AnalysisService = Depends(get_analysis_service),
+):
+    """
+    Directives declaring a given ModSecurity rule id.
+
+    Returns several directives when a rule is chained — a `chain` action spans multiple
+    directives that all carry the same id.
+    """
+    return analysis.get_directives_by_rule_id(configuration_id, rule_id, limit, offset)
+
+
+@router.get("/directives/by-tag/{tag}", response_model=DirectiveListResponse)
+async def get_directives_by_tag(
+    tag: str = Path(..., description="Exact tag value"),
+    configuration_id: int = Depends(get_analysis_configuration_id),
+    limit: int = Depends(_limit),
+    offset: int = Depends(_offset),
+    analysis: AnalysisService = Depends(get_analysis_service),
+):
+    """Directives carrying a given tag."""
+    return analysis.get_directives_by_tag(configuration_id, tag, limit, offset)
+
+
+@router.post("/directives/filter", response_model=DirectiveListResponse)
+async def filter_directives_by_request(
+    filters: HttpRequestFilter = HttpRequestFilter(),
+    configuration_id: int = Depends(get_analysis_configuration_id),
+    limit: int = Depends(_limit),
+    offset: int = Depends(_offset),
+    analysis: AnalysisService = Depends(get_analysis_service),
+):
+    """
+    Directives applying to a host/location, in execution order.
+
+    - **location**, **host**: regexes. Use `.*` to match everything.
+
+    Ordered by phase, then `<If>` depth, then location/vhost, then node_id — the order
+    Apache and ModSecurity would actually evaluate them in.
+    """
+    return analysis.filter_directives_by_request(
+        configuration_id, filters.location, filters.host, limit, offset
+    )
+
+
+@router.get("/directives/{node_id}/removed-by", response_model=RemoverListResponse)
+async def get_removers_of_node(
+    node_id: int = Path(..., description="Parser node_id of the removed directive"),
+    configuration_id: int = Depends(get_analysis_configuration_id),
+    limit: int = Depends(_limit),
+    offset: int = Depends(_offset),
+    analysis: AnalysisService = Depends(get_analysis_service),
+):
+    """
+    What removed this directive, and on what grounds?
+
+    Handles removal both by id and by tag. Each entry names the criterion
+    (`Id` with a ModSecurity rule id, or `Regex` with a tag pattern) and the directive
+    that did the removing.
+    """
+    return analysis.get_removers_of_node(configuration_id, node_id, limit, offset)
+
+
+@router.get("/directives/{node_id}", response_model=DirectiveListResponse)
+async def get_directive_by_node_id(
+    node_id: int = Path(..., description="Parser node_id — NOT the ModSecurity rule id"),
+    configuration_id: int = Depends(get_analysis_configuration_id),
+    limit: int = Depends(_limit),
+    offset: int = Depends(_offset),
+    analysis: AnalysisService = Depends(get_analysis_service),
+):
+    """Single directive by its parser node_id."""
+    return analysis.get_directive_by_node_id(configuration_id, node_id, limit, offset)
+
+
+# ==================== Removal analysis ====================
+
+@router.get("/removals/by-rule-id/{rule_id}", response_model=DirectiveListResponse)
+async def get_directives_removing_rule_id(
+    rule_id: int = Path(..., description="ModSecurity rule id being removed"),
+    configuration_id: int = Depends(get_analysis_configuration_id),
+    limit: int = Depends(_limit),
+    offset: int = Depends(_offset),
+    analysis: AnalysisService = Depends(get_analysis_service),
+):
+    """
+    `SecRuleRemoveById` directives targeting a rule id.
+
+    The targeted rule need not exist here — removals often reference rules that were
+    never loaded in this configuration.
+    """
+    return analysis.get_directives_removing_rule_id(configuration_id, rule_id, limit, offset)
+
+
+@router.get("/removals/by-tag/{tag}", response_model=DirectiveListResponse)
+async def get_directives_removing_tag(
+    tag: str = Path(..., description="Tag value being removed"),
+    configuration_id: int = Depends(get_analysis_configuration_id),
+    limit: int = Depends(_limit),
+    offset: int = Depends(_offset),
+    analysis: AnalysisService = Depends(get_analysis_service),
+):
+    """`SecRuleRemoveByTag` directives whose pattern matches a given tag."""
+    return analysis.get_directives_removing_tag(configuration_id, tag, limit, offset)
+
+
+# ==================== Constant / variable analysis ====================
+
+@router.get("/symbols/search", response_model=SymbolSearchResponse)
+async def search_symbols(
+    q: str = Query(..., min_length=1, max_length=500, description="Search terms"),
+    configuration_id: int = Depends(get_analysis_configuration_id),
+    limit: int = Depends(_limit),
+    offset: int = Depends(_offset),
+    analysis: AnalysisService = Depends(get_analysis_service),
+):
+    """
+    Fuzzy fulltext search over constants, variables and collections.
+
+    Each match reports its labels so you can tell a `Constant` from a `Variable`.
+    """
+    return analysis.search_symbols(configuration_id, q, limit, offset)
+
+
+@router.post("/symbols/used-by", response_model=DirectiveListResponse)
+async def get_directives_using_constant(
+    query: ConstantQuery,
+    configuration_id: int = Depends(get_analysis_configuration_id),
+    limit: int = Depends(_limit),
+    offset: int = Depends(_offset),
+    analysis: AnalysisService = Depends(get_analysis_service),
+):
+    """
+    Directives that *read* a constant or variable.
+
+    Omitting **value** matches the node with no value set — not "any value". A name can
+    have several distinct nodes differing only by value.
+    """
+    return analysis.get_directives_using_constant(
+        configuration_id, query.name, query.value, limit, offset
+    )
+
+
+@router.post("/symbols/set-by", response_model=DirectiveListResponse)
+async def get_directives_setting_constant(
+    query: ConstantQuery,
+    configuration_id: int = Depends(get_analysis_configuration_id),
+    limit: int = Depends(_limit),
+    offset: int = Depends(_offset),
+    analysis: AnalysisService = Depends(get_analysis_service),
+):
+    """Directives that *set or define* a constant or variable (`setvar`, `setenv`, `Define`)."""
+    return analysis.get_directives_setting_constant(
+        configuration_id, query.name, query.value, limit, offset
+    )
+
+
+# ==================== Source mapping ====================
+
+@router.post("/nodes/at-source", response_model=DirectiveListResponse)
+async def get_nodes_at_source(
+    query: SourceLocationQuery,
+    configuration_id: int = Depends(get_analysis_configuration_id),
+    limit: int = Depends(_limit),
+    offset: int = Depends(_offset),
+    analysis: AnalysisService = Depends(get_analysis_service),
+):
+    """
+    Which directives did a given configuration line produce?
+
+    The inverse of `/nodes/{node_id}/metadata`. One line inside a macro can expand into
+    many directives.
+    """
+    return analysis.get_nodes_at_source(
+        configuration_id, query.file_path, query.line_number, limit, offset
+    )
+
+
+@router.get("/nodes/{node_id}/metadata", response_model=NodeMetadataResponse)
+async def get_node_metadata(
+    node_id: int = Path(..., description="Parser node_id"),
+    configuration_id: int = Depends(get_analysis_configuration_id),
+    analysis: AnalysisService = Depends(get_analysis_service),
+):
+    """
+    Source file/line chain for a directive.
+
+    Frames run innermost-first; `macro_name` is `/` for the frame that sits directly in
+    a file.
+    """
+    return analysis.get_node_metadata(configuration_id, node_id)
+
+
+@router.get("/nodes/{node_id}/macro-trace", response_model=MacroTraceResponse)
+async def get_macro_call_trace(
+    node_id: int = Path(..., description="Parser node_id"),
+    configuration_id: int = Depends(get_analysis_configuration_id),
+    analysis: AnalysisService = Depends(get_analysis_service),
+):
+    """
+    Full macro call stack for a directive, with the source text of each frame.
+
+    Reads the extracted configuration files to pull each `<Macro>` body and the `Use`
+    site that invoked it. `formatted` is a pre-rendered version for display.
+    """
+    return analysis.get_macro_call_trace(configuration_id, node_id)

@@ -3,13 +3,16 @@ services:
   neo4j_na:
     container_name: neo4j_na
     image: neo4j:latest
-    # volumes:
+    volumes:
+      # The neo4j image declares VOLUME /data, so without an explicit mount Docker
+      # attaches a fresh ANONYMOUS volume on every `compose up` after a `down` —
+      # silently losing the whole graph while postgres_data (a named volume) survives.
+      # Note /data, not /neo4j/ as the old commented line had it.
+      - neo4j_data:/data
       # - ${DOCKER_DATA_PATH}/neo4j/logs:/logs
       # - ${DOCKER_DATA_PATH}/neo4j/config:/config
-      # - ${DOCKER_DATA_PATH}/neo4j/data:/data
       # - ${DOCKER_DATA_PATH}/neo4j/import:/import
       # - ${EXPORT_DIR}:/import/exports
-      # - neo4j_data:/neo4j/
     environment:
       - NEO4J_AUTH=${NEO4J_USER}/${NEO4J_PASSWORD}
       - NEO4J_PLUGINS=["apoc"]

@@ -159,9 +159,36 @@ class ConfigFileStorage:
         
         if not dump_path.exists():
             raise FileNotFoundError(f"Dump file not found for configuration {config_id}")
-        
+
         return str(dump_path)
-    
+
+    def get_extracted_path(self, config_id: int) -> str:
+        """
+        Get path to the extracted configuration tree (the directory containing `conf/`).
+
+        This is the parser's `config_root`: the dump refers to files by their path inside
+        the WAF container (e.g. /etc/httpd/conf/common/macros.conf), and the parser
+        rewrites everything up to and including `conf/` with this root to find the real
+        file on disk.
+
+        Args:
+            config_id: Configuration ID
+
+        Returns:
+            Path to the extracted directory
+
+        Raises:
+            FileNotFoundError: If the extracted directory doesn't exist
+        """
+        extracted_path = self._get_config_dir(config_id) / "extracted"
+
+        if not extracted_path.exists():
+            raise FileNotFoundError(
+                f"Extracted files not found for configuration {config_id}"
+            )
+
+        return str(extracted_path)
+
     def get_file_tree(self, config_id: int, relative_path: str = "") -> Dict[str, Any]:
         """
         Get file tree structure or file content.

@@ -215,15 +215,29 @@ class ConfigManagerService:
         config = self.config_repo.get_by_id(configuration_id)
         if not config:
             raise ValueError(f"Configuration with id {configuration_id} not found")
-        
+
+        # Delete parsed data. PostgreSQL cascades handle symbol_table / macro_definitions
+        # / macro_calls when the configuration row goes, but nothing else clears Neo4j —
+        # without this, every deleted configuration leaks its graph permanently.
+        # Imported here to avoid a circular import at module load.
+        from services.parser.service import clear_configuration_data
+        try:
+            clear_configuration_data(self.db, configuration_id)
+        except Exception as e:
+            # Never block deletion on graph cleanup; log loudly so orphans are traceable.
+            logger.error(
+                f"Failed to clear parsed data for configuration {configuration_id}: {e}",
+                exc_info=True,
+            )
+
         # Delete files
         self.storage.delete_config_files(configuration_id)
-        
+
         # Delete DB record (cascades to parsing data)
         self.config_repo.delete(config)
-        
+
         logger.info(f"Deleted configuration {configuration_id}")
-        
+
         return True
     
     def get_dump_path(self, configuration_id: int) -> str:

@@ -12,7 +12,12 @@ class Symbol(Base):
         nullable=False,
         index=True
     )
-    node_id = Column(String(255), nullable=False, index=True)
+    # Nullable: a symbol row is written for every frame of a directive's context chain.
+    # Only the innermost frame carries the directive's node_id; the rows recording where
+    # a macro is *defined* and where it is *used* have none. The old schema agreed
+    # (`node_id integer`, no NOT NULL), and the old lookup query filtered these out with
+    # an explicit `WHERE node_id IS NOT NULL`.
+    node_id = Column(String(255), nullable=True, index=True)
     file_path = Column(String(500), nullable=False)
     line_number = Column(Integer, nullable=False)
     
