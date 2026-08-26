@@ -1,6 +1,5 @@
 'use client'
 
-import { Info } from 'lucide-react'
 import { Badge, directiveVariant } from '@/components/ui/badge'
 import {
   Table,
@@ -19,8 +18,6 @@ interface DirectiveTableProps {
   /** Re-run a search from a chip inside the table. */
   onTagClick?: (tag: string) => void
   onRuleIdClick?: (ruleId: number) => void
-  /** Suppress the Location explainer in nested/compact tables where it is just noise. */
-  showHints?: boolean
 }
 
 /**
@@ -28,8 +25,9 @@ interface DirectiveTableProps {
  *
  * Columns are chosen from what is actually populated: `if_level` and `conditions` are
  * empty on every directive in practice, so they live in the detail panel instead.
- * `location` IS shown — it is nearly always empty today because the parser does not yet
- * track <LocationMatch>, but it is the next fix, so the column is here waiting for it.
+ * `location` IS shown, though it is nearly always empty today: the parser does not yet
+ * track <LocationMatch>, so directives inside those blocks carry no location. That is the
+ * next parser fix, so the column stays.
  */
 export function DirectiveTable({
   directives,
@@ -37,27 +35,9 @@ export function DirectiveTable({
   selectedNodeId,
   onTagClick,
   onRuleIdClick,
-  showHints = true,
 }: DirectiveTableProps) {
-  // Explain the blank Location column rather than letting it look like a bug.
-  const withLocation = directives.filter((d) => d.location).length
-  const locationMostlyEmpty =
-    showHints && directives.length >= 5 && withLocation / directives.length < 0.1
-
   return (
     <div className="space-y-3">
-      {locationMostlyEmpty && (
-        <div className="flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
-          <Info className="mt-0.5 h-4 w-4 shrink-0" />
-          <p>
-            <span className="font-medium">Location is mostly empty.</span> The parser does
-            not track <code className="font-mono text-xs">&lt;LocationMatch&gt;</code> yet,
-            so directives inside those blocks are recorded without a location. Plain{' '}
-            <code className="font-mono text-xs">&lt;Location&gt;</code> blocks are correct.
-          </p>
-        </div>
-      )}
-
       <div className="rounded-lg border">
         <Table>
           <TableHeader>

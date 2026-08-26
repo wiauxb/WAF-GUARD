@@ -29,7 +29,7 @@ import {
   searchSymbols,
 } from '@/lib/analysis'
 import { useConfigStore } from '@/stores/config'
-import type { DirectiveListResponse, DirectiveResponse } from '@/types'
+import type { DirectiveListResponse, DirectiveResponse, SymbolMatch } from '@/types'
 
 type Page = { limit: number; offset: number }
 const FIRST_PAGE: Page = { limit: DEFAULT_PAGE_SIZE, offset: 0 }
@@ -49,7 +49,10 @@ export default function DirectivesPage() {
 
   const [symbolQuery, setSymbolQuery] = useState('')
   const [appliedSymbol, setAppliedSymbol] = useState('')
-  const [activeSymbol, setActiveSymbol] = useState<string | null>(null)
+  // The whole match, not just its name: a :Variable node is identified by (name, value),
+  // and one name commonly has several nodes — one per assigned value. Keying on the name
+  // alone highlighted every variant at once and queried only the value-IS-NULL one.
+  const [activeSymbol, setActiveSymbol] = useState<SymbolMatch | null>(null)
 
   const [removalKind, setRemovalKind] = useState<'rule' | 'tag'>('rule')
   const [removalInput, setRemovalInput] = useState('')
@@ -109,7 +112,7 @@ export default function DirectivesPage() {
     setTab('symbols')
     setSymbolQuery(name)
     setAppliedSymbol(name)
-    setActiveSymbol(name)
+    setActiveSymbol({ name, value: null, labels: [] })
   }
 
   // ---------- symbols tab ----------
@@ -120,14 +123,22 @@ export default function DirectivesPage() {
     queryFn: () => searchSymbols(appliedSymbol, { limit: 100 }),
   })
   const usedBy = useQuery({
-    queryKey: ['analysis', 'used-by', configId, activeSymbol],
+    queryKey: ['analysis', 'used-by', configId, activeSymbol?.name, activeSymbol?.value],
     enabled: !!activeSymbol,
-    queryFn: () => getDirectivesUsingConstant({ name: activeSymbol! }, { limit: 25 }),
+    queryFn: () =>
+      getDirectivesUsingConstant(
+        { name: activeSymbol!.name, value: activeSymbol!.value },
+        { limit: 25 }
+      ),
   })
   const setBy = useQuery({
-    queryKey: ['analysis', 'set-by', configId, activeSymbol],
+    queryKey: ['analysis', 'set-by', configId, activeSymbol?.name, activeSymbol?.value],
     enabled: !!activeSymbol,
-    queryFn: () => getDirectivesSettingConstant({ name: activeSymbol! }, { limit: 25 }),
+    queryFn: () =>
+      getDirectivesSettingConstant(
+        { name: activeSymbol!.name, value: activeSymbol!.value },
+        { limit: 25 }
+      ),
   })
 
   // ---------- removals tab ----------
@@ -176,7 +187,7 @@ export default function DirectivesPage() {
             </TabsTrigger>
             <TabsTrigger value="symbols">
               <Tags className="mr-2 h-4 w-4" />
-              Symbols
+              Variables
             </TabsTrigger>
             <TabsTrigger value="removals">
               <Scissors className="mr-2 h-4 w-4" />
@@ -298,10 +309,12 @@ export default function DirectivesPage() {
                     {symbols.data.matches.map((m, i) => (
                       <button
                         key={`${m.name}-${i}`}
-                        onClick={() => setActiveSymbol(m.name)}
+                        onClick={() => setActiveSymbol(m)}
                         className={
                           'w-full rounded-md border px-3 py-2 text-left hover:bg-muted ' +
-                          (activeSymbol === m.name ? 'border-primary bg-primary/5' : '')
+                          (activeSymbol?.name === m.name && activeSymbol?.value === m.value
+                            ? 'border-primary bg-primary/5'
+                            : '')
                         }
                       >
                         <div className="flex items-center justify-between gap-2">
@@ -317,7 +330,7 @@ export default function DirectivesPage() {
                     ))}
                     {symbols.data.matches.length === 0 && (
                       <p className="py-6 text-center text-sm text-muted-foreground">
-                        No symbols matched.
+                        No variables matched.
                       </p>
                     )}
                   </CardContent>
@@ -325,12 +338,12 @@ export default function DirectivesPage() {
 
                 <div className="space-y-4">
                   {!activeSymbol ? (
-                    <EmptyState icon={Tags} title="Select a symbol" />
+                    <EmptyState icon={Tags} title="Select a variable" />
                   ) : (
                     <>
                       <SymbolUsage
                         title="Read by"
-                        description="Directives that use this symbol"
+                        description="Directives that use this variable"
                         data={usedBy.data}
                         loading={usedBy.isLoading}
                         onSelect={(d) => {
@@ -474,11 +487,7 @@ function SymbolUsage({
           <p className="py-4 text-center text-sm text-muted-foreground">None.</p>
         ) : (
           <div className="max-h-72 overflow-y-auto">
-            <DirectiveTable
-              directives={data.directives}
-              onSelect={onSelect}
-              showHints={false}
-            />
+            <DirectiveTable directives={data.directives} onSelect={onSelect} />
           </div>
         )}
       </CardContent>

@@ -14,7 +14,14 @@ COLLECTIONS = ["ARGS","ARGS_COMBINED_SIZE","ARGS_GET","ARGS_GET_NAMES","ARGS_NAM
              "SCRIPT_MODE","SCRIPT_UID","SCRIPT_USERNAME","SDBM_DELETE_ERROR","SERVER_ADDR","SERVER_NAME","SERVER_PORT","SESSION",
              "SESSIONID","STATUS_LINE","STREAM_INPUT_BODY","STREAM_OUTPUT_BODY","TIME","TIME_DAY","TIME_EPOCH","TIME_HOUR",
              "TIME_MIN","TIME_MON","TIME_SEC","TIME_WDAY","TIME_YEAR","TX","UNIQUE_ID","URLENCODED_ERROR","USERID","USERAGENT_IP",
-             "WEBAPPID","WEBSERVER_ERROR_LOG","XML"]
+             "WEBAPPID","WEBSERVER_ERROR_LOG","XML",
+             # Persistent collections, created with initcol/setsid/setuid. The original
+             # list covered the read-only request collections but only included SESSION,
+             # so %{IP.blocked} and friends were classified as a Constant literally named
+             # "IP.blocked" instead of variable `blocked` in collection `IP` -- while the
+             # SecRule-target path (SecRule IP:blocked) got it right, giving the same
+             # variable two representations. See PARSER.md.
+             "GLOBAL","IP","RESOURCE","USER"]
 
 OPERATORS = ["@beginsWith", "@contains", "@containsWord", "@detectSQLi", "@detectXSS", "@endsWith", "@fuzzyHash", "@eq", "@ge",
              "@geoLookup", "@gsbLookup", "@gt", "@inspectFile", "@ipMatch", "@ipMatchF", "@ipMatchFromFile", "@le", "@lt", "@noMatch",
