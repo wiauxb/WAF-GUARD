@@ -103,6 +103,34 @@ class GraphQueryRepository:
             {"node_ids": node_ids}, limit, offset,
         )
 
+    # ---------- combinable search ----------
+
+    def search_directives(
+        self,
+        clauses: List[str],
+        params: Dict[str, Any],
+        sort_by: str,
+        sort_dir: str,
+        limit: int,
+        offset: int,
+    ):
+        """
+        Any combination of directive criteria, in any supported order.
+
+        The clause list and its parameters are built by the service; this only assembles
+        and runs them. `sort_by` is a validated SortField, never raw caller input -- see
+        Q.build_directive_search.
+        """
+        page_cypher, count_cypher = Q.build_directive_search(clauses, sort_by, sort_dir)
+        return self.fetch_page(page_cypher, count_cypher, params, limit, offset)
+
+    def directive_facets(self) -> Dict[str, List[Dict[str, Any]]]:
+        """Distinct types and phases present, with counts, for the filter dropdowns."""
+        return {
+            "types": self._run(Q.FACET_TYPES),
+            "phases": self._run(Q.FACET_PHASES),
+        }
+
     # ---------- request simulation ----------
 
     def directives_by_request(self, location: str, host: str, limit: int, offset: int):

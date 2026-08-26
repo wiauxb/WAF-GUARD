@@ -19,10 +19,14 @@ from sqlalchemy.orm import Session
 from shared.config import settings
 from services.configmanager.storage import ConfigFileStorage
 
+from . import queries as Q
 from .repository import GraphQueryRepository, SymbolQueryRepository
 from .schemas import (
+    DirectiveFacetsResponse,
     DirectiveListResponse,
     DirectiveResponse,
+    DirectiveSearchQuery,
+    FacetCount,
     MacroTraceFrame,
     MacroTraceResponse,
     NodeMetadataEntry,
@@ -88,6 +92,78 @@ class AnalysisService:
             total_count=total,
             limit=limit,
             offset=offset,
+        )
+
+    # ==================== Combinable search ====================
+
+    def search_directives(
+        self,
+        configuration_id: int,
+        query: DirectiveSearchQuery,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> DirectiveListResponse:
+        """
+        Any combination of directive criteria, sorted by any supported column.
+
+        Backs the Directives page. Every criterion is AND-ed; within one criterion the
+        semantics follow the property -- see DirectiveSearchQuery.
+
+        Criteria are matched against node PROPERTIES rather than the relationships that
+        mirror them ($tag IN n.tags, not (n)-[:Has]->(:Tag)). That is what lets them
+        combine into one MATCH, and it is cheaper too: the relationship form for
+        location/host expands every directive's edge to a single shared value node.
+        """
+        clauses: List[str] = []
+        params: Dict[str, Any] = {}
+
+        # OR-within-field: several values of a single-valued property.
+        for field in ("types", "phases", "rule_ids"):
+            values = getattr(query, field)
+            if values:
+                clauses.append(Q.CLAUSES[field])
+                params[field] = values
+
+        # AND-within-field: the directive must carry every tag asked for.
+        if query.tags:
+            clauses.append(Q.CLAUSES["tags"])
+            params["tags"] = query.tags
+
+        for field in ("node_id", "host", "location", "args_contains", "msg_contains"):
+            value = getattr(query, field)
+            if value is not None and value != "":
+                clauses.append(Q.CLAUSES[field])
+                params[field] = value
+
+        if query.has_rule_id is not None:
+            key = "has_rule_id_true" if query.has_rule_id else "has_rule_id_false"
+            clauses.append(Q.CLAUSES[key])          # no parameter: the clause IS the test
+
+        # Source line lives in PostgreSQL, so it resolves to node_ids first and joins the
+        # rest of the criteria as an ordinary clause.
+        if query.source is not None:
+            node_ids = self._symbols(configuration_id).node_ids_at_source(
+                query.source.file_path, query.source.line_number
+            )
+            if not node_ids:
+                # Nothing was produced by that line. Short-circuit rather than emitting
+                # `IN []`, which is a full scan that can only return nothing.
+                return self._directive_list(configuration_id, [], 0, limit, offset)
+            clauses.append(Q.CLAUSES["source_node_ids"])
+            params["source_node_ids"] = node_ids
+
+        rows, total = self._graph(configuration_id).search_directives(
+            clauses, params, query.sort_by, query.sort_dir, limit, offset
+        )
+        return self._directive_list(configuration_id, rows, total, limit, offset)
+
+    def get_directive_facets(self, configuration_id: int) -> DirectiveFacetsResponse:
+        """Distinct types and phases present, with counts — populates the filter dropdowns."""
+        facets = self._graph(configuration_id).directive_facets()
+        return DirectiveFacetsResponse(
+            configuration_id=configuration_id,
+            types=[FacetCount(**r) for r in facets["types"]],
+            phases=[FacetCount(**r) for r in facets["phases"]],
         )
 
     # ==================== Directive lookup ====================

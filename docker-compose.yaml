@@ -144,12 +144,12 @@ services:
     working_dir: /opt/api
     command: "fastapi dev main.py --host 0.0.0.0 --port 8000"
 
-  # model_na:
-  #   image: nelver28/modernbert:latest
-  #   container_name: modernbert
-  #   ports:
-  #     - "8102:8102"
-  #   restart: always
+  model_na:
+    image: nelver28/modernbert:latest
+    container_name: modernbert
+    ports:
+      - "8102:8102"
+    restart: always
 
 volumes:
   neo4j_data:      # graph — must stay named, see the neo4j_na comment

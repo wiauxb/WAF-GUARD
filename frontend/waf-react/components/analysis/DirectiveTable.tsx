@@ -1,5 +1,6 @@
 'use client'
 
+import { ArrowDown, ArrowUp, ChevronsUpDown } from 'lucide-react'
 import { Badge, directiveVariant } from '@/components/ui/badge'
 import {
   Table,
@@ -9,7 +10,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import type { DirectiveResponse } from '@/types'
+import type { DirectiveResponse, SortDir, SortField } from '@/types'
+import type { SortState } from './FilterBar'
 
 interface DirectiveTableProps {
   directives: DirectiveResponse[]
@@ -18,6 +20,13 @@ interface DirectiveTableProps {
   /** Re-run a search from a chip inside the table. */
   onTagClick?: (tag: string) => void
   onRuleIdClick?: (ruleId: number) => void
+  /**
+   * Sorting. Both optional together — omit them and the headers render as plain labels,
+   * which is what the Removals tab and the nested usage tables want: those show one
+   * unpaginated set, so a header that reordered only the visible rows would mislead.
+   */
+  sort?: SortState
+  onSortChange?: (next: SortState) => void
 }
 
 /**
@@ -28,6 +37,10 @@ interface DirectiveTableProps {
  * `location` IS shown, though it is nearly always empty today: the parser does not yet
  * track <LocationMatch>, so directives inside those blocks carry no location. That is the
  * next parser fix, so the column stays.
+ *
+ * Sorting is applied by the SERVER over the whole match set, never here over the current
+ * page — ordering 50 rows out of ~97,000 would answer a different question than the one
+ * clicking a header asks.
  */
 export function DirectiveTable({
   directives,
@@ -35,18 +48,61 @@ export function DirectiveTable({
   selectedNodeId,
   onTagClick,
   onRuleIdClick,
+  sort,
+  onSortChange,
 }: DirectiveTableProps) {
+  /** A header cell that sorts, when the parent supports it. */
+  const SortHead = ({
+    field,
+    children,
+    className,
+  }: {
+    field: SortField
+    children: React.ReactNode
+    className?: string
+  }) => {
+    if (!sort || !onSortChange) return <TableHead className={className}>{children}</TableHead>
+
+    const active = sort.by === field
+    // A fresh column starts ascending; the active one flips.
+    const next: SortDir = active && sort.dir === 'asc' ? 'desc' : 'asc'
+    const Icon = !active ? ChevronsUpDown : sort.dir === 'asc' ? ArrowUp : ArrowDown
+
+    return (
+      <TableHead className={className}>
+        <button
+          type="button"
+          onClick={() => onSortChange({ by: field, dir: next })}
+          aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+          className={
+            'group -mx-1 flex items-center gap-1 rounded px-1 py-0.5 hover:text-foreground ' +
+            (active ? 'text-foreground' : '')
+          }
+        >
+          {children}
+          <Icon
+            className={
+              'h-3.5 w-3.5 shrink-0 ' + (active ? 'opacity-100' : 'opacity-30 group-hover:opacity-60')
+            }
+          />
+        </button>
+      </TableHead>
+    )
+  }
+
   return (
     <div className="space-y-3">
       <div className="rounded-lg border">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/40">
-              <TableHead>Node ID</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Rule ID</TableHead>
-              <TableHead>Phase</TableHead>
-              <TableHead>Location</TableHead>
+              <SortHead field="node_id">Node ID</SortHead>
+              <SortHead field="type">Type</SortHead>
+              <SortHead field="rule_id">Rule ID</SortHead>
+              <SortHead field="phase">Phase</SortHead>
+              <SortHead field="location">Location</SortHead>
+              {/* Not sortable: tags is a list, args is free text — neither has a
+                  meaningful single order, and both are expensive to sort at scale. */}
               <TableHead>Tags</TableHead>
               <TableHead className="w-[40%]">Arguments</TableHead>
             </TableRow>

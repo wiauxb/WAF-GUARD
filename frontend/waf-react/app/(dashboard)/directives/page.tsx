@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Scissors, Search, Shield, SlidersHorizontal, Tags } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -14,18 +14,20 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ConfigGuard } from '@/components/analysis/ConfigGuard'
 import { DirectiveDetail } from '@/components/analysis/DirectiveDetail'
 import { DirectiveTable } from '@/components/analysis/DirectiveTable'
-import { SearchBar, initialSearch, type SearchState } from '@/components/analysis/SearchBar'
+import {
+  FilterBar,
+  toQuery,
+  type Filter,
+  type SortState,
+} from '@/components/analysis/FilterBar'
 import {
   DEFAULT_PAGE_SIZE,
-  filterDirectives,
-  getDirectiveByNodeId,
-  getDirectivesByRuleId,
-  getDirectivesByTag,
+  getDirectiveFacets,
   getDirectivesSettingConstant,
   getDirectivesUsingConstant,
-  getNodesAtSource,
   getRemovalsByRuleId,
   getRemovalsByTag,
+  searchDirectives,
   searchSymbols,
 } from '@/lib/analysis'
 import { useConfigStore } from '@/stores/config'
@@ -33,6 +35,7 @@ import type { DirectiveListResponse, DirectiveResponse, SymbolMatch } from '@/ty
 
 type Page = { limit: number; offset: number }
 const FIRST_PAGE: Page = { limit: DEFAULT_PAGE_SIZE, offset: 0 }
+const DEFAULT_SORT: SortState = { by: 'node_id', dir: 'asc' }
 
 export default function DirectivesPage() {
   const { selectedConfig } = useConfigStore()
@@ -42,8 +45,8 @@ export default function DirectivesPage() {
 
   // Each tab keeps its own state — the old page shared one `results` array across all
   // four tabs, so switching tabs showed the previous search's output.
-  const [search, setSearch] = useState<SearchState>(initialSearch)
-  const [applied, setApplied] = useState<SearchState | null>(null)
+  const [filters, setFilters] = useState<Filter[]>([])
+  const [sort, setSort] = useState<SortState>(DEFAULT_SORT)
   const [page, setPage] = useState<Page>(FIRST_PAGE)
   const [selected, setSelected] = useState<DirectiveResponse | null>(null)
 
@@ -60,54 +63,47 @@ export default function DirectivesPage() {
 
   // ---------- directives tab ----------
 
+  // One query for every combination of filters. An empty filter set is legal and returns
+  // the whole configuration, which is what makes the sortable headers discoverable on
+  // arrival — the backend does page+count in ~120 ms on ~97k directives.
   const directives = useQuery<DirectiveListResponse>({
-    queryKey: ['analysis', 'directives', configId, applied, page],
-    enabled: !!applied,
-    queryFn: () => {
-      const s = applied!
-      switch (s.mode) {
-        case 'rule-id':
-          return getDirectivesByRuleId(Number(s.ruleId), page)
-        case 'tag':
-          return getDirectivesByTag(s.tag, page)
-        case 'node-id':
-          return getDirectiveByNodeId(Number(s.nodeId), page)
-        case 'source':
-          return getNodesAtSource(
-            { file_path: s.filePath, line_number: Number(s.lineNumber) },
-            page
-          )
-        default:
-          return filterDirectives({ location: s.location, host: s.host }, page)
-      }
-    },
+    queryKey: ['analysis', 'search', configId, filters, sort, page],
+    queryFn: () => searchDirectives(toQuery(filters, sort), page),
+    // Filters apply on every chip change, so without this the table would blank to a
+    // spinner each time one is added or removed.
+    placeholderData: keepPreviousData,
   })
 
-  const runSearch = (next?: Partial<SearchState>) => {
-    const s = { ...search, ...next }
-    setSearch(s)
-    setApplied(s)
-    setPage(FIRST_PAGE)
+  // Dropdown contents: the types and phases this configuration actually contains.
+  const facets = useQuery({
+    queryKey: ['analysis', 'facets', configId],
+    queryFn: getDirectiveFacets,
+    staleTime: 5 * 60_000,       // fixed for a parsed configuration
+  })
+
+  const applyFilters = (next: Filter[]) => {
+    setFilters(next)
+    setPage(FIRST_PAGE)          // page 3 of the old result set means nothing in the new one
     setSelected(null)
   }
 
-  // Cross-links: jump from a chip straight into the matching search.
-  const searchByTag = (tag: string) => {
-    setTab('directives')
-    runSearch({ mode: 'tag', tag })
+  const applySort = (next: SortState) => {
+    setSort(next)
+    setPage(FIRST_PAGE)
   }
-  const searchByRuleId = (ruleId: number) => {
+
+  // Cross-links: clicking a chip anywhere replaces the filter set with just that criterion.
+  const replaceWith = (filter: Filter) => {
     setTab('directives')
-    runSearch({ mode: 'rule-id', ruleId: String(ruleId) })
+    applyFilters([filter])
   }
-  const searchByNodeId = (nodeId: number) => {
-    setTab('directives')
-    runSearch({ mode: 'node-id', nodeId: String(nodeId) })
-  }
-  const searchBySource = (filePath: string, lineNumber: number) => {
-    setTab('directives')
-    runSearch({ mode: 'source', filePath, lineNumber: String(lineNumber) })
-  }
+  const searchByTag = (tag: string) => replaceWith({ kind: 'tag', value: tag })
+  const searchByRuleId = (ruleId: number) =>
+    replaceWith({ kind: 'rule-id', value: String(ruleId) })
+  const searchByNodeId = (nodeId: number) =>
+    replaceWith({ kind: 'node-id', value: String(nodeId) })
+  const searchBySource = (filePath: string, lineNumber: number) =>
+    replaceWith({ kind: 'source', value: `${filePath}:${lineNumber}` })
   const inspectSymbol = (name: string) => {
     setTab('symbols')
     setSymbolQuery(name)
@@ -197,20 +193,14 @@ export default function DirectivesPage() {
 
           {/* ============ Directives ============ */}
           <TabsContent value="directives" className="space-y-4">
-            <SearchBar
-              value={search}
-              onChange={setSearch}
-              onSearch={() => runSearch()}
+            <FilterBar
+              filters={filters}
+              onChange={applyFilters}
+              facets={facets.data}
               loading={directives.isFetching}
             />
 
-            {!applied ? (
-              <EmptyState
-                icon={Search}
-                title="Search the configuration"
-                description="Filter by request target, or look up a rule ID, tag, node ID or source line."
-              />
-            ) : directives.isLoading ? (
+            {directives.isLoading ? (
               <LoadingSpinner />
             ) : directives.data ? (
               <div
@@ -222,15 +212,32 @@ export default function DirectivesPage() {
                 <Card>
                   <CardContent className="space-y-4 p-4">
                     {directives.data.total_count === 0 ? (
-                      <EmptyState icon={Search} title="No directives matched" />
+                      <EmptyState
+                        icon={Search}
+                        title="No directives matched"
+                        description={
+                          filters.length > 1
+                            ? 'All filters must hold at once — try removing one.'
+                            : undefined
+                        }
+                      />
                     ) : (
                       <>
+                        <p className="text-sm text-muted-foreground">
+                          <span className="font-medium text-foreground">
+                            {directives.data.total_count.toLocaleString()}
+                          </span>{' '}
+                          {directives.data.total_count === 1 ? 'directive' : 'directives'}
+                          {filters.length === 0 && ' — add a filter to narrow down'}
+                        </p>
                         <DirectiveTable
                           directives={directives.data.directives}
                           onSelect={setSelected}
                           selectedNodeId={selected?.node_id}
                           onTagClick={searchByTag}
                           onRuleIdClick={searchByRuleId}
+                          sort={sort}
+                          onSortChange={applySort}
                         />
                         <Pagination
                           total={directives.data.total_count}
@@ -346,20 +353,14 @@ export default function DirectivesPage() {
                         description="Directives that use this variable"
                         data={usedBy.data}
                         loading={usedBy.isLoading}
-                        onSelect={(d) => {
-                          setTab('directives')
-                          searchByNodeId(d.node_id)
-                        }}
+                        onSelect={(d) => searchByNodeId(d.node_id)}
                       />
                       <SymbolUsage
                         title="Set by"
                         description="Directives that define or assign it"
                         data={setBy.data}
                         loading={setBy.isLoading}
-                        onSelect={(d) => {
-                          setTab('directives')
-                          searchByNodeId(d.node_id)
-                        }}
+                        onSelect={(d) => searchByNodeId(d.node_id)}
                       />
                     </>
                   )}
@@ -438,10 +439,7 @@ export default function DirectivesPage() {
                   ) : (
                     <DirectiveTable
                       directives={removals.data.directives}
-                      onSelect={(d) => {
-                        setTab('directives')
-                        searchByNodeId(d.node_id)
-                      }}
+                      onSelect={(d) => searchByNodeId(d.node_id)}
                       onTagClick={searchByTag}
                       onRuleIdClick={searchByRuleId}
                     />

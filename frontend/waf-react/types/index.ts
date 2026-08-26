@@ -413,6 +413,47 @@ export interface HttpRequestFilter {
   host: string                 // regex
 }
 
+/** Columns the backend will order by. Closed set — anything else 422s. */
+export type SortField = 'node_id' | 'type' | 'rule_id' | 'phase' | 'location'
+export type SortDir = 'asc' | 'desc'
+
+/**
+ * Combinable directive filter — the single query behind the Directives page.
+ *
+ * Criteria are AND-ed. Within one criterion the meaning follows the property:
+ *   types / phases / rule_ids  — a directive has ONE of each, so a list means "any of"
+ *   tags                       — a directive carries a LIST, so a list means "all of"
+ *
+ * An empty object is legal and returns the whole configuration.
+ */
+export interface DirectiveSearchQuery {
+  types?: string[]
+  phases?: number[]
+  rule_ids?: number[]
+  tags?: string[]
+  node_id?: number | null
+  host?: string | null           // regex
+  location?: string | null       // regex
+  args_contains?: string | null  // case-insensitive substring
+  msg_contains?: string | null   // case-insensitive substring
+  has_rule_id?: boolean | null   // null = don't care
+  source?: SourceLocationQuery | null
+  sort_by?: SortField
+  sort_dir?: SortDir
+}
+
+export interface FacetCount {
+  value: string | number
+  count: number
+}
+
+/** The values present in this configuration, for populating the filter dropdowns. */
+export interface DirectiveFacetsResponse {
+  configuration_id: number
+  types: FacetCount[]            // commonest first
+  phases: FacetCount[]           // by phase number
+}
+
 export interface ConstantQuery {
   name: string
   // omitted/null matches the node with NO value set — not "any value"

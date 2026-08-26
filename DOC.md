@@ -21,13 +21,13 @@ separate track and are out of scope for this document.
 | ChatbotService | 🟡 TO REVIEW | Works, but its 5 WAF tools return dummy data and checkpoint deletion is a no-op |
 | LogAnalysisService | 🟡 TO REVIEW | Largest doc/code drift; the ML service it calls is not reachable |
 
-**Route totals:** all 43 implemented. See [Route Totals](#route-totals).
+**Route totals:** all 45 implemented. See [Route Totals](#route-totals).
 
 **Critical path:** ~~ParserService~~ ✅ → ~~AnalysisService~~ ✅ →
 ~~re-point the `/directives` page~~ ✅ → swap the chatbot's dummy tools for real calls.
 
 > The `/cypher` page is still wired to the dropped free-Cypher endpoints and 404s on every
-> action. It remains in the sidebar; either rebuild it on `/analysis/directives/filter` or
+> action. It remains in the sidebar; either rebuild it on `/analysis/directives/search` or
 > remove the nav entry.
 
 > ⚠️ **Schema migration required on existing databases.** `symbol_table.node_id` must be
@@ -1191,6 +1191,8 @@ which also validates that the target is actually queryable:
 
 | Method | Endpoint | Request | Response | Description |
 |--------|----------|---------|----------|-------------|
+| POST | `/directives/search` | `DirectiveSearchQuery` | `DirectiveListResponse` | **Any combination of criteria, any sort order.** Backs the Directives page |
+| GET | `/directives/facets` | - | `DirectiveFacetsResponse` | Types and phases present in this config, with counts — populates the filter dropdowns |
 | GET | `/directives/{node_id}` | - | `DirectiveListResponse` | Directive by node ID |
 | GET | `/directives/by-rule-id/{rule_id}` | - | `DirectiveListResponse` | Directives carrying a ModSecurity rule ID |
 | GET | `/directives/by-tag/{tag}` | - | `DirectiveListResponse` | Directives carrying a tag |
@@ -1204,6 +1206,40 @@ which also validates that the target is actually queryable:
 | GET | `/nodes/{node_id}/metadata` | - | `NodeMetadataResponse` | Source file/line chain for a node |
 | GET | `/nodes/{node_id}/macro-trace` | - | `MacroTraceResponse` | Full macro call stack with file contents |
 | POST | `/nodes/at-source` | `SourceLocationQuery` | `DirectiveListResponse` | Directives produced by a given config line |
+
+### `POST /directives/search` — the combinable filter
+
+The single-purpose lookups above are each expressible here (`by-tag/{t}` is
+`{"tags": ["t"]}`), and unlike them they compose. Criteria are AND-ed; **within** one
+criterion the meaning follows the underlying property, which is the only part that
+surprises people:
+
+| Field | Reading | Why |
+|-------|---------|-----|
+| `types`, `phases`, `rule_ids` | *any of* | A directive has one type, one phase, one id — so a list can only mean "either" |
+| `tags` | *all of* | A directive carries a **list** of tags, so a list narrows to those carrying every one |
+
+Other fields: `node_id`, `host` / `location` (regex), `args_contains` / `msg_contains`
+(case-insensitive substring), `has_rule_id` (separates real ModSecurity rules from the
+config directives around them), and `source` (a file+line, resolved through PostgreSQL to
+node IDs and then joined as an ordinary clause). An empty body returns the whole
+configuration.
+
+Every criterion is matched against a node **property** rather than the relationship that
+mirrors it — `$tag IN n.tags`, not `(n)-[:Has]->(:Tag)`. That is what lets them all be
+conjuncts on one `MATCH`, and it is cheaper for location/host, where the relationship form
+expands every directive's edge through a single shared `value:""` node.
+
+`sort_by` (`node_id` | `type` | `rule_id` | `phase` | `location`) and `sort_dir` order the
+**full match set** server-side, so paging stays correct. Two details in
+[queries.build_directive_search](backend/src/services/analysis/queries.py):
+Cypher cannot parameterise `ORDER BY`, so the column is interpolated from a closed
+whitelist and anything else 422s; and directives with no value for the sort column sort
+**last in both directions**, since Neo4j otherwise treats `null` as the largest value and a
+`phase DESC` would open on a page of blanks.
+
+Measured on `Full conf` (96,934 directives, no index on directive nodes): page + count
+together run in ~100–170 ms for every sort column.
 
 **Status codes:**
 - `400` — no `configuration_id` given and the user has no active configuration.
@@ -1231,7 +1267,7 @@ re-pointing once these routes exist:
 
 | Page | Currently calls | Should call |
 |------|-----------------|-------------|
-| [directives/page.tsx](frontend/waf-react/app/(dashboard)/directives/page.tsx) | `/directives/id`, `/directives/tag`, `/directives/id/{nodeid}`, `/directives/removed/{nodeid}` | `/analysis/directives/by-rule-id/…`, `/analysis/directives/by-tag/…`, `/analysis/directives/{node_id}`, `/analysis/directives/{node_id}/removed-by` |
+| [directives/page.tsx](frontend/waf-react/app/(dashboard)/directives/page.tsx) | `/directives/id`, `/directives/tag`, `/directives/id/{nodeid}`, `/directives/removed/{nodeid}` | **`/analysis/directives/search`** for the whole Directives tab — combinable filters and sorting replace the five one-at-a-time modes; `/analysis/removals/*` for the Removals tab |
 | [cypher/page.tsx](frontend/waf-react/app/(dashboard)/cypher/page.tsx) | `/cypher/run`, `/cypher/to_json` | **N/A** — free Cypher is out of scope. Either delete the page or rebuild it on `/analysis/directives/filter`. |
 
 ### Request Schemas
@@ -1607,13 +1643,13 @@ async def upload_configuration(
 | Auth | `/auth` | 5 | 0 | ✅ |
 | Configurations | `/configurations` | 8 | 0 | 🟡 |
 | Parser | `/parser` | **4** | 0 | ✅ |
-| Analysis | `/analysis` | **13** | 0 | ✅ |
+| Analysis | `/analysis` | **15** | 0 | ✅ |
 | Chatbot | `/chatbot` | 7 | 0 | 🟡 |
 | Logs | `/logs` | 6 | 0 | 🟡 |
-| **Total under `/api/v1`** | | **43** | **0** | |
+| **Total under `/api/v1`** | | **45** | **0** | |
 
 Plus 2 unprefixed routes in [main.py](backend/src/main.py): `GET /` and `GET /health`.
-Grand total of implemented handlers: **45**.
+Grand total of implemented handlers: **47**.
 
 > The old figure of "32 endpoints" counted 3 Parser routes that were never built and 3
 > "Common" entries that are shared schemas, not routes.

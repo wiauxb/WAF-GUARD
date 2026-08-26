@@ -13,7 +13,7 @@ which space it means. The old API had `/directives/id` and `/directives/id/{node
 meaning different things.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -54,6 +54,58 @@ class SourceLocationQuery(BaseModel):
     line_number: int = Field(gt=0)
 
 
+# Columns the result set may be ordered by. A whitelist, not a free string: Cypher cannot
+# parameterise ORDER BY, so the chosen name is interpolated into the query and must never
+# come straight from the caller. `queries.SORT_FIELDS` maps these onto node properties.
+SortField = Literal["node_id", "type", "rule_id", "phase", "location"]
+
+
+class DirectiveSearchQuery(BaseModel):
+    """
+    Combinable directive filter — the one query behind the Directives page.
+
+    Every criterion is AND-ed with the others. Within a single criterion the meaning
+    depends on what the field means on a directive:
+
+      - `types`, `phases`, `rule_ids` are SINGLE-valued on a directive, so listing several
+        means OR: `phases=[1,2]` is "phase 1 or phase 2".
+      - `tags` is MULTI-valued on a directive, so listing several means AND:
+        `tags=["a","b"]` is "carries both tags" — the useful reading when narrowing down.
+
+    Empty/omitted everywhere is legal and returns the whole configuration, ordered by
+    `sort_by`.
+    """
+    # OR within the field
+    types: List[str] = Field(default_factory=list, description="Directive types; any of")
+    phases: List[int] = Field(default_factory=list, description="ModSecurity phases; any of")
+    rule_ids: List[int] = Field(default_factory=list, description="ModSecurity ids; any of")
+
+    # AND within the field
+    tags: List[str] = Field(default_factory=list, description="Tags; must carry ALL of them")
+
+    # single-valued
+    node_id: Optional[int] = Field(default=None, description="Parser node_id — exact")
+    host: Optional[str] = Field(default=None, max_length=500, description="VirtualHost regex")
+    location: Optional[str] = Field(default=None, max_length=500, description="Location regex")
+    args_contains: Optional[str] = Field(
+        default=None, max_length=500, description="Substring of the directive arguments"
+    )
+    msg_contains: Optional[str] = Field(
+        default=None, max_length=500, description="Substring of the rule msg"
+    )
+    has_rule_id: Optional[bool] = Field(
+        default=None,
+        description="True = only directives declaring id:NNN, False = only those without, "
+                    "null = both",
+    )
+    source: Optional[SourceLocationQuery] = Field(
+        default=None, description="Only directives produced by this configuration line"
+    )
+
+    sort_by: SortField = "node_id"
+    sort_dir: Literal["asc", "desc"] = "asc"
+
+
 # ==================== Response Schemas ====================
 
 class DirectiveResponse(BaseModel):
@@ -88,6 +140,24 @@ class DirectiveListResponse(BaseModel):
     total_count: int
     limit: int
     offset: int
+
+
+class FacetCount(BaseModel):
+    """One distinct value of a directive property, with how many directives carry it."""
+    value: Any
+    count: int
+
+
+class DirectiveFacetsResponse(BaseModel):
+    """
+    The values actually present in a configuration, for populating filter dropdowns.
+
+    Without this the type dropdown would need a hardcoded list of directive names, which
+    would be both incomplete and full of entries this configuration never uses.
+    """
+    configuration_id: int
+    types: List[FacetCount]                # ordered by count, commonest first
+    phases: List[FacetCount]               # ordered by phase number
 
 
 class RemoverEntry(BaseModel):

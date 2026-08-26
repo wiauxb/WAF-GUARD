@@ -73,6 +73,99 @@ def _count(match_clause: str) -> str:
     """
 
 
+# ==================== Combinable search ====================
+
+# Whitelist mapping a SortField onto the node property it orders by.
+#
+# Cypher cannot parameterise ORDER BY -- `ORDER BY $field` is a syntax error -- so the
+# column has to be interpolated into the query text. This dict is the only thing that ever
+# reaches that interpolation, which is what keeps a caller-supplied sort from becoming an
+# injection point.
+SORT_FIELDS = {
+    "node_id": "n.node_id",
+    "type": "n.type",
+    "rule_id": "n.id",
+    "phase": "n.phase",
+    "location": "n.Location",
+}
+
+# Clause fragments, keyed by the criterion they implement. Kept here rather than in the
+# service so that every piece of Cypher in AnalysisService lives in this one file.
+#
+# Note the two readings of a multi-value criterion, which follow from what the property is:
+#   - type/phase/rule_id are single-valued on a directive  -> IN  (any of)
+#   - tags is a list on the directive                      -> ALL (carries every one)
+CLAUSES = {
+    "types": "n.type IN $types",
+    "phases": "n.phase IN $phases",
+    "rule_ids": "n.id IN $rule_ids",
+    "tags": "ALL(t IN $tags WHERE t IN n.tags)",
+    "node_id": "n.node_id = $node_id",
+    "host": "n.VirtualHost =~ $host",
+    "location": "n.Location =~ $location",
+    # CONTAINS is case-sensitive in Cypher; a search box should not be. No index is given
+    # up by the toLower() -- directive nodes have none on any of these properties.
+    "args_contains": "toLower(n.args) CONTAINS toLower($args_contains)",
+    "msg_contains": "toLower(n.msg) CONTAINS toLower($msg_contains)",
+    "has_rule_id_true": "n.id IS NOT NULL",
+    "has_rule_id_false": "n.id IS NULL",
+    "source_node_ids": "n.node_id IN $source_node_ids",
+}
+
+SEARCH_MATCH = "MATCH (n {configuration_id: $cid})"
+
+
+def build_directive_search(
+    clauses: list[str], sort_by: str = "node_id", sort_dir: str = "asc"
+) -> tuple[str, str]:
+    """
+    Assemble the (page, count) pair for a combinable directive search.
+
+    All clauses are AND-ed onto one MATCH, so this composes any subset of the criteria
+    without a query per combination.
+
+    Two things the ORDER BY has to get right:
+
+    - NULLS. Neo4j orders null as the LARGEST value, so a plain `phase DESC` opens on a
+      full page of blanks -- ~87% of directives declare no phase. Sorting on the null test
+      first (false < true) parks blanks at the bottom whichever direction is asked for.
+    - TIES. Page and count run as separate statements and SKIP/LIMIT walks the page query
+      repeatedly; without a unique tiebreaker, equal sort keys order arbitrarily between
+      calls and paging repeats or drops rows. node_id is unique per configuration, so it
+      settles every tie.
+    """
+    match = SEARCH_MATCH
+    if clauses:
+        match += "\nWHERE " + "\n  AND ".join(clauses)
+
+    field = SORT_FIELDS[sort_by]              # KeyError here means an unvalidated caller
+    direction = "DESC" if sort_dir == "desc" else "ASC"
+
+    keys = [f"({field} IS NULL)", f"{field} {direction}"]
+    if field != "n.node_id":
+        keys.append("n.node_id")
+    order_by = "ORDER BY " + ", ".join(keys)
+
+    return _page(match, order_by), _count(match)
+
+
+# Distinct values present in a configuration, for the filter dropdowns. Both aggregate
+# over one property and materialise nothing else, so they stay cheap at any size.
+FACET_TYPES = """
+MATCH (n {configuration_id: $cid})
+WHERE n.type IS NOT NULL
+RETURN n.type AS value, count(*) AS count
+ORDER BY count DESC, value
+"""
+
+FACET_PHASES = """
+MATCH (n {configuration_id: $cid})
+WHERE n.phase IS NOT NULL
+RETURN n.phase AS value, count(*) AS count
+ORDER BY value
+"""
+
+
 # ==================== Staleness guard ====================
 
 # Cheap existence check backing the "marked parsed but the graph is empty" 409.

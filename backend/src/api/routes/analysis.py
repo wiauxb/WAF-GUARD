@@ -16,7 +16,9 @@ from api.dependencies import get_analysis_configuration_id, get_analysis_service
 from services.analysis.schemas import (
     ConstantQuery,
     DEFAULT_LIMIT,
+    DirectiveFacetsResponse,
     DirectiveListResponse,
+    DirectiveSearchQuery,
     HttpRequestFilter,
     MacroTraceResponse,
     MAX_LIMIT,
@@ -43,11 +45,50 @@ def _offset(offset: int = Query(0, ge=0, description="Results to skip")) -> int:
 # ==========================================================================
 # Directive lookup
 #
-# ORDERING MATTERS: the literal-prefix routes (/by-rule-id, /by-tag, /filter)
-# MUST be declared before /directives/{node_id}. FastAPI matches in declaration
-# order, and with node_id typed as int a request to /directives/by-rule-id/5
-# would otherwise hit the {node_id} route and fail validation with 422.
+# ORDERING MATTERS: the literal-prefix routes (/search, /facets, /by-rule-id,
+# /by-tag, /filter) MUST be declared before /directives/{node_id}. FastAPI matches
+# in declaration order, and with node_id typed as int a request to
+# /directives/by-rule-id/5 would otherwise hit the {node_id} route and fail
+# validation with 422.
 # ==========================================================================
+
+@router.post("/directives/search", response_model=DirectiveListResponse)
+async def search_directives(
+    query: DirectiveSearchQuery = DirectiveSearchQuery(),
+    configuration_id: int = Depends(get_analysis_configuration_id),
+    limit: int = Depends(_limit),
+    offset: int = Depends(_offset),
+    analysis: AnalysisService = Depends(get_analysis_service),
+):
+    """
+    Directives matching any combination of criteria, in any supported order.
+
+    Criteria are AND-ed together. Within one criterion the meaning follows the property:
+
+    - **types**, **phases**, **rule_ids** — *any of* (a directive has one type, one phase)
+    - **tags** — *all of* (a directive carries a list, so listing two narrows to both)
+
+    An empty body returns the whole configuration ordered by `node_id`.
+
+    Sorting is server-side over the FULL match set, not the page. Directives with no value
+    for the sort column (most have no phase and no rule id) sort last in both directions.
+    """
+    return analysis.search_directives(configuration_id, query, limit, offset)
+
+
+@router.get("/directives/facets", response_model=DirectiveFacetsResponse)
+async def get_directive_facets(
+    configuration_id: int = Depends(get_analysis_configuration_id),
+    analysis: AnalysisService = Depends(get_analysis_service),
+):
+    """
+    Directive types and phases actually present, with counts.
+
+    Populates the filter dropdowns, so they offer what this configuration contains rather
+    than a hardcoded list of every directive ModSecurity defines.
+    """
+    return analysis.get_directive_facets(configuration_id)
+
 
 @router.get("/directives/by-rule-id/{rule_id}", response_model=DirectiveListResponse)
 async def get_directives_by_rule_id(

@@ -12,7 +12,9 @@
 import { api } from './api'
 import type {
   ConstantQuery,
+  DirectiveFacetsResponse,
   DirectiveListResponse,
+  DirectiveSearchQuery,
   HttpRequestFilter,
   MacroTraceResponse,
   NodeMetadataResponse,
@@ -29,6 +31,32 @@ export const MAX_PAGE_SIZE = 1000
 
 function pageParams({ limit = DEFAULT_PAGE_SIZE, offset = 0 }: PageParams = {}) {
   return { limit: Math.min(limit, MAX_PAGE_SIZE), offset }
+}
+
+// ==================== Combinable search ====================
+
+/**
+ * Any combination of directive criteria, sorted by any supported column.
+ *
+ * This is what the Directives page runs. The single-purpose lookups below still exist as
+ * the API mirror (and back the chatbot tools), but every combination of them is expressible
+ * here — `getDirectivesByTag(t)` is `searchDirectives({ tags: [t] })`.
+ *
+ * Sorting is applied to the FULL match set server-side, so it stays correct across pages.
+ */
+export async function searchDirectives(query: DirectiveSearchQuery, page?: PageParams) {
+  const { data } = await api.post<DirectiveListResponse>(
+    `/analysis/directives/search`,
+    query,
+    { params: pageParams(page) },
+  )
+  return data
+}
+
+/** Types and phases present in this configuration, with counts — for the filter dropdowns. */
+export async function getDirectiveFacets() {
+  const { data } = await api.get<DirectiveFacetsResponse>(`/analysis/directives/facets`)
+  return data
 }
 
 // ==================== Directive lookup ====================
