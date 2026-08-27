@@ -15,6 +15,7 @@ import type {
   DirectiveFacetsResponse,
   DirectiveListResponse,
   DirectiveSearchQuery,
+  FacetValuesResponse,
   HttpRequestFilter,
   MacroTraceResponse,
   NodeMetadataResponse,
@@ -22,6 +23,7 @@ import type {
   RemoverListResponse,
   SourceLocationQuery,
   SymbolSearchResponse,
+  ValueField,
 } from '@/types'
 
 export const DEFAULT_PAGE_SIZE = 50
@@ -56,6 +58,21 @@ export async function searchDirectives(query: DirectiveSearchQuery, page?: PageP
 /** Types and phases present in this configuration, with counts — for the filter dropdowns. */
 export async function getDirectiveFacets() {
   const { data } = await api.get<DirectiveFacetsResponse>(`/analysis/directives/facets`)
+  return data
+}
+
+/**
+ * Searchable value list for one property — backs the tag/host/location comboboxes.
+ *
+ * Searched server-side rather than filtered in the browser: this configuration already has
+ * 239 tags and 56 locations, and the latter reaches several hundred once the parser tracks
+ * `<LocationMatch>`. Values come back raw, ready to hand straight to `searchDirectives`.
+ */
+export async function getDirectiveValues(field: ValueField, q = '', limit = 50) {
+  const { data } = await api.get<FacetValuesResponse>(
+    `/analysis/directives/values/${field}`,
+    { params: { q, limit } },
+  )
   return data
 }
 

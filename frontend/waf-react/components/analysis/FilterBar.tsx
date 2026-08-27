@@ -1,8 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Plus, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Combobox } from '@/components/ui/combobox'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -11,7 +13,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import type { DirectiveFacetsResponse, DirectiveSearchQuery, SortDir, SortField } from '@/types'
+import { getDirectiveValues } from '@/lib/analysis'
+import type {
+  DirectiveFacetsResponse,
+  DirectiveSearchQuery,
+  SortDir,
+  SortField,
+  ValueField,
+} from '@/types'
 
 /**
  * The criteria a directive can be filtered by.
@@ -22,9 +31,8 @@ import type { DirectiveFacetsResponse, DirectiveSearchQuery, SortDir, SortField 
  * LIST of tags, so two of those read as "both".
  */
 export type FilterKind =
-  | 'type' | 'phase' | 'rule-id' | 'tag'            // repeatable
-  | 'node-id' | 'host' | 'location'                 // one at a time
-  | 'args' | 'msg' | 'has-rule-id' | 'source'       // one at a time
+  | 'type' | 'phase' | 'rule-id' | 'tag' | 'host' | 'location'   // repeatable
+  | 'node-id' | 'args' | 'msg' | 'has-rule-id' | 'source'        // one at a time
 
 export interface Filter {
   kind: FilterKind
@@ -38,9 +46,16 @@ export interface SortState {
 }
 
 /** Kinds that accumulate. Everything else replaces the existing chip of its kind. */
-const REPEATABLE: FilterKind[] = ['type', 'phase', 'rule-id', 'tag']
+const REPEATABLE: FilterKind[] = ['type', 'phase', 'rule-id', 'tag', 'host', 'location']
 
-type Widget = 'text' | 'number' | 'type' | 'phase' | 'bool' | 'source'
+type Widget = 'text' | 'number' | 'type' | 'phase' | 'bool' | 'source' | 'values'
+
+/** Filter kinds backed by a searchable value list, and the API field that serves it. */
+const VALUE_FIELD: Partial<Record<FilterKind, ValueField>> = {
+  tag: 'tag',
+  host: 'host',
+  location: 'location',
+}
 
 const KINDS: {
   kind: FilterKind
@@ -51,13 +66,13 @@ const KINDS: {
 }[] = [
   { kind: 'type', label: 'Directive type', widget: 'type', hint: 'Several types match any of them' },
   { kind: 'phase', label: 'Phase', widget: 'phase', hint: 'Several phases match any of them' },
-  { kind: 'tag', label: 'Tag', widget: 'text', placeholder: 'e.g. security', hint: 'Several tags require ALL of them' },
+  { kind: 'tag', label: 'Tag', widget: 'values', placeholder: 'Search tags…', hint: 'Several tags require ALL of them' },
   { kind: 'rule-id', label: 'Rule ID', widget: 'number', placeholder: 'e.g. 5000402', hint: 'ModSecurity id:NNN — several rows for a chained rule' },
   { kind: 'args', label: 'Arguments contain', widget: 'text', placeholder: 'e.g. REQUEST_URI', hint: 'Case-insensitive substring of the directive arguments' },
   { kind: 'msg', label: 'Message contains', widget: 'text', placeholder: 'e.g. SQL injection', hint: 'Case-insensitive substring of the rule msg' },
   { kind: 'has-rule-id', label: 'Has rule ID', widget: 'bool', hint: 'Separates real ModSecurity rules from the config directives around them' },
-  { kind: 'host', label: 'Host (regex)', widget: 'text', placeholder: '.*example\\.com', hint: 'Regex matched against the VirtualHost' },
-  { kind: 'location', label: 'Location (regex)', widget: 'text', placeholder: '/api/.*', hint: 'Regex matched against the Location' },
+  { kind: 'host', label: 'Host', widget: 'values', placeholder: 'Search hosts…', hint: 'Several hosts match any of them' },
+  { kind: 'location', label: 'Location', widget: 'values', placeholder: 'Search locations…', hint: 'Several locations match any of them' },
   { kind: 'node-id', label: 'Node ID', widget: 'number', placeholder: 'e.g. 382', hint: "The parser's own id — not the rule ID" },
   { kind: 'source', label: 'Source line', widget: 'source', hint: 'Which directives a given config line produced' },
 ]
@@ -67,10 +82,37 @@ const KIND_LABEL = Object.fromEntries(KINDS.map((k) => [k.kind, k.label])) as Re
   string
 >
 
+/**
+ * What the empty string reads as, per kind.
+ *
+ * For a host it is not missing data: a directive outside every `<VirtualHost>` is
+ * server-level configuration, which Apache calls the global context. Naming it says
+ * something true about the directive, where "(none)" only says something is absent.
+ *
+ * Location keeps "(none)" deliberately — a directive outside every `<Location>` is not
+ * global, it still sits inside whatever VirtualHost encloses it.
+ */
+const EMPTY_LABEL: Partial<Record<FilterKind, string>> = {
+  host: 'Global',
+}
+
+/**
+ * How a stored value reads on screen.
+ *
+ * Values arrive exactly as the parser recorded them, which is what the filter needs but not
+ * what anyone wants to look at: the dump preserves the quotes around `"*:80"` and
+ * `".well-known/acme-challenge"`, and stores "outside any block" as the empty string.
+ * Only the label changes — the raw value is what travels to the API.
+ */
+export function displayValue(v: string | null | undefined, kind?: FilterKind): string {
+  if (v == null || v === '') return (kind && EMPTY_LABEL[kind]) || '(none)'
+  return v.length > 1 && v.startsWith('"') && v.endsWith('"') ? v.slice(1, -1) : v
+}
+
 /** How a chip reads once applied. */
 export function describeFilter(f: Filter): string {
   if (f.kind === 'has-rule-id') return f.value === 'true' ? 'Has a rule ID' : 'No rule ID'
-  return `${KIND_LABEL[f.kind]}: ${f.value}`
+  return `${KIND_LABEL[f.kind]}: ${displayValue(f.value, f.kind)}`
 }
 
 /**
@@ -93,9 +135,11 @@ export function toQuery(filters: Filter[], sort: SortState): DirectiveSearchQuer
     phases: of('phase').map(Number),
     rule_ids: of('rule-id').map(Number),
     tags: of('tag'),
+    // Exact, not the regex `host`/`location` fields: the stored values carry their quotes
+    // and contain regex metacharacters, so `"*:80"` has no working pattern form.
+    hosts: of('host'),
+    locations: of('location'),
     node_id: one('node-id') ? Number(one('node-id')) : null,
-    host: one('host'),
-    location: one('location'),
     args_contains: one('args'),
     msg_contains: one('msg'),
     has_rule_id: hasRuleId === null ? null : hasRuleId === 'true',
@@ -129,6 +173,22 @@ export function FilterBar({ filters, onChange, facets, loading }: FilterBarProps
   const [pickerKey, setPickerKey] = useState(0)
 
   const spec = KINDS.find((k) => k.kind === kind)!
+  const valueField = VALUE_FIELD[kind]
+
+  // Debounced so typing does not fire a request per keystroke. 200ms is below the point
+  // where the list feels laggy and well above a fast typist's inter-key gap.
+  const [debounced, setDebounced] = useState('')
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(draft), 200)
+    return () => clearTimeout(t)
+  }, [draft])
+
+  const values = useQuery({
+    queryKey: ['analysis', 'values', valueField, debounced],
+    enabled: !!valueField,
+    queryFn: () => getDirectiveValues(valueField!, debounced, 50),
+    staleTime: 60_000,
+  })
 
   // `source` needs both halves; everything else just needs a value.
   const ready = kind === 'source' ? !!draft && !!line : !!draft
@@ -239,6 +299,29 @@ export function FilterBar({ filters, onChange, facets, loading }: FilterBarProps
                 <SelectItem value="false">No rule ID</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+        )}
+
+        {spec.widget === 'values' && (
+          <div className="flex-1">
+            <label className="mb-1 block text-xs uppercase tracking-wide text-muted-foreground">
+              {spec.label}
+            </label>
+            <Combobox
+              query={draft}
+              onQueryChange={setDraft}
+              onSelect={pick}
+              loading={values.isFetching}
+              placeholder={spec.placeholder}
+              // Enter with nothing highlighted applies whatever was typed, so a value the
+              // top-50 cut off is still reachable.
+              onSubmitRaw={commit}
+              options={(values.data?.values ?? []).map((v) => ({
+                value: String(v.value),
+                label: displayValue(String(v.value), kind),
+                count: v.count,
+              }))}
+            />
           </div>
         )}
 

@@ -11,7 +11,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import type { DirectiveResponse, SortDir, SortField } from '@/types'
-import type { SortState } from './FilterBar'
+import { displayValue, type SortState } from './FilterBar'
 
 interface DirectiveTableProps {
   directives: DirectiveResponse[]
@@ -100,11 +100,12 @@ export function DirectiveTable({
               <SortHead field="type">Type</SortHead>
               <SortHead field="rule_id">Rule ID</SortHead>
               <SortHead field="phase">Phase</SortHead>
+              <SortHead field="host">Host</SortHead>
               <SortHead field="location">Location</SortHead>
               {/* Not sortable: tags is a list, args is free text — neither has a
                   meaningful single order, and both are expensive to sort at scale. */}
               <TableHead>Tags</TableHead>
-              <TableHead className="w-[40%]">Arguments</TableHead>
+              <TableHead className="w-[32%]">Arguments</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -144,8 +145,24 @@ export function DirectiveTable({
                     <span className="text-muted-foreground">—</span>
                   )}
                 </TableCell>
+                {/* Both stored with the quotes the dump used (`"*:80"`), so both go
+                    through displayValue rather than rendering raw. */}
+                <TableCell className="max-w-[140px] truncate font-mono text-xs">
+                  {d.virtual_host ? (
+                    displayValue(d.virtual_host, 'host')
+                  ) : (
+                    // Not missing data: no VirtualHost means server-level configuration.
+                    // Named here as well as in the filter, so a "Host: Global" chip and the
+                    // rows it selects say the same thing.
+                    <span className="text-muted-foreground">Global</span>
+                  )}
+                </TableCell>
                 <TableCell className="max-w-[160px] truncate font-mono text-xs">
-                  {d.location || <span className="text-muted-foreground">—</span>}
+                  {d.location ? (
+                    displayValue(d.location, 'location')
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
                 </TableCell>
                 <TableCell>
                   <div className="flex max-w-[200px] flex-wrap gap-1">

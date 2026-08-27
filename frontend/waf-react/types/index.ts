@@ -414,8 +414,11 @@ export interface HttpRequestFilter {
 }
 
 /** Columns the backend will order by. Closed set — anything else 422s. */
-export type SortField = 'node_id' | 'type' | 'rule_id' | 'phase' | 'location'
+export type SortField = 'node_id' | 'type' | 'rule_id' | 'phase' | 'host' | 'location'
 export type SortDir = 'asc' | 'desc'
+
+/** Properties offering a searchable value list, for the filter comboboxes. */
+export type ValueField = 'tag' | 'host' | 'location'
 
 /**
  * Combinable directive filter — the single query behind the Directives page.
@@ -431,9 +434,16 @@ export interface DirectiveSearchQuery {
   phases?: number[]
   rule_ids?: number[]
   tags?: string[]
+  /**
+   * Exact host/location, any of — what the UI sends. The stored values keep the quotes the
+   * dump used (`"*:80"`) and contain regex metacharacters, so the regex fields below cannot
+   * express them. `""` is a real value: "outside any VirtualHost/Location block".
+   */
+  hosts?: string[]
+  locations?: string[]
   node_id?: number | null
-  host?: string | null           // regex
-  location?: string | null       // regex
+  host?: string | null           // regex — API only, not reachable from the UI
+  location?: string | null       // regex — API only, not reachable from the UI
   args_contains?: string | null  // case-insensitive substring
   msg_contains?: string | null   // case-insensitive substring
   has_rule_id?: boolean | null   // null = don't care
@@ -452,6 +462,19 @@ export interface DirectiveFacetsResponse {
   configuration_id: number
   types: FacetCount[]            // commonest first
   phases: FacetCount[]           // by phase number
+}
+
+/**
+ * A searchable slice of one property's distinct values, commonest first.
+ *
+ * Never the whole set — the search runs server-side because the value count grows with the
+ * configuration. `value` is raw: quotes included, and `""` for "outside any block".
+ */
+export interface FacetValuesResponse {
+  configuration_id: number
+  field: ValueField
+  query: string
+  values: FacetCount[]
 }
 
 export interface ConstantQuery {

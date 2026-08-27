@@ -10,6 +10,8 @@ Both are scoped to one configuration, mirroring the parser's repositories.
 import logging
 from typing import Any, Dict, List, Optional
 
+from fastapi import HTTPException, status
+from neo4j.exceptions import ClientError
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -37,7 +39,21 @@ class GraphQueryRepository:
         shadow its arguments and raise TypeError.
         """
         params = {"cid": self.configuration_id, **(params or {})}
-        return [record.data() for record in self.session.run(cypher, params)]
+        try:
+            return [record.data() for record in self.session.run(cypher, params)]
+        except ClientError as e:
+            # A bad regex in host=/location= is caller error, not a server fault. Neo4j
+            # raises it at evaluation time, so it cannot be caught by request validation.
+            # Without this the UI's own placeholder text ("*:80") produced a 500.
+            # Neo4j phrases this "Invalid Regex: Dangling meta character ...", so match on
+            # the stem rather than the full phrase.
+            if "regex" in (e.message or "").lower():
+                logger.info("Invalid regex in analysis query: %s", e.message)
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid regular expression: {e.message}",
+                ) from e
+            raise
 
     # ---------- staleness ----------
 
@@ -130,6 +146,14 @@ class GraphQueryRepository:
             "types": self._run(Q.FACET_TYPES),
             "phases": self._run(Q.FACET_PHASES),
         }
+
+    def directive_values(self, field: str, q: str, limit: int) -> List[Dict[str, Any]]:
+        """
+        Searchable distinct values of one property, commonest first.
+
+        `field` indexes a fixed dict of queries, so it can never reach the Cypher as text.
+        """
+        return self._run(Q.VALUE_QUERIES[field], {"q": q, "limit": limit})
 
     # ---------- request simulation ----------
 

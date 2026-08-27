@@ -172,11 +172,9 @@ export default function LogsPage() {
                       <CardTitle className="text-base">{session.filename}</CardTitle>
                     </div>
                   </div>
-                  <CardDescription>
-                    <div className="flex items-center gap-1 text-xs">
-                      <Clock className="h-3 w-3" />
-                      {formatDate(session.created_at)}
-                    </div>
+                  <CardDescription className="flex items-center gap-1 text-xs">
+                    <Clock className="h-3 w-3" />
+                    {formatDate(session.created_at)}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">

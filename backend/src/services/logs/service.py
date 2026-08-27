@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 class LogAnalysisService:
     """Business logic for log analysis and classification"""
     
-    def __init__(self, storage_root: str = None, ml_service_url: str = "http://model:8102"):
+    def __init__(self, storage_root: str = None, ml_service_url: str = "http://model_na:8102"):
         self.storage = LogSessionStorage(storage_root or settings.STORAGE_ROOT)
         self.ml_service_url = ml_service_url
     

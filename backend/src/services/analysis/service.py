@@ -27,6 +27,7 @@ from .schemas import (
     DirectiveResponse,
     DirectiveSearchQuery,
     FacetCount,
+    FacetValuesResponse,
     MacroTraceFrame,
     MacroTraceResponse,
     NodeMetadataEntry,
@@ -124,6 +125,15 @@ class AnalysisService:
                 clauses.append(Q.CLAUSES[field])
                 params[field] = values
 
+        # Exact host/location, any of. Note "" is a legitimate value here -- it means
+        # "outside any VirtualHost/Location block" -- so these must not be truthiness-
+        # filtered the way the scalar criteria below are.
+        for field in ("hosts", "locations"):
+            values = getattr(query, field)
+            if values:
+                clauses.append(Q.CLAUSES[field])
+                params[field] = values
+
         # AND-within-field: the directive must carry every tag asked for.
         if query.tags:
             clauses.append(Q.CLAUSES["tags"])
@@ -164,6 +174,23 @@ class AnalysisService:
             configuration_id=configuration_id,
             types=[FacetCount(**r) for r in facets["types"]],
             phases=[FacetCount(**r) for r in facets["phases"]],
+        )
+
+    def get_directive_values(
+        self, configuration_id: int, field: str, q: str = "", limit: int = 50
+    ) -> FacetValuesResponse:
+        """
+        Searchable value list for one property — backs the tag/host/location comboboxes.
+
+        Counts come from the node property, matching what the filter will actually return.
+        See queries.VALUES_* for why that distinction matters.
+        """
+        rows = self._graph(configuration_id).directive_values(field, q, limit)
+        return FacetValuesResponse(
+            configuration_id=configuration_id,
+            field=field,
+            query=q,
+            values=[FacetCount(**r) for r in rows],
         )
 
     # ==================== Directive lookup ====================

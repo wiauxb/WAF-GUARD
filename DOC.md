@@ -21,7 +21,7 @@ separate track and are out of scope for this document.
 | ChatbotService | 🟡 TO REVIEW | Works, but its 5 WAF tools return dummy data and checkpoint deletion is a no-op |
 | LogAnalysisService | 🟡 TO REVIEW | Largest doc/code drift; the ML service it calls is not reachable |
 
-**Route totals:** all 45 implemented. See [Route Totals](#route-totals).
+**Route totals:** all 46 implemented. See [Route Totals](#route-totals).
 
 **Critical path:** ~~ParserService~~ ✅ → ~~AnalysisService~~ ✅ →
 ~~re-point the `/directives` page~~ ✅ → swap the chatbot's dummy tools for real calls.
@@ -1193,6 +1193,7 @@ which also validates that the target is actually queryable:
 |--------|----------|---------|----------|-------------|
 | POST | `/directives/search` | `DirectiveSearchQuery` | `DirectiveListResponse` | **Any combination of criteria, any sort order.** Backs the Directives page |
 | GET | `/directives/facets` | - | `DirectiveFacetsResponse` | Types and phases present in this config, with counts — populates the filter dropdowns |
+| GET | `/directives/values/{field}` | Query: `q`, `limit` | `FacetValuesResponse` | Searchable value list for `tag` \| `host` \| `location` — backs the filter comboboxes |
 | GET | `/directives/{node_id}` | - | `DirectiveListResponse` | Directive by node ID |
 | GET | `/directives/by-rule-id/{rule_id}` | - | `DirectiveListResponse` | Directives carrying a ModSecurity rule ID |
 | GET | `/directives/by-tag/{tag}` | - | `DirectiveListResponse` | Directives carrying a tag |
@@ -1216,29 +1217,48 @@ surprises people:
 
 | Field | Reading | Why |
 |-------|---------|-----|
-| `types`, `phases`, `rule_ids` | *any of* | A directive has one type, one phase, one id — so a list can only mean "either" |
+| `types`, `phases`, `rule_ids`, `hosts`, `locations` | *any of* | A directive has one type, one phase, one id, one host, one location — so a list can only mean "either" |
 | `tags` | *all of* | A directive carries a **list** of tags, so a list narrows to those carrying every one |
 
-Other fields: `node_id`, `host` / `location` (regex), `args_contains` / `msg_contains`
-(case-insensitive substring), `has_rule_id` (separates real ModSecurity rules from the
-config directives around them), and `source` (a file+line, resolved through PostgreSQL to
-node IDs and then joined as an ordinary clause). An empty body returns the whole
-configuration.
+Other fields: `node_id`, `args_contains` / `msg_contains` (case-insensitive substring),
+`has_rule_id` (separates real ModSecurity rules from the config directives around them),
+and `source` (a file+line, resolved through PostgreSQL to node IDs and then joined as an
+ordinary clause). An empty body returns the whole configuration.
+
+> **`hosts`/`locations` are exact; `host`/`location` are regex and API-only.** The stored
+> values keep the quotes the dump used — `"*:80"`, `".well-known/acme-challenge"` — and
+> contain regex metacharacters, so `*:80` is not even a valid pattern (it used to 500; an
+> invalid regex now returns 400). Once the parser tracks `<LocationMatch>` the Location
+> values will themselves BE regexes like `(?i)[.]axd($|/)`, which makes regex-matching them
+> meaningless as well. The UI therefore sends only the exact forms.
+>
+> `""` is a real value meaning **outside any VirtualHost/Location block** — the parser
+> initialises both to `""` and never to null. So `locations: [""]` filters to exactly those
+> 71,236 directives, and needs no sentinel.
+
+**Restricted to directive nodes.** `configuration_id` is not unique to directives — every
+value node the parser MERGEs (`Id`, `Tag`, `Constant`, `Variable`, `Collection`, `Location`,
+`VirtualHost`, `Phase`, `Regex`, `Predicate`) carries it too, ~4,500 of them on a full
+configuration. The base MATCH therefore carries `n.node_id IS NOT NULL`, which every
+directive satisfies and no value node does. The single-purpose routes never needed it: each
+constrains `n` through a relationship, which already implies a directive.
 
 Every criterion is matched against a node **property** rather than the relationship that
 mirrors it — `$tag IN n.tags`, not `(n)-[:Has]->(:Tag)`. That is what lets them all be
 conjuncts on one `MATCH`, and it is cheaper for location/host, where the relationship form
 expands every directive's edge through a single shared `value:""` node.
 
-`sort_by` (`node_id` | `type` | `rule_id` | `phase` | `location`) and `sort_dir` order the
+`sort_by` (`node_id` | `type` | `rule_id` | `phase` | `host` | `location`) and `sort_dir` order the
 **full match set** server-side, so paging stays correct. Two details in
 [queries.build_directive_search](backend/src/services/analysis/queries.py):
 Cypher cannot parameterise `ORDER BY`, so the column is interpolated from a closed
 whitelist and anything else 422s; and directives with no value for the sort column sort
-**last in both directions**, since Neo4j otherwise treats `null` as the largest value and a
-`phase DESC` would open on a page of blanks.
+**last in both directions**. Neo4j treats `null` as the largest value, so a `phase DESC`
+would otherwise open on a page of blanks — and "blank" is not only null, since `Location`
+and `VirtualHost` store absence as `""`, which sorts *first* ascending. Both cases are
+covered.
 
-Measured on `Full conf` (96,934 directives, no index on directive nodes): page + count
+Measured on `Full conf` (92,443 directives, no index on directive nodes): page + count
 together run in ~100–170 ms for every sort column.
 
 **Status codes:**
@@ -1643,13 +1663,13 @@ async def upload_configuration(
 | Auth | `/auth` | 5 | 0 | ✅ |
 | Configurations | `/configurations` | 8 | 0 | 🟡 |
 | Parser | `/parser` | **4** | 0 | ✅ |
-| Analysis | `/analysis` | **15** | 0 | ✅ |
+| Analysis | `/analysis` | **16** | 0 | ✅ |
 | Chatbot | `/chatbot` | 7 | 0 | 🟡 |
 | Logs | `/logs` | 6 | 0 | 🟡 |
-| **Total under `/api/v1`** | | **45** | **0** | |
+| **Total under `/api/v1`** | | **46** | **0** | |
 
 Plus 2 unprefixed routes in [main.py](backend/src/main.py): `GET /` and `GET /health`.
-Grand total of implemented handlers: **47**.
+Grand total of implemented handlers: **48**.
 
 > The old figure of "32 endpoints" counted 3 Parser routes that were never built and 3
 > "Common" entries that are shared schemas, not routes.

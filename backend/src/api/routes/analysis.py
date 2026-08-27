@@ -22,10 +22,12 @@ from services.analysis.schemas import (
     HttpRequestFilter,
     MacroTraceResponse,
     MAX_LIMIT,
+    FacetValuesResponse,
     NodeMetadataResponse,
     RemoverListResponse,
     SourceLocationQuery,
     SymbolSearchResponse,
+    ValueField,
 )
 from services.analysis.service import AnalysisService
 
@@ -45,8 +47,8 @@ def _offset(offset: int = Query(0, ge=0, description="Results to skip")) -> int:
 # ==========================================================================
 # Directive lookup
 #
-# ORDERING MATTERS: the literal-prefix routes (/search, /facets, /by-rule-id,
-# /by-tag, /filter) MUST be declared before /directives/{node_id}. FastAPI matches
+# ORDERING MATTERS: the literal-prefix routes (/search, /facets, /values,
+# /by-rule-id, /by-tag, /filter) MUST be declared before /directives/{node_id}. FastAPI matches
 # in declaration order, and with node_id typed as int a request to
 # /directives/by-rule-id/5 would otherwise hit the {node_id} route and fail
 # validation with 422.
@@ -88,6 +90,30 @@ async def get_directive_facets(
     than a hardcoded list of every directive ModSecurity defines.
     """
     return analysis.get_directive_facets(configuration_id)
+
+
+@router.get("/directives/values/{field}", response_model=FacetValuesResponse)
+async def get_directive_values(
+    field: ValueField = Path(..., description="tag | host | location"),
+    q: str = Query("", max_length=200, description="Case-insensitive substring; empty = top by count"),
+    limit: int = Query(50, ge=1, le=500, description="Max values to return"),
+    configuration_id: int = Depends(get_analysis_configuration_id),
+    analysis: AnalysisService = Depends(get_analysis_service),
+):
+    """
+    Searchable list of the values a property actually takes, commonest first.
+
+    Populates the tag/host/location filter comboboxes. The search runs here rather than in
+    the browser because the value count grows with the configuration — this one already has
+    239 tags and 56 locations, and the latter reaches several hundred once the parser
+    tracks `<LocationMatch>`.
+
+    Values are returned **raw**: surrounding quotes included (`"*:80"`, as the dump stores
+    them) and `""` for directives outside any block. That is exactly the form
+    `hosts` / `locations` / `tags` expect, so a value can be handed straight back to
+    `/directives/search`.
+    """
+    return analysis.get_directive_values(configuration_id, field, q, limit)
 
 
 @router.get("/directives/by-rule-id/{rule_id}", response_model=DirectiveListResponse)

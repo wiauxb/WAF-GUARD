@@ -57,7 +57,10 @@ class SourceLocationQuery(BaseModel):
 # Columns the result set may be ordered by. A whitelist, not a free string: Cypher cannot
 # parameterise ORDER BY, so the chosen name is interpolated into the query and must never
 # come straight from the caller. `queries.SORT_FIELDS` maps these onto node properties.
-SortField = Literal["node_id", "type", "rule_id", "phase", "location"]
+SortField = Literal["node_id", "type", "rule_id", "phase", "host", "location"]
+
+# Properties offering a searchable value list via GET /directives/values/{field}.
+ValueField = Literal["tag", "host", "location"]
 
 
 class DirectiveSearchQuery(BaseModel):
@@ -83,8 +86,15 @@ class DirectiveSearchQuery(BaseModel):
     # AND within the field
     tags: List[str] = Field(default_factory=list, description="Tags; must carry ALL of them")
 
+    # Exact host/location, any of. This is what the UI sends. The stored values keep the
+    # quotes the dump used (`"*:80"`) and contain regex metacharacters, so the regex fields
+    # below cannot express them. "" is a real value meaning "outside any block".
+    hosts: List[str] = Field(default_factory=list, description="Exact VirtualHost values; any of")
+    locations: List[str] = Field(default_factory=list, description="Exact Location values; any of")
+
     # single-valued
     node_id: Optional[int] = Field(default=None, description="Parser node_id — exact")
+    # Regex variants, for programmatic callers. An invalid pattern returns 400.
     host: Optional[str] = Field(default=None, max_length=500, description="VirtualHost regex")
     location: Optional[str] = Field(default=None, max_length=500, description="Location regex")
     args_contains: Optional[str] = Field(
@@ -154,10 +164,30 @@ class DirectiveFacetsResponse(BaseModel):
 
     Without this the type dropdown would need a hardcoded list of directive names, which
     would be both incomplete and full of entries this configuration never uses.
+
+    Types and phases only: both are small and fixed, so the whole list is worth sending.
+    Tags, hosts and locations are served by /directives/values/{field}, which searches.
     """
     configuration_id: int
     types: List[FacetCount]                # ordered by count, commonest first
     phases: List[FacetCount]               # ordered by phase number
+
+
+class FacetValuesResponse(BaseModel):
+    """
+    A searchable slice of one property's distinct values, commonest first.
+
+    Only a page of matches, never the whole set: this configuration already has 56 distinct
+    locations and will have several hundred once the parser tracks <LocationMatch>, so the
+    search runs server-side and the caller sends `q` as the user types.
+
+    `value` is raw — surrounding quotes included, and "" for "outside any block". That is
+    the form the filter takes; prettifying it is the UI's job.
+    """
+    configuration_id: int
+    field: str                             # tag | host | location
+    query: str                             # the `q` that produced this
+    values: List[FacetCount]
 
 
 class RemoverEntry(BaseModel):

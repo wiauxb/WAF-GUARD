@@ -86,8 +86,15 @@ SORT_FIELDS = {
     "type": "n.type",
     "rule_id": "n.id",
     "phase": "n.phase",
+    "host": "n.VirtualHost",
     "location": "n.Location",
 }
+
+# Sort columns where "absent" is stored as the empty string rather than null: the parser
+# initialises Location and VirtualHost to "" and never to None (dump_parser.py). Sorting
+# them on the null test alone leaves "" as the smallest string, so an ascending sort opens
+# on a page of blanks -- 71,236 of them for Location. These get a blank test covering both.
+_EMPTY_MEANS_BLANK = {"type", "host", "location"}
 
 # Clause fragments, keyed by the criterion they implement. Kept here rather than in the
 # service so that every piece of Cypher in AnalysisService lives in this one file.
@@ -101,6 +108,14 @@ CLAUSES = {
     "rule_ids": "n.id IN $rule_ids",
     "tags": "ALL(t IN $tags WHERE t IN n.tags)",
     "node_id": "n.node_id = $node_id",
+    # Exact, and the form the UI uses. The stored values carry their quotes (`"*:80"`) and
+    # contain regex metacharacters, so `=~` cannot express them: `*:80` is not even a valid
+    # pattern. Once the parser tracks <LocationMatch>, Location values will themselves BE
+    # regexes, which makes regex-matching them meaningless as well.
+    # "" is a real value meaning "outside any block", so IN [""] filters to exactly those.
+    "hosts": "n.VirtualHost IN $hosts",
+    "locations": "n.Location IN $locations",
+    # Regex forms, kept for programmatic callers. Not reachable from the UI.
     "host": "n.VirtualHost =~ $host",
     "location": "n.Location =~ $location",
     # CONTAINS is case-sensitive in Cypher; a search box should not be. No index is given
@@ -112,7 +127,19 @@ CLAUSES = {
     "source_node_ids": "n.node_id IN $source_node_ids",
 }
 
-SEARCH_MATCH = "MATCH (n {configuration_id: $cid})"
+# `configuration_id` scopes the graph, but it is NOT only on directives -- every value node
+# the parser MERGEs (Id, Tag, Constant, Variable, Collection, Location, VirtualHost, Phase,
+# Regex, Predicate) carries it too. On a full configuration that is ~4,500 extra nodes, so
+# an unfiltered search over-counted by that much and deep pages showed blank rows.
+#
+# `node_id` is the discriminator: the parser assigns one to every directive and to no value
+# node. It costs nothing and needs no re-parse -- unlike a shared :Directive label, which
+# would let this become an index seek but only after re-parsing.
+#
+# The single-purpose queries above never had this problem: each constrains `n` through a
+# relationship, which already implies a directive.
+SEARCH_MATCH = """MATCH (n {configuration_id: $cid})
+WHERE n.node_id IS NOT NULL"""
 
 
 def build_directive_search(
@@ -121,27 +148,36 @@ def build_directive_search(
     """
     Assemble the (page, count) pair for a combinable directive search.
 
-    All clauses are AND-ed onto one MATCH, so this composes any subset of the criteria
+    All clauses are AND-ed onto the base MATCH, so this composes any subset of the criteria
     without a query per combination.
 
     Two things the ORDER BY has to get right:
 
-    - NULLS. Neo4j orders null as the LARGEST value, so a plain `phase DESC` opens on a
-      full page of blanks -- ~87% of directives declare no phase. Sorting on the null test
-      first (false < true) parks blanks at the bottom whichever direction is asked for.
+    - BLANKS. Neo4j orders null as the LARGEST value, so a plain `phase DESC` opens on a
+      full page of blanks -- ~87% of directives declare no phase. Sorting on the blank test
+      first (false < true) parks them at the bottom whichever direction is asked for.
+      "Blank" is not just null: Location and VirtualHost store absence as "", which sorts
+      FIRST ascending, so those columns test for both. See _EMPTY_MEANS_BLANK.
     - TIES. Page and count run as separate statements and SKIP/LIMIT walks the page query
       repeatedly; without a unique tiebreaker, equal sort keys order arbitrarily between
       calls and paging repeats or drops rows. node_id is unique per configuration, so it
       settles every tie.
     """
+    # SEARCH_MATCH already opens the WHERE with the directive restriction, so every
+    # criterion joins it with AND rather than starting a clause of its own.
     match = SEARCH_MATCH
-    if clauses:
-        match += "\nWHERE " + "\n  AND ".join(clauses)
+    for clause in clauses:
+        match += f"\n  AND {clause}"
 
     field = SORT_FIELDS[sort_by]              # KeyError here means an unvalidated caller
     direction = "DESC" if sort_dir == "desc" else "ASC"
 
-    keys = [f"({field} IS NULL)", f"{field} {direction}"]
+    blank = (
+        f"({field} IS NULL OR {field} = '')"
+        if sort_by in _EMPTY_MEANS_BLANK
+        else f"({field} IS NULL)"
+    )
+    keys = [blank, f"{field} {direction}"]
     if field != "n.node_id":
         keys.append("n.node_id")
     order_by = "ORDER BY " + ", ".join(keys)
@@ -153,17 +189,70 @@ def build_directive_search(
 # over one property and materialise nothing else, so they stay cheap at any size.
 FACET_TYPES = """
 MATCH (n {configuration_id: $cid})
-WHERE n.type IS NOT NULL
+WHERE n.node_id IS NOT NULL AND n.type IS NOT NULL
 RETURN n.type AS value, count(*) AS count
 ORDER BY count DESC, value
 """
 
 FACET_PHASES = """
 MATCH (n {configuration_id: $cid})
-WHERE n.phase IS NOT NULL
+WHERE n.node_id IS NOT NULL AND n.phase IS NOT NULL
 RETURN n.phase AS value, count(*) AS count
 ORDER BY value
 """
+
+
+# ==================== Value suggestions ====================
+
+# Backs GET /directives/values/{field}: the searchable dropdowns for tag, host and location.
+#
+# These aggregate the node PROPERTY, deliberately NOT the value nodes that mirror it.
+# Measured: tag "security" counts 41,995 via n.tags but 41,956 via (:Tag)<-[:Has]- -- Tag
+# nodes and their edges are only written by the generic/secrule modules, so some directives
+# carry the property with no edge. Since the FILTER matches the property, a suggestion count
+# taken from the nodes would disagree with the result the user gets after clicking it.
+#
+# `value` is returned raw, including any surrounding quotes the dump preserved (`"*:80"`).
+# That raw form is what the filter needs; stripping is a display concern for the UI.
+# The empty string is a genuine value meaning "outside any block" and is returned like the
+# rest, so "(none)" needs no sentinel.
+
+_VALUE_FILTER_AND_PAGE = """
+WITH value, count(*) AS count
+WHERE $q = '' OR toLower(toString(value)) CONTAINS toLower($q)
+RETURN value, count
+ORDER BY count DESC, value
+LIMIT $limit
+"""
+
+# tags is a list property, so it needs flattening before it can be grouped.
+VALUES_TAG = f"""
+MATCH (n {{configuration_id: $cid}})
+WHERE n.node_id IS NOT NULL
+UNWIND n.tags AS value
+{_VALUE_FILTER_AND_PAGE}
+"""
+
+VALUES_HOST = f"""
+MATCH (n {{configuration_id: $cid}})
+WHERE n.node_id IS NOT NULL AND n.VirtualHost IS NOT NULL
+WITH n.VirtualHost AS value
+{_VALUE_FILTER_AND_PAGE}
+"""
+
+VALUES_LOCATION = f"""
+MATCH (n {{configuration_id: $cid}})
+WHERE n.node_id IS NOT NULL AND n.Location IS NOT NULL
+WITH n.Location AS value
+{_VALUE_FILTER_AND_PAGE}
+"""
+
+# The field name in the URL -> its query. Also the whitelist: an unknown field 422s.
+VALUE_QUERIES = {
+    "tag": VALUES_TAG,
+    "host": VALUES_HOST,
+    "location": VALUES_LOCATION,
+}
 
 
 # ==================== Staleness guard ====================
