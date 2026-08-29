@@ -75,7 +75,12 @@ class Settings(BaseSettings):
     LLM_TEMPERATURE: float = 0.7
 
     # Chatbot-specific LLM settings (LangGraph)
-    OPENAI_MODEL: str = "gpt-4o-mini"  # Model for chatbot agent
+    # Model for the chatbot agent. gpt-5.6-luna: 1.05M context, reasoning, and $0.20/$1.20
+    # per 1M tokens ($0.02 cached). Chosen over gpt-4o-mini on measured answer quality --
+    # both score 8/8 on counting questions, but 4o-mini names the wrong file on remediation
+    # questions where luna traces the real one. Note _model_kwargs() in graphs/simple_graphs
+    # routes the GPT-5 family to the Responses API; without that, every tool call 400s.
+    OPENAI_MODEL: str = "gpt-5.6-luna"
     # How many recent messages SummarizationMiddleware keeps verbatim before compressing
     # older turns. Directive tool results are bulky, so this is the main lever on how long
     # a conversation can run before the context window becomes the limit.

@@ -26,6 +26,26 @@ from services.chatbot.tools.registry import get_tools_for_categories
 logger = logging.getLogger(__name__)
 
 
+def _model_kwargs(model_name: str) -> dict:
+    """
+    Per-family client options.
+
+    The GPT-5 family refuses function tools on /v1/chat/completions unless reasoning is
+    switched off:
+
+        "Function tools with reasoning_effort are not supported for gpt-5.6-luna in
+         /v1/chat/completions. To use function tools, use /v1/responses or set
+         reasoning_effort to 'none'."
+
+    Every tool call this agent makes would 400. Routing those models to the Responses API
+    keeps the reasoning, which is the only reason to prefer them over gpt-4o-mini in the
+    first place; disabling it would buy compatibility with the thing being paid for.
+    """
+    if model_name.startswith(("gpt-5", "o1", "o3", "o4")):
+        return {"use_responses_api": True}
+    return {}
+
+
 def build_ui_graph_v1(checkpointer, model_name: str = None, temperature: float = None):
     """
     The WAF analysis agent.
@@ -51,7 +71,7 @@ def build_ui_graph_v1(checkpointer, model_name: str = None, temperature: float =
     model_name = model_name or settings.OPENAI_MODEL
     temperature = settings.CHATBOT_TEMPERATURE if temperature is None else temperature
 
-    model = ChatOpenAI(model=model_name, temperature=temperature)
+    model = ChatOpenAI(model=model_name, temperature=temperature, **_model_kwargs(model_name))
 
     return create_agent(
         model=model,

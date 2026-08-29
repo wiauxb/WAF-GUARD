@@ -6,6 +6,38 @@ from langchain_core.messages import AIMessage, ToolMessage, HumanMessage
 from ..schemas import MessageResponse, ToolCallInfo
 
 
+
+def message_text(msg) -> str:
+    """
+    The visible prose of a message, whatever shape the provider returned.
+
+    Chat Completions gives `content` as a string. The Responses API — which the GPT-5
+    family requires for function calling — gives a LIST of blocks: reasoning blocks
+    carrying an `encrypted_content` blob, then the text block. Passing that list on
+    raises AttributeError on `.strip()`, and stringifying it dumps kilobytes of
+    ciphertext into the UI and the database.
+
+    `.text` takes the text blocks and nothing else.
+    """
+    text = getattr(msg, "text", None)
+    if isinstance(text, str):               # current langchain: a property
+        return text
+    if callable(text):                      # older langchain exposed it as a method
+        try:
+            called = text()
+        except Exception:                   # noqa: BLE001 - fall through to content
+            called = None
+        if isinstance(called, str):
+            return called
+    content = getattr(msg, "content", "")
+    if isinstance(content, list):
+        return "".join(
+            b.get("text", "") for b in content
+            if isinstance(b, dict) and b.get("type") == "text"
+        )
+    return content or ""
+
+
 def parse_langchain_messages_to_responses(messages: list) -> List[MessageResponse]:
     """
     Convert LangChain messages to MessageResponse objects with tool extraction.
@@ -60,16 +92,22 @@ def parse_langchain_messages_to_responses(messages: list) -> List[MessageRespons
                 tools.append(tool_info)
 
             # If this message has actual content, include it with tools
-            if msg.content and msg.content.strip():
+            text = message_text(msg)
+            if text and text.strip():
                 message_responses.append(MessageResponse(
                     role="assistant",
-                    content=msg.content,
+                    content=text,
                     timestamp=getattr(msg, "timestamp", datetime.utcnow()),
-                    tools_used=tools
+                    tools_used=(pending_tools or []) + tools
                 ))
+                pending_tools = None
             else:
-                # No content yet - store tools to attach to next AI message
-                pending_tools = tools
+                # No content yet - carry the tools forward to the message that answers.
+                # ACCUMULATE: one turn commonly runs several rounds of tool calls, e.g.
+                # match_url -> get_provenance -> read_config_file, each its own AIMessage.
+                # Assigning here instead of extending dropped every round but the last, so a
+                # reloaded conversation showed one tool where the live stream had shown six.
+                pending_tools = (pending_tools or []) + tools
             continue
 
         # Handle regular messages (user or AI without tool calls)
@@ -88,7 +126,7 @@ def parse_langchain_messages_to_responses(messages: list) -> List[MessageRespons
         # Create MessageResponse
         message_responses.append(MessageResponse(
             role=role,
-            content=msg.content,
+            content=message_text(msg),
             timestamp=timestamp,
             tools_used=tools_used
         ))

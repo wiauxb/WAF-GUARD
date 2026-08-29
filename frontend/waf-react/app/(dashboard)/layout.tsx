@@ -13,7 +13,11 @@ export default function DashboardLayout({
       <div className="flex h-screen overflow-hidden">
         <Sidebar />
         <main className="flex-1 overflow-y-auto lg:ml-64">
-          <div className="container mx-auto p-4 lg:p-8">
+          {/* w-full, not `container mx-auto`: the container utility caps at the breakpoint
+            width and centres, which left ~100px of dead margin each side on a wide
+            screen. Pages here are dense (a 9-column directive table, a chat panel with
+            tool output) and want the room. */}
+          <div className="w-full p-4 lg:p-6">
             {children}
           </div>
         </main>

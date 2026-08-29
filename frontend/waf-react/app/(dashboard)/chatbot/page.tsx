@@ -233,8 +233,12 @@ export default function ChatbotPage() {
     }
   }
 
+  // Full-bleed: the negative margin cancels the dashboard layout's p-4/lg:p-6 so the chat
+  // reaches the sidebar and the window edges, then p-2 puts a thin gutter back. The old
+  // h-[calc(100vh-8rem)] reserved 128px for a page header this route does not render, which
+  // is where the large dead strip under the panel came from.
   return (
-    <div className="flex h-[calc(100vh-8rem)] gap-4">
+    <div className="flex h-screen gap-3 -m-4 lg:-m-6 p-2">
       <Card className="w-80 flex flex-col bg-gradient-to-br from-purple-50 to-blue-50 border-purple-200">
         <div className="p-4 border-b flex items-center justify-between">
           <h2 className="font-semibold flex items-center gap-2">
@@ -245,7 +249,9 @@ export default function ChatbotPage() {
             <Plus className="h-4 w-4" />
           </Button>
         </div>
-        <div className="flex-1 overflow-y-auto p-2">
+        {/* overflow-x-hidden: the selected item uses scale-105, and a transform still counts
+              toward scrollWidth, so it raised an 8px horizontal scrollbar on the list. */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-2">
           {conversationsLoading ? (
             <LoadingSpinner />
           ) : conversations?.length === 0 ? (
@@ -302,7 +308,11 @@ export default function ChatbotPage() {
         </div>
       </Card>
 
-      <Card className="flex-1 flex flex-col bg-gradient-to-br from-slate-50 to-gray-100 border-slate-200">
+      {/* min-w-0 here is what actually stops the horizontal blowout: this Card is a flex
+          item, and a flex item refuses to shrink below its content unless min-width is 0.
+          Without it a wide tool-call <pre> widened the Card itself, so the constraints on
+          the bubble inside never got a chance to apply. */}
+      <Card className="flex-1 min-w-0 flex flex-col bg-gradient-to-br from-slate-50 to-gray-100 border-slate-200">
         {!currentThreadId ? (
           <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-50">
             <div className="text-center space-y-4">
@@ -324,13 +334,17 @@ export default function ChatbotPage() {
           <>
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {messages.map((message, index) => (
-                <div key={index} className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div key={index} className={`flex gap-3 min-w-0 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   {message.role === 'assistant' && (
                     <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center flex-shrink-0 shadow-lg">
                       <Bot className="h-5 w-5 text-white" />
                     </div>
                   )}
-                  <div className={`max-w-[70%] rounded-lg p-3 shadow-md ${
+                  {/* min-w-0: a flex item defaults to min-width:auto, so a wide <pre> in an
+                      expanded tool call pushed the bubble past max-w-[70%] and stretched the
+                      whole panel off-screen. With min-width:0 the inner overflow-x-auto
+                      finally engages and the long line scrolls inside the bubble instead. */}
+                  <div className={`max-w-[85%] min-w-0 rounded-lg p-3 shadow-md ${
                     message.role === 'user' 
                       ? 'bg-gradient-to-br from-blue-500 to-indigo-500 text-white' 
                       : 'bg-white border-2 border-purple-200'
@@ -351,11 +365,11 @@ export default function ChatbotPage() {
                         {message.tools_used.map((tool, idx) => (
                           <details key={idx} className="text-xs opacity-70 mt-1">
                             <summary className="cursor-pointer font-mono">{tool.name}</summary>
-                            <pre className="mt-1 p-1 bg-black/10 rounded overflow-x-auto">{JSON.stringify(tool.arguments, null, 2)}</pre>
+                            <pre className="mt-1 p-1 bg-black/10 rounded max-w-full max-h-40 overflow-y-auto whitespace-pre-wrap break-all">{JSON.stringify(tool.arguments, null, 2)}</pre>
                             {/* The result, which this never used to show — a tool call you
                                 cannot see the output of is not much of an audit trail. */}
                             {tool.result != null && (
-                              <pre className="mt-1 max-h-48 overflow-auto p-1 bg-black/5 rounded">
+                              <pre className="mt-1 max-h-48 max-w-full overflow-y-auto p-1 bg-black/5 rounded whitespace-pre-wrap break-all">
                                 {typeof tool.result === 'string' ? tool.result : JSON.stringify(tool.result, null, 2)}
                               </pre>
                             )}
@@ -381,7 +395,7 @@ export default function ChatbotPage() {
                   <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center shadow-lg flex-shrink-0">
                     <Bot className="h-5 w-5 text-white" />
                   </div>
-                  <div className="bg-white border-2 border-purple-200 rounded-lg p-3 shadow-md max-w-[80%] space-y-2">
+                  <div className="bg-white border-2 border-purple-200 rounded-lg p-3 shadow-md max-w-[85%] min-w-0 space-y-2">
                     {liveTools.map((t, i) => (
                       <div key={t.id ?? `${t.name}-${i}`} className="rounded border border-purple-100 bg-purple-50/60 p-2">
                         <div className="flex items-center gap-2 text-xs font-medium text-purple-900">
@@ -393,13 +407,13 @@ export default function ChatbotPage() {
                           <span className="font-mono">{t.name}</span>
                           {t.running && <span className="opacity-60">running…</span>}
                         </div>
-                        <pre className="mt-1 overflow-x-auto text-[11px] text-purple-900/80">
+                        <pre className="mt-1 max-w-full text-[11px] text-purple-900/80 whitespace-pre-wrap break-all">
                           {JSON.stringify(t.arguments, null, 0)}
                         </pre>
                         {t.result && (
                           <details className="mt-1 text-[11px]">
                             <summary className="cursor-pointer opacity-70">result</summary>
-                            <pre className="mt-1 max-h-40 overflow-auto rounded bg-black/5 p-1">{t.result}</pre>
+                            <pre className="mt-1 max-h-40 max-w-full overflow-y-auto rounded bg-black/5 p-1 whitespace-pre-wrap break-all">{t.result}</pre>
                           </details>
                         )}
                       </div>

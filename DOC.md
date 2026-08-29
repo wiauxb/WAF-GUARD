@@ -407,6 +407,61 @@ configuration returns a **sentence**, not an exception, so the agent explains in
 dying; and list arguments **accept a bare value** — models routinely send `locations: ""`
 for `locations: [""]`, and rejecting it wasted a round trip.
 
+### Source-file tools
+
+Three read-only tools over the ORIGINAL extracted configuration, alongside the ten that
+query the compiled dump: `grep_config`, `glob_config`, `read_config_file`. They exist because
+a fix is applied to source, and the dump cannot tell you what to edit.
+
+**No write tools, by choice.** The agent recommends an edit in the chat; a human applies it.
+
+**Isolation.** Each tool resolves its root from `ChatContext.configuration_id` *at call
+time*, so a turn can only reach the files of the configuration its conversation is bound to.
+langchain's `FilesystemFileSearchMiddleware` was the obvious alternative and was rejected:
+its `root_path` is a constructor argument, which would give the isolation invariant two
+sources of truth — graph build and invocation context — free to drift apart. One binding,
+re-checked per call.
+
+Containment is `Path.resolve().is_relative_to(root)` (resolves symlinks; no `startswith`
+prefix hole such as `config_5` vs `config_55` — note `AnalysisService._resolve` still uses
+the weaker form on parser-supplied paths). Paths returned to the model are **virtual**
+(`/conf/common/apps/jira.conf`), so it never learns where configurations live and cannot
+name another one. `..` is refused before any path mapping. 37 tests in
+`backend/tests/test_source_tools_isolation.py` try every escape route; they need `pytest`,
+which is not in the backend image.
+
+**Two traps that produce confident wrong answers**, both handled in the tools and the prompt:
+
+- *Case.* Apache directive names are case-insensitive; the files are not self-consistent.
+  `SecRuleRemoveById` finds nothing, `SecRuleRemoveByID` finds `aaa-security.conf:89`. Grep
+  therefore defaults to case-insensitive.
+- *Macro expansion.* The source does not contain the dump's strings. `<Location
+  /jira/secure/>` has 19 directives in the graph and appears nowhere in the source, which
+  writes `<Location $frontPath/>` inside `<Macro Jira_Proxy_>`. A grep miss means
+  "macro-generated — use `get_provenance`", never "not in your configuration".
+
+`get_provenance` reports dump paths (`/etc/httpd/conf/...`) while these tools return virtual
+ones; both forms are accepted, because the agent holds one and needs the other. Before that,
+it looped: provenance handed it a path, the read failed, and it started guessing filenames.
+
+### Remediation guidance
+
+The tools let the agent *read* the compiled configuration; a fix has to be written to a
+**source file**. That gap is closed in the prompt, not in code, because every failure below
+was a confident wrong answer rather than an error:
+
+| Failure observed | Rule added |
+|---|---|
+| Asked to fix a false positive, it proposed deleting an existing `SecRuleRemoveById` — **re-enabling** the rule that was blocking | Check direction first: removing an exclusion fixes a false *negative*. Never propose it for a false positive |
+| Offered a `<LocationMatch>` for an unrelated path it had seen in a tool result | Call `match_url`, propose the exclusion in the tightest block that actually covers the request |
+| Named `httpd.conf` / `conf.d/` — a plausible path it never retrieved | A fix answer is unfinished until `get_provenance` has named a real file |
+| **Invented rule id `204`** when the user had named no rule at all | Only name a rule the user gave or a tool showed active at that scope; otherwise stop and ask for the audit-log `[id "NNNNNN"]` |
+| Hunted for the culprit rule until the recursion limit | Explicit stop condition — no filter combination can identify a rule for a request you cannot see |
+| Cited "around line 790" | Name the file and quote the snippet; macro-expanded line numbers are approximate |
+
+It also prefers `SecRuleUpdateTargetById` (rule keeps running, one parameter excluded) over a
+blunt `SecRuleRemoveById`, and warns that editing a `<Macro>` body changes every call site.
+
 ### Streaming
 
 `POST /conversations/{thread_id}/messages/stream` emits JSON SSE events: `token`,
@@ -520,7 +575,10 @@ services/chatbot/
 > the chatbot actually useful, and it is blocked on ParserService + AnalysisService.
 
 **Configuration** (from settings):
-- `OPENAI_MODEL`: Model for chatbot (default: "gpt-4o-mini")
+- `OPENAI_MODEL`: Model for chatbot (default: `"gpt-5.6-luna"` — 1.05M context, reasoning,
+  $0.20/$1.20 per 1M, $0.02 cached input). The GPT-5 family refuses function tools on
+  `/v1/chat/completions`, so `_model_kwargs()` routes it to the Responses API; that API
+  returns content as a list of blocks (reasoning + text), flattened by `message_text()`.
 - `CHATBOT_TEMPERATURE`: Response temperature (default: 0.7)
 - `OPENAI_API_KEY`: Required for OpenAI API access
 

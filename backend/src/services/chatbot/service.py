@@ -10,7 +10,7 @@ from .schemas import (
     ConversationListFilters,
     ToolCallInfo
 )
-from .utils import parse_langchain_messages_to_responses
+from .utils import parse_langchain_messages_to_responses, message_text
 from typing import List, Optional
 from datetime import datetime
 import uuid
@@ -201,7 +201,7 @@ class ChatbotService:
         # The last parsed message should be the assistant's response
         assistant_response = parsed_messages[-1] if parsed_messages else MessageResponse(
             role="assistant",
-            content=all_messages[-1].content,
+            content=message_text(all_messages[-1]),
             timestamp=datetime.utcnow(),
             tools_used=None
         )
@@ -395,8 +395,11 @@ class ChatbotService:
                 # JSON straight into the reply text. Tool output belongs in tool_end.
                 if type(message_chunk).__name__ not in ("AIMessageChunk", "AIMessage"):
                     continue
-                if getattr(message_chunk, "content", None):
-                    yield {"type": "token", "content": message_chunk.content}
+                # Responses-API chunks carry reasoning blocks alongside text; only the
+                # text is the reply. See message_text.
+                piece = message_text(message_chunk)
+                if piece:
+                    yield {"type": "token", "content": piece}
                 continue
 
             # mode == "updates"

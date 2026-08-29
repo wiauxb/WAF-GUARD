@@ -10,10 +10,12 @@ from .error_handling import (
 )
 from .message_parser import (
     parse_langchain_messages_to_responses,
+    message_text,
 )
 
 __all__ = [
     "handle_tool_error",
     "create_tool_node_with_fallback",
     "parse_langchain_messages_to_responses",
+    "message_text",
 ]
