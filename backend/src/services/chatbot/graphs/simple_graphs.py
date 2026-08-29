@@ -1,89 +1,71 @@
 """
-Simple Graph Implementations
+Agent construction.
 
-Simple ReAct agents using LangGraph's built-in create_react_agent().
-Following LangGraph best practices: use built-in patterns, not custom classes.
+Built with `langchain.agents.create_agent`, which the LangChain v1 docs call "the new
+standard for building agents in LangChain, replacing langgraph.prebuilt.create_react_agent"
+— the entry point this used to use. What that buys here, concretely:
+
+  - `context_schema` + ToolRuntime, so a conversation's configuration reaches every tool
+    as typed per-invocation input rather than being smuggled through message state;
+  - middleware, of which SummarizationMiddleware is not optional for this workload —
+    directive tool results are bulky and a long investigation would otherwise walk off the
+    end of the context window mid-conversation.
 """
 
-from langgraph.prebuilt import create_react_agent
+import logging
+
+from langchain.agents import create_agent
+from langchain.agents.middleware import SummarizationMiddleware
 from langchain_openai import ChatOpenAI
+
 from shared.config import settings
-from services.chatbot.tools.registry import get_tools_for_categories
+from services.chatbot.context import ChatContext
 from services.chatbot.prompts.agent_prompts import get_system_prompt
+from services.chatbot.tools.registry import get_tools_for_categories
+
+logger = logging.getLogger(__name__)
 
 
-def build_ui_graph_v1(
-    checkpointer,
-    model_name: str = None,
-    temperature: float = None
-):
+def build_ui_graph_v1(checkpointer, model_name: str = None, temperature: float = None):
     """
-    Build a simple ReAct agent for WAF configuration assistance.
-
-    This is the recommended approach from LangGraph documentation:
-    - Uses create_react_agent() (built-in, optimized)
-    - No custom agent classes needed
-    - Automatic tool calling and conversation management
-    - Checkpointer handles persistence automatically
+    The WAF analysis agent.
 
     Args:
-        checkpointer: LangGraph PostgresSaver instance for conversation persistence
-        model_name (str): OpenAI model name (default: from settings.OPENAI_MODEL)
-        temperature (float): Model temperature for response generation (default: from settings.CHATBOT_TEMPERATURE)
+        checkpointer: LangGraph saver; the conversation history lives here, keyed by
+            thread_id.
+        model_name: defaults to settings.OPENAI_MODEL.
+        temperature: defaults to settings.CHATBOT_TEMPERATURE.
 
     Returns:
-        CompiledGraph: Compiled LangGraph ready for invocation
+        A compiled agent. Invoke it with BOTH a thread and a context:
 
-    Usage:
-        >>> from shared.database import get_langgraph_checkpointer
-        >>> checkpointer = get_langgraph_checkpointer()
-        >>> graph = build_ui_graph_v1(checkpointer)
-        >>>
-        >>> # Invoke with thread_id for conversation persistence
-        >>> config = {"configurable": {"thread_id": "thread_abc123"}}
-        >>> response = graph.invoke(
-        ...     {"messages": [{"role": "user", "content": "Filter rules for /api"}]},
-        ...     config
-        ... )
-        >>> print(response["messages"][-1].content)
+            agent.invoke(
+                {"messages": [...]},
+                config={"configurable": {"thread_id": thread_id}},
+                context=ChatContext(configuration_id=..., user_id=...),
+            )
 
-    Architecture:
-        User Message → Model (with tools) → Tool Execution → Model → Response
-                         ↑                                            ↓
-                         └────────── Checkpointer Persistence ───────┘
+        The thread_id selects the conversation; the context selects the configuration its
+        tools resolve against. Omitting the context leaves the tools with nothing to query.
     """
-    # Use configuration defaults if not specified
-    if model_name is None:
-        model_name = settings.OPENAI_MODEL
-    if temperature is None:
-        temperature = settings.CHATBOT_TEMPERATURE
+    model_name = model_name or settings.OPENAI_MODEL
+    temperature = settings.CHATBOT_TEMPERATURE if temperature is None else temperature
 
-    # Get WAF tools from registry
-    tools = get_tools_for_categories(["waf"])
-
-    # Create model
     model = ChatOpenAI(model=model_name, temperature=temperature)
 
-    # Get system prompt
-    system_prompt = get_system_prompt("ui_graph_v1")
-
-    # Create ReAct agent with system prompt
-    # The 'prompt' parameter accepts a string or SystemMessage
-    graph = create_react_agent(
+    return create_agent(
         model=model,
-        tools=tools,
+        tools=get_tools_for_categories(["waf"]),
+        system_prompt=get_system_prompt("ui_graph_v1"),
+        context_schema=ChatContext,
         checkpointer=checkpointer,
-        prompt=system_prompt
+        middleware=[
+            # Compresses older turns once the history grows, keeping the recent exchange
+            # intact. Without it a handful of directive searches fills the window and the
+            # conversation starts failing rather than degrading.
+            SummarizationMiddleware(
+                model=model,
+                keep=("messages", settings.CHATBOT_KEEP_MESSAGES),
+            ),
+        ],
     )
-
-    return graph
-
-
-# Future graph builders (Phase 2 & 3):
-# def build_workflow_graph_v1(checkpointer, **kwargs):
-#     """Workflow graph with routing and orchestration"""
-#     pass
-#
-# def build_multi_agent_v1(checkpointer, **kwargs):
-#     """Multi-agent supervisor with subgraphs"""
-#     pass

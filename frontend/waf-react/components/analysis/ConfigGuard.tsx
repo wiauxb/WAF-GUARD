@@ -1,5 +1,6 @@
 'use client'
 
+import { errorMessage } from '@/lib/errors'
 import { useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, FileCode, Play } from 'lucide-react'
@@ -86,7 +87,7 @@ export function ConfigGuard({ error, configurationId, children }: ConfigGuardPro
         toast.success('Parsing started — this can take a few minutes')
       } catch (e: any) {
         setParsing(false)
-        toast.error(e?.response?.data?.detail || 'Could not start parsing')
+        toast.error(errorMessage(e, 'Could not start parsing'))
       }
     }
 

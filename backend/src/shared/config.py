@@ -76,6 +76,10 @@ class Settings(BaseSettings):
 
     # Chatbot-specific LLM settings (LangGraph)
     OPENAI_MODEL: str = "gpt-4o-mini"  # Model for chatbot agent
+    # How many recent messages SummarizationMiddleware keeps verbatim before compressing
+    # older turns. Directive tool results are bulky, so this is the main lever on how long
+    # a conversation can run before the context window becomes the limit.
+    CHATBOT_KEEP_MESSAGES: int = 20
     CHATBOT_TEMPERATURE: float = 0.7  # Temperature for chatbot responses
     
     # ==================== API Settings ====================

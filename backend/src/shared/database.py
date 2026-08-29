@@ -12,6 +12,7 @@ from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import NullPool, QueuePool
 from neo4j import GraphDatabase, Session as Neo4jSession
 from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from typing import Generator
 import logging
 
@@ -158,6 +159,14 @@ _psycopg_url = settings.POSTGRES_URL.replace("postgresql+psycopg://", "postgresq
 _checkpointer_context = PostgresSaver.from_conn_string(_psycopg_url)
 langgraph_checkpointer = _checkpointer_context.__enter__()  # Get the actual PostgresSaver instance
 
+# An ASYNC saver as well, because the two are not interchangeable: `graph.astream` calls
+# `aget_tuple`, which the synchronous PostgresSaver raises NotImplementedError from. The
+# blocking `invoke` path works on the sync one, so streaming failed while sending did not.
+# Both point at the same tables, so a conversation streamed and a conversation sent share
+# one history.
+_async_checkpointer_context = AsyncPostgresSaver.from_conn_string(_psycopg_url)
+langgraph_async_checkpointer = None  # set up in init_postgres_db, which can await
+
 logger.info("LangGraph checkpointer initialized")
 
 
@@ -201,6 +210,20 @@ def get_langgraph_checkpointer():
         messages = checkpointer.get_tuple(config)
     """
     return langgraph_checkpointer
+
+
+async def get_langgraph_async_checkpointer():
+    """
+    The ASYNC checkpointer, for `graph.astream`.
+
+    Opened lazily on first use: `from_conn_string` yields an async context manager, so it
+    cannot be entered at module import the way the sync one is.
+    """
+    global langgraph_async_checkpointer
+    if langgraph_async_checkpointer is None:
+        langgraph_async_checkpointer = await _async_checkpointer_context.__aenter__()
+        logger.info("LangGraph async checkpointer initialized")
+    return langgraph_async_checkpointer
 
 
 # ==================== Database Initialization ====================

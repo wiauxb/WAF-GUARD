@@ -6,13 +6,17 @@ from typing import Optional, List, Any, Dict
 class ConversationCreateRequest(BaseModel):
     """Request to create a new conversation"""
     title: Optional[str] = Field(None, max_length=255)
-    configuration_id: Optional[int] = Field(None, gt=0)
+    # REQUIRED, and fixed for the life of the conversation. Tools resolve against this,
+    # never the user's active configuration — otherwise revisiting an old thread silently
+    # changes its answers.
+    configuration_id: int = Field(..., gt=0, description="Configuration this conversation analyses")
 
 
 class SendMessageRequest(BaseModel):
     """Request to send a message in a conversation"""
     message: str = Field(min_length=1, max_length=10000)
-    configuration_id: Optional[int] = Field(None, gt=0)
+    # Deliberately absent: the conversation owns its configuration. Letting a single
+    # message retarget it is what made old threads confusing.
     graph_name: Optional[str] = Field(default="ui_graph_v1", description="LangGraph configuration to use")
     stream: bool = Field(default=False, description="Enable streaming response")
 

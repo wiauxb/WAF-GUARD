@@ -1,3 +1,6 @@
+import json
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.responses import StreamingResponse
 from typing import Optional, List
@@ -14,6 +17,8 @@ from services.chatbot.schemas import (
 from services.auth.schemas import UserInfo
 from shared.schemas import SuccessResponse
 from api.dependencies import get_current_user, get_chatbot_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/chatbot", tags=["chatbot"])
 
@@ -106,16 +111,21 @@ async def send_message_stream(
     - **configuration_id**: Optional configuration context for this message
     - **graph_name**: Optional graph type to use (default: "ui_graph_v1")
 
-    Uses LangGraph streaming to provide real-time response generation.
-    Frontend should use EventSource to receive streaming chunks.
+    Each SSE `data:` line is a JSON object with a `type`:
 
-    Example frontend usage:
-    ```javascript
-    const eventSource = new EventSource('/api/v1/chatbot/conversations/{thread_id}/messages/stream');
-    eventSource.onmessage = (event) => {
-        console.log(event.data); // Response chunk
-    };
-    ```
+    | type | payload | meaning |
+    |------|---------|---------|
+    | `token` | `content` | a fragment of the assistant's reply |
+    | `tool_start` | `name`, `arguments`, `id` | a tool was called |
+    | `tool_end` | `name`, `id`, `result` | that tool returned (result capped at 4000 chars) |
+    | `done` | - | the turn is complete |
+    | `error` | `message` | the turn failed |
+
+    Tool events come from LangGraph's `updates` stream; tokens from `messages`. Both are
+    consumed, because streaming tokens alone leaves the UI unable to show which tools ran.
+
+    The configuration the tools query is the CONVERSATION's, fixed when it was created —
+    `configuration_id` on the request body is ignored.
     """
     try:
         # Verify ownership upfront
@@ -134,14 +144,16 @@ async def send_message_stream(
         # Create streaming generator
         async def generate():
             try:
-                async for chunk in chatbot_service.send_message_stream(
+                async for event in chatbot_service.send_message_stream(
                     thread_id, request, current_user.id
                 ):
-                    # SSE format: data: {content}\n\n
-                    yield f"data: {chunk}\n\n"
+                    # Each event is a dict with a "type": token | tool_start | tool_end |
+                    # done. JSON, not bare text: the client has to tell a prose token from
+                    # a tool result, and tool arguments are structured anyway.
+                    yield f"data: {json.dumps(event)}\n\n"
             except Exception as e:
-                # Send error as SSE event
-                yield f"data: [ERROR] {str(e)}\n\n"
+                logger.exception("Chatbot stream failed for thread %s", thread_id)
+                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
 
         return StreamingResponse(
             generate(),

@@ -1,5 +1,6 @@
 'use client'
 
+import { errorMessage } from '@/lib/errors'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -49,7 +50,7 @@ export default function RegisterPage() {
       toast.success('Registration successful!')
       router.push('/dashboard')
     } catch (error: any) {
-      toast.error(error.response?.data?.detail || 'Registration failed')
+      toast.error(errorMessage(error, 'Registration failed'))
     } finally {
       setLoading(false)
     }

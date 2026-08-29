@@ -1,5 +1,6 @@
 'use client'
 
+import { errorMessage } from '@/lib/errors'
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { webAppApi } from '@/lib/api'
@@ -45,7 +46,7 @@ export default function CypherPage() {
       toast.success('Query executed successfully!')
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Failed to execute query')
+      toast.error(errorMessage(error, 'Failed to execute query'))
     },
   })
 
@@ -59,7 +60,7 @@ export default function CypherPage() {
       toast.success('Query executed successfully!')
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Failed to execute query')
+      toast.error(errorMessage(error, 'Failed to execute query'))
     },
   })
 

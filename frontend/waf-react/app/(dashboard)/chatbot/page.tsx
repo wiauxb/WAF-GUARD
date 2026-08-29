@@ -1,7 +1,10 @@
 'use client'
 
+import { errorMessage } from '@/lib/errors'
+import { Markdown } from '@/components/ui/markdown'
 import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { streamMessage, type ToolActivity } from '@/lib/chatbot'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -15,7 +18,8 @@ import {
   MessageSquare,
   Bot,
   User as UserIcon,
-  Wrench
+  Wrench,
+  Check,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { ConversationResponse, MessageResponse, ConversationHistoryResponse } from '@/types'
@@ -63,11 +67,32 @@ export default function ChatbotPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  // Which configuration a NEW conversation will analyse. Seeded from the active one for
+  // convenience, but explicit: the conversation keeps whatever is chosen here for life, so
+  // reopening it later still answers about that configuration rather than silently
+  // following whatever is active at the time.
+  const [newConfigId, setNewConfigId] = useState<number | null>(null)
+  const [pickerOpen, setPickerOpen] = useState(false)
+
+  const configs = useQuery({
+    queryKey: ['configs'],
+    queryFn: async () => {
+      const res = await api.get('/configurations')
+      const list = Array.isArray(res.data) ? res.data : res.data?.configurations ?? []
+      return list.filter((c: any) => c.parsing_status === 'parsed')
+    },
+  })
+
+  // The open conversation, so the UI can state ITS configuration rather than the active one.
+  const currentConversation = (conversations ?? []).find(
+    (c: any) => c.thread_id === currentThreadId,
+  )
+
   const createConversationMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (configurationId: number) => {
       const response = await api.post<ConversationResponse>('/chatbot/conversations', {
         title: null,
-        configuration_id: selectedConfig?.id || null,
+        configuration_id: configurationId,
       })
       return response.data
     },
@@ -78,32 +103,53 @@ export default function ChatbotPage() {
       toast.success('New conversation started!')
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Failed to create conversation')
+      toast.error(errorMessage(error, 'Failed to create conversation'))
     },
   })
 
-  const sendMessageMutation = useMutation({
-    mutationFn: async (message: string) => {
-      const response = await api.post<MessageResponse>(
-        `/chatbot/conversations/${currentThreadId}/messages`,
-        {
-          message,
-          graph_type: 'ui_graph_v1',
-          stream: false,
+  // The turn currently streaming: prose as it arrives, and each tool as it runs. Held
+  // separately from `messages` so a half-finished turn never lands in the history.
+  const [streamingText, setStreamingText] = useState('')
+  const [liveTools, setLiveTools] = useState<ToolActivity[]>([])
+
+  const runStream = async (threadId: string, message: string) => {
+    setIsTyping(true)
+    setStreamingText('')
+    setLiveTools([])
+    try {
+      await streamMessage(threadId, message, (event) => {
+        if (event.type === 'token') {
+          setStreamingText((t) => t + event.content)
+        } else if (event.type === 'tool_start') {
+          setLiveTools((ts) => [
+            ...ts,
+            { id: event.id, name: event.name, arguments: event.arguments, running: true },
+          ])
+        } else if (event.type === 'tool_end') {
+          // Match on the call id where there is one — the same tool can run twice in a turn.
+          setLiveTools((ts) =>
+            ts.map((t) =>
+              (event.id ? t.id === event.id : t.name === event.name) && t.running
+                ? { ...t, running: false, result: event.result }
+                : t,
+            ),
+          )
+        } else if (event.type === 'error') {
+          toast.error(event.message)
         }
-      )
-      return response.data
-    },
-    onSuccess: (data) => {
-      setMessages(prev => [...prev, data])
+      })
+    } catch (e: any) {
+      toast.error(e?.message || 'Streaming failed')
+    } finally {
       setIsTyping(false)
-      queryClient.invalidateQueries({ queryKey: ['conversation-history', currentThreadId] })
-    },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Failed to send message')
-      setIsTyping(false)
-    },
-  })
+      setStreamingText('')
+      setLiveTools([])
+      // The turn is persisted server-side by the checkpointer; refetch so the finished
+      // message (with its tools) becomes part of the history.
+      queryClient.invalidateQueries({ queryKey: ['conversation-history', threadId] })
+      queryClient.invalidateQueries({ queryKey: ['conversations'] })
+    }
+  }
 
   const deleteConversationMutation = useMutation({
     mutationFn: async (threadId: string) => {
@@ -119,7 +165,7 @@ export default function ChatbotPage() {
       queryClient.invalidateQueries({ queryKey: ['conversations'] })
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Failed to delete conversation')
+      toast.error(errorMessage(error, 'Failed to delete conversation'))
     },
   })
 
@@ -137,34 +183,48 @@ export default function ChatbotPage() {
       setEditThreadId(null)
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Failed to rename conversation')
+      toast.error(errorMessage(error, 'Failed to rename conversation'))
+      setEditThreadId(null)   // otherwise the row stays stuck in edit mode
     },
   })
 
-  const handleSendMessage = async () => {
-    if (!messageInput.trim()) return
-    
-    let threadId = currentThreadId
-    
-    if (!threadId) {
-      const newConversation = await createConversationMutation.mutateAsync()
-      threadId = newConversation.thread_id
-      setCurrentThreadId(threadId)
+  /**
+   * Finish a rename, or abandon it.
+   *
+   * An empty or unchanged title is a cancel, not a request: the API requires at least one
+   * character, so submitting "" returned a 422 whose `detail` is an array of objects —
+   * which the old error toast rendered as a React child and crashed the page. Not sending
+   * it is the real fix; errorMessage() stops that shape crashing anywhere else.
+   */
+  const commitRename = (conversation: any) => {
+    const title = editThreadTitle.trim()
+    if (!title || title === (conversation.title ?? '')) {
+      setEditThreadId(null)
+      return
     }
-
-    const userMessage: MessageResponse = {
-      role: 'user',
-      content: messageInput,
-      timestamp: new Date().toISOString(),
-      tools_used: null,
-    }
-
-    setMessages(prev => [...prev, userMessage])
-    setMessageInput('')
-    setIsTyping(true)
-    
-    sendMessageMutation.mutate(messageInput)
+    renameConversationMutation.mutate({ threadId: conversation.thread_id, title })
   }
+
+  const handleSendMessage = async () => {
+    const text = messageInput.trim()
+    if (!text) return
+
+    // Sending with no conversation open needs a configuration first — it is a deliberate
+    // choice, not something to infer from whatever is active.
+    if (!currentThreadId) {
+      setNewConfigId(selectedConfig?.id ?? null)
+      setPickerOpen(true)
+      return
+    }
+
+    setMessages((prev) => [
+      ...prev,
+      { role: 'user', content: text, timestamp: new Date().toISOString(), tools_used: null },
+    ])
+    setMessageInput('')
+    await runStream(currentThreadId, text)
+  }
+
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -181,7 +241,7 @@ export default function ChatbotPage() {
             <MessageSquare className="h-5 w-5" />
             Conversations
           </h2>
-          <Button size="sm" onClick={() => createConversationMutation.mutate()} disabled={createConversationMutation.isPending} className="bg-blue-300 hover:bg-white/30 text-purple-700 border-purple-700">
+          <Button size="sm" onClick={() => { setNewConfigId(selectedConfig?.id ?? null); setPickerOpen(true) }} disabled={createConversationMutation.isPending} className="bg-blue-300 hover:bg-white/30 text-purple-700 border-purple-700">
             <Plus className="h-4 w-4" />
           </Button>
         </div>
@@ -208,7 +268,11 @@ export default function ChatbotPage() {
                         <Input
                           value={editThreadTitle}
                           onChange={(e) => setEditThreadTitle(e.target.value)}
-                          onBlur={() => renameConversationMutation.mutate({ threadId: conversation.thread_id, title: editThreadTitle })}
+                          onBlur={() => commitRename(conversation)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') commitRename(conversation)
+                            if (e.key === 'Escape') setEditThreadId(null)
+                          }}
                           className="h-6 text-sm"
                           autoFocus
                         />
@@ -250,7 +314,7 @@ export default function ChatbotPage() {
                 <h3 className="text-lg font-semibold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">Welcome to WAF-GUARD Assistant</h3>
                 <p className="text-sm text-muted-foreground">Start a new conversation to get help with your WAF configuration</p>
               </div>
-              <Button onClick={() => createConversationMutation.mutate()} className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white shadow-lg">
+              <Button onClick={() => { setNewConfigId(selectedConfig?.id ?? null); setPickerOpen(true) }} className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white shadow-lg">
                 <Plus className="h-4 w-4 mr-2" />
                 Start New Conversation
               </Button>
@@ -271,7 +335,14 @@ export default function ChatbotPage() {
                       ? 'bg-gradient-to-br from-blue-500 to-indigo-500 text-white' 
                       : 'bg-white border-2 border-purple-200'
                   }`}>
-                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                    {/* The assistant writes markdown; rendering it as preformatted text
+                        showed literal ** and | . User messages stay plain — echoing a
+                        user's own text through a renderer buys nothing. */}
+                    {message.role === 'user' ? (
+                      <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                    ) : (
+                      <Markdown content={message.content} />
+                    )}
                     {message.tools_used && message.tools_used.length > 0 && (
                       <div className="mt-2 pt-2 border-t border-border/50">
                         <p className="text-xs opacity-70 flex items-center gap-1 mb-1">
@@ -279,8 +350,15 @@ export default function ChatbotPage() {
                         </p>
                         {message.tools_used.map((tool, idx) => (
                           <details key={idx} className="text-xs opacity-70 mt-1">
-                            <summary className="cursor-pointer">{tool.name}</summary>
+                            <summary className="cursor-pointer font-mono">{tool.name}</summary>
                             <pre className="mt-1 p-1 bg-black/10 rounded overflow-x-auto">{JSON.stringify(tool.arguments, null, 2)}</pre>
+                            {/* The result, which this never used to show — a tool call you
+                                cannot see the output of is not much of an audit trail. */}
+                            {tool.result != null && (
+                              <pre className="mt-1 max-h-48 overflow-auto p-1 bg-black/5 rounded">
+                                {typeof tool.result === 'string' ? tool.result : JSON.stringify(tool.result, null, 2)}
+                              </pre>
+                            )}
                           </details>
                         ))}
                       </div>
@@ -294,17 +372,47 @@ export default function ChatbotPage() {
                   )}
                 </div>
               ))}
+              {/* The turn in flight: tools appear as they are called, each showing its
+                  arguments and then its result, with the prose streaming underneath. The
+                  old version showed only bouncing dots, then tool NAMES after the fact and
+                  never their output. */}
               {isTyping && (
                 <div className="flex gap-3">
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center shadow-lg">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center shadow-lg flex-shrink-0">
                     <Bot className="h-5 w-5 text-white" />
                   </div>
-                  <div className="bg-white  border-2 border-purple-200 rounded-lg p-3 shadow-md">
-                    <div className="flex gap-1">
-                      <div className="w-2 h-2 rounded-full bg-purple-500 animate-bounce" />
-                      <div className="w-2 h-2 rounded-full bg-blue-500 animate-bounce delay-100" />
-                      <div className="w-2 h-2 rounded-full bg-indigo-500 animate-bounce delay-200" />
-                    </div>
+                  <div className="bg-white border-2 border-purple-200 rounded-lg p-3 shadow-md max-w-[80%] space-y-2">
+                    {liveTools.map((t, i) => (
+                      <div key={t.id ?? `${t.name}-${i}`} className="rounded border border-purple-100 bg-purple-50/60 p-2">
+                        <div className="flex items-center gap-2 text-xs font-medium text-purple-900">
+                          {t.running ? (
+                            <span className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-purple-400 border-t-transparent" />
+                          ) : (
+                            <Check className="h-3 w-3 shrink-0 text-green-600" />
+                          )}
+                          <span className="font-mono">{t.name}</span>
+                          {t.running && <span className="opacity-60">running…</span>}
+                        </div>
+                        <pre className="mt-1 overflow-x-auto text-[11px] text-purple-900/80">
+                          {JSON.stringify(t.arguments, null, 0)}
+                        </pre>
+                        {t.result && (
+                          <details className="mt-1 text-[11px]">
+                            <summary className="cursor-pointer opacity-70">result</summary>
+                            <pre className="mt-1 max-h-40 overflow-auto rounded bg-black/5 p-1">{t.result}</pre>
+                          </details>
+                        )}
+                      </div>
+                    ))}
+                    {streamingText ? (
+                      <Markdown content={streamingText} />
+                    ) : liveTools.length === 0 ? (
+                      <div className="flex gap-1">
+                        <div className="w-2 h-2 rounded-full bg-purple-500 animate-bounce" />
+                        <div className="w-2 h-2 rounded-full bg-blue-500 animate-bounce delay-100" />
+                        <div className="w-2 h-2 rounded-full bg-indigo-500 animate-bounce delay-200" />
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               )}
@@ -318,27 +426,90 @@ export default function ChatbotPage() {
                   onChange={(e) => setMessageInput(e.target.value)} 
                   onKeyPress={handleKeyPress} 
                   placeholder="Type your message..." 
-                  disabled={sendMessageMutation.isPending} 
+                  disabled={isTyping} 
                   className="border-purple-200 focus:ring-purple-500 focus:border-purple-500"
                 />
                 <Button 
                   onClick={handleSendMessage} 
-                  disabled={sendMessageMutation.isPending || !messageInput.trim()}
+                  disabled={isTyping || !messageInput.trim()}
                   className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white shadow-lg"
                 >
                   <Send className="h-4 w-4" />
                 </Button>
               </div>
-              {selectedConfig && (
+              {/* The CONVERSATION's configuration, not the sidebar's active one. Showing
+                  the active config here was actively misleading: a thread pinned to
+                  "Full conf" would claim to be using "Full conf v2". */}
+              {currentConversation && (
                 <p className="text-xs text-purple-600 mt-2 flex items-center gap-1">
-                  <span className="inline-block w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                  Using configuration: <span className="font-semibold">{selectedConfig.name}</span>
+                  <span className="inline-block w-2 h-2 bg-green-500 rounded-full"></span>
+                  This conversation analyses{' '}
+                  <span className="font-semibold">
+                    {currentConversation.configuration_name ?? `configuration ${currentConversation.configuration_id}`}
+                  </span>
+                  {selectedConfig && currentConversation.configuration_id !== selectedConfig.id && (
+                    <span className="text-muted-foreground">
+                      (your active configuration is {selectedConfig.name})
+                    </span>
+                  )}
                 </p>
               )}
             </div>
           </>
         )}
       </Card>
+
+      {/* Choosing the configuration is a deliberate step, not an inherited default: the
+          conversation keeps it for life, which is what stops an old thread from silently
+          answering about whatever happens to be active later. */}
+      {pickerOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+             onClick={() => setPickerOpen(false)}>
+          <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl"
+               onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold">New conversation</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Which configuration should it analyse? This is fixed for the life of the
+              conversation.
+            </p>
+            <div className="mt-4 max-h-64 space-y-1 overflow-y-auto">
+              {(configs.data ?? []).length === 0 && (
+                <p className="py-4 text-center text-sm text-muted-foreground">
+                  No parsed configuration available.
+                </p>
+              )}
+              {(configs.data ?? []).map((c: any) => (
+                <button
+                  key={c.id}
+                  onClick={() => setNewConfigId(c.id)}
+                  className={
+                    'flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm hover:bg-muted ' +
+                    (newConfigId === c.id ? 'border-purple-500 bg-purple-50' : '')
+                  }
+                >
+                  <span className="font-medium">{c.name}</span>
+                  {selectedConfig?.id === c.id && (
+                    <span className="text-xs text-muted-foreground">currently active</span>
+                  )}
+                </button>
+              ))}
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setPickerOpen(false)}>Cancel</Button>
+              <Button
+                disabled={!newConfigId || createConversationMutation.isPending}
+                onClick={() => {
+                  if (!newConfigId) return
+                  createConversationMutation.mutate(newConfigId)
+                  setPickerOpen(false)
+                }}
+              >
+                Start
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -371,19 +371,54 @@ class ParseStatusResponse(BaseModel):
 
 ### ChatbotService
 
-> 🟡 **TO REVIEW** — implemented and working, but three claims below are wrong and one
-> feature is stubbed:
-> 1. **The 5 WAF tools return hardcoded dummy data** — see the 🔴 under *Available Tools*.
-> 2. `delete_conversation` is documented as full cleanup, but `_delete_thread_checkpoints`
->    is a TODO that returns `True` without deleting anything
->    ([repository.py:207](backend/src/services/chatbot/repository.py#L207)). Checkpoints
->    leak on every delete. The route docstring
->    ([chatbot.py:191](backend/src/api/routes/chatbot.py#L191)) asserts the *opposite* of
->    the service docstring — pick one and make both agree.
-> 3. `ConversationResponse.configuration_name` is never populated (`# TODO` in
->    `get_user_conversations`); it is always `null`.
-> 4. Doc says `create_agent()` from LangChain; the code uses `create_react_agent` from
->    `langgraph.prebuilt` ([simple_graphs.py:72](backend/src/services/chatbot/graphs/simple_graphs.py#L72)).
+> ✅ **WIRED** — the tools call the real analysis layer. What changed:
+> 1. The five dummy tools are gone, replaced by **ten** capability tools over
+>    `AnalysisService` (below). Verified against known figures, not just wired.
+> 2. Built with **`langchain.agents.create_agent`** (langchain 1.3, langgraph 1.2.11) —
+>    the docs call it *"the new standard… replacing `langgraph.prebuilt.create_react_agent`"*.
+>    `SummarizationMiddleware` keeps long investigations inside the context window.
+> 3. **A conversation is pinned to one configuration at creation** and keeps it for life.
+>    Tools resolve against it via the typed runtime context, never the user's active
+>    configuration — so reopening an old thread still answers about what it was about.
+>    `configuration_id` is now REQUIRED on create and is no longer accepted per message.
+> 4. `ConversationResponse.configuration_name` is populated, so the list says which
+>    configuration each thread analyses.
+>
+> 🟡 **Still open**: `_delete_thread_checkpoints` remains a TODO that returns `True`
+> without deleting ([repository.py:207](backend/src/services/chatbot/repository.py#L207)),
+> so checkpoints leak on every conversation delete. The route and service docstrings still
+> contradict each other on this — pick one and make both agree.
+
+### The tools
+
+| Tool | What it answers |
+|---|---|
+| `search_directives` | the whole filter surface — types, phases, tags, hosts, locations, url, args, has_rule_id |
+| `get_statistics` | headline counts and distributions for a slice |
+| `list_values` | what values a field actually takes — how the agent avoids guessing a tag that does not exist |
+| `match_url` | which `<Location>`/`<LocationMatch>` blocks cover a URL from a log |
+| `search_symbols` / `who_uses` / `who_sets` | constants and variables, and who reads or writes them |
+| `what_removes` / `removed_by` | removal analysis, both directions |
+| `get_provenance` | source file/line chain and macro call stack for a directive |
+
+Three conventions make them usable rather than merely present: results are **capped**
+(default 20, max 50) because they re-enter the context window each turn; an unqueryable
+configuration returns a **sentence**, not an exception, so the agent explains instead of
+dying; and list arguments **accept a bare value** — models routinely send `locations: ""`
+for `locations: [""]`, and rejecting it wasted a round trip.
+
+### Streaming
+
+`POST /conversations/{thread_id}/messages/stream` emits JSON SSE events: `token`,
+`tool_start` (name + arguments), `tool_end` (name + result), `done`, `error`. Tool events
+come from LangGraph's `updates` stream, tokens from `messages`.
+
+> Two things that are easy to get wrong here, both found by testing:
+> - `astream` needs the **async** checkpointer. The synchronous `PostgresSaver` raises
+>   `NotImplementedError` from `aget_tuple`, so streaming failed while the blocking send
+>   path worked. Both savers share the same tables.
+> - `stream_mode="messages"` also carries **ToolMessages**, which have `content` — a bare
+>   content check leaked raw tool JSON into the assistant's prose.
 
 **Overview**: AI-powered chatbot for WAF configuration assistance using LangGraph and OpenAI.
 

@@ -1,19 +1,34 @@
 """
-WAF Analysis Tools
+WAF analysis tools.
 
-Collection of tools for analyzing ModSecurity WAF configurations.
+The previous five tools here returned hardcoded fake data; they are gone. These call
+AnalysisService against the configuration the conversation is bound to.
 """
 
-from .filter_rule import filter_rule
-from .removed_by import removed_by
-from .get_constant_info import get_constant_info
-from .get_directives import get_directives_with_constant
-from .macro_trace import get_macro_call_trace
+from .analysis_tools import (
+    ALL_TOOLS,
+    get_provenance,
+    get_statistics,
+    list_values,
+    match_url,
+    removed_by,
+    search_directives,
+    search_symbols,
+    what_removes,
+    who_sets,
+    who_uses,
+)
 
 __all__ = [
-    "filter_rule",
+    "ALL_TOOLS",
+    "search_directives",
+    "get_statistics",
+    "list_values",
+    "match_url",
+    "search_symbols",
+    "who_uses",
+    "who_sets",
+    "what_removes",
     "removed_by",
-    "get_constant_info",
-    "get_directives_with_constant",
-    "get_macro_call_trace",
+    "get_provenance",
 ]

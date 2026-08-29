@@ -1,5 +1,6 @@
 'use client'
 
+import { errorMessage } from '@/lib/errors'
 import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, ChevronsUpDown, Database } from 'lucide-react'
@@ -70,7 +71,7 @@ export function ConfigSwitcher() {
       toast.success('Active configuration changed')
     },
     onError: (e: any) =>
-      toast.error(e?.response?.data?.detail || 'Could not switch configuration'),
+      toast.error(errorMessage(e, 'Could not switch configuration')),
   })
 
   // Array.isArray rather than `?? []`: the ['configs'] key is shared with the dashboard

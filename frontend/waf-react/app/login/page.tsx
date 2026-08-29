@@ -1,5 +1,6 @@
 'use client'
 
+import { errorMessage } from '@/lib/errors'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -40,7 +41,7 @@ export default function LoginPage() {
       toast.success('Login successful!')
       router.push('/dashboard')
     } catch (error: any) {
-      toast.error(error.response?.data?.detail || 'Login failed')
+      toast.error(errorMessage(error, 'Login failed'))
     } finally {
       setLoading(false)
     }

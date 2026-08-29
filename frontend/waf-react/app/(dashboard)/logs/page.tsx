@@ -1,5 +1,6 @@
 'use client'
 
+import { errorMessage } from '@/lib/errors'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
@@ -64,7 +65,7 @@ export default function LogsPage() {
       router.push(`/logs/${data.session_id}`)
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Failed to classify log file')
+      toast.error(errorMessage(error, 'Failed to classify log file'))
     },
   })
 
@@ -79,7 +80,7 @@ export default function LogsPage() {
       queryClient.invalidateQueries({ queryKey: ['log-sessions'] })
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Failed to delete session')
+      toast.error(errorMessage(error, 'Failed to delete session'))
     },
   })
 

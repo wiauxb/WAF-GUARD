@@ -1,5 +1,6 @@
 'use client'
 
+import { errorMessage } from '@/lib/errors'
 import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
@@ -105,7 +106,7 @@ export default function ConfigsPage() {
       if (fileInputRef.current) fileInputRef.current.value = ''
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Failed to upload configuration')
+      toast.error(errorMessage(error, 'Failed to upload configuration'))
     },
   })
 
@@ -128,7 +129,7 @@ export default function ConfigsPage() {
       queryClient.invalidateQueries({ queryKey: ['user-info'] })
     },
     onError: (error: any) => {
-      toast.error(error.message || error.response?.data?.detail || 'Failed to select configuration')
+      toast.error(error.message || errorMessage(error, 'Failed to select configuration'))
     },
   })
 
@@ -143,7 +144,7 @@ export default function ConfigsPage() {
       queryClient.invalidateQueries({ queryKey: ['configs'] })
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Failed to delete configuration')
+      toast.error(errorMessage(error, 'Failed to delete configuration'))
     },
   })
 
@@ -158,7 +159,7 @@ export default function ConfigsPage() {
       queryClient.invalidateQueries({ queryKey: ['configs'] })
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Failed to start parsing')
+      toast.error(errorMessage(error, 'Failed to start parsing'))
     },
   })
 
@@ -182,7 +183,7 @@ export default function ConfigsPage() {
       setIsFileModified(false)
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.detail || 'Failed to save file')
+      toast.error(errorMessage(error, 'Failed to save file'))
     },
   })
 
@@ -235,7 +236,7 @@ export default function ConfigsPage() {
       setCurrentPath(path)
     } catch (error: any) {
       console.error('Failed to load files:', error)
-      toast.error(error.response?.data?.detail || 'Failed to load files')
+      toast.error(errorMessage(error, 'Failed to load files'))
     } finally {
       setIsLoadingFiles(false)
     }
@@ -268,7 +269,7 @@ export default function ConfigsPage() {
         }
       } catch (error: any) {
         console.error('Failed to load file:', error)
-        toast.error(error.response?.data?.detail || 'Failed to load file')
+        toast.error(errorMessage(error, 'Failed to load file'))
       } finally {
         setIsLoadingFiles(false)
       }

@@ -8,7 +8,11 @@ dotenv
 requests 
 tqdm
 uvicorn #?
-langgraph
+# Pinned: create_agent + ToolRuntime (the typed per-invocation context the chatbot binds
+# its configuration through) need langchain v1 and a current langgraph. `langchain` is the
+# meta package -- langchain-core alone does NOT provide langchain.agents.
+langgraph==1.2.11
+langchain>=1,<2
 streamlit #?
 langchain-openai 
 langchain-community 

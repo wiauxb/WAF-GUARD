@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from .context import ChatContext
 from .repository import ConversationRepository
 from .schemas import (
     ConversationCreateRequest,
@@ -34,6 +35,25 @@ class ChatbotService:
 
         # TODO: Initialize LangGraph components here
         # self.langgraph_app = ...
+
+    @staticmethod
+    def _context_for(conversation) -> ChatContext:
+        """
+        The typed context every tool in this conversation resolves against.
+
+        Bound to the conversation's OWN configuration, deliberately not the user's active
+        one: a thread must keep answering about the configuration it was started for, or
+        revisiting it silently changes its answers.
+        """
+        if conversation.configuration_id is None:
+            raise ValueError(
+                "This conversation is not linked to a configuration, so its tools have "
+                "nothing to query. Start a new conversation and choose one."
+            )
+        return ChatContext(
+            configuration_id=conversation.configuration_id,
+            user_id=conversation.user_id,
+        )
 
     def create_conversation(
         self,
@@ -98,9 +118,16 @@ class ChatbotService:
             offset=filters.offset
         )
 
-        # TODO: Optionally join with configurations table to get configuration_name
-        # For now, return without configuration_name
-        return [ConversationResponse.from_orm(c) for c in conversations]
+        # Populate configuration_name. Not cosmetic: a conversation is pinned to one
+        # configuration for life, so the list has to say WHICH — otherwise reopening an old
+        # thread gives you no way to know what its answers are about. The Conversation model
+        # already declares the relationship, so this is a lazy load, not a new query shape.
+        out = []
+        for c in conversations:
+            item = ConversationResponse.from_orm(c)
+            item.configuration_name = c.configuration.name if c.configuration else None
+            out.append(item)
+        return out
 
     def send_message(
         self,
@@ -162,7 +189,7 @@ class ChatbotService:
         current_state = graph.get_state(config)
         existing_message_count = len(current_state.values.get("messages", []))
 
-        response = graph.invoke(input_data, config)
+        response = graph.invoke(input_data, config, context=self._context_for(conversation))
 
         # Extract only NEW messages (from this exchange)
         all_messages = response["messages"]
@@ -333,28 +360,67 @@ class ChatbotService:
         # Get graph from registry
         graph_name = message_request.graph_name or "ui_graph_v1"
         try:
+            # The ASYNC saver, not self.checkpointer. `astream` calls `aget_tuple`, which
+            # the synchronous PostgresSaver does not implement -- streaming failed with
+            # NotImplementedError while the blocking send path worked fine. Both savers
+            # read and write the same tables, so the history is shared.
+            from shared.database import get_langgraph_async_checkpointer
+
             graph = get_graph(
                 name=graph_name,
-                checkpointer=self.checkpointer
+                checkpointer=await get_langgraph_async_checkpointer(),
             )
         except ValueError as e:
             raise ValueError(f"Invalid graph name: {str(e)}")
 
-        # Prepare input for LangGraph
         input_data = {
             "messages": [{"role": "user", "content": message_request.message}]
         }
         config = {"configurable": {"thread_id": thread_id}}
 
-        # Stream with messages mode (LLM tokens)
-        async for chunk, metadata in graph.astream(
+        # BOTH modes: "messages" carries the assistant's tokens, "updates" carries whole
+        # node outputs -- which is the only place tool calls and their results are visible.
+        # Streaming tokens alone (what this used to do) leaves the UI with a spinner and no
+        # way to show which tools ran or what they returned.
+        async for mode, chunk in graph.astream(
             input_data,
             config,
-            stream_mode="messages"
+            context=self._context_for(conversation),
+            stream_mode=["updates", "messages"],
         ):
-            # Filter for content chunks (not empty)
-            if hasattr(chunk, 'content') and chunk.content:
-                yield chunk.content
+            if mode == "messages":
+                message_chunk, _metadata = chunk
+                # ONLY the assistant's own prose. This mode also carries ToolMessages, and
+                # a ToolMessage has `content` too -- so a bare content check leaked raw tool
+                # JSON straight into the reply text. Tool output belongs in tool_end.
+                if type(message_chunk).__name__ not in ("AIMessageChunk", "AIMessage"):
+                    continue
+                if getattr(message_chunk, "content", None):
+                    yield {"type": "token", "content": message_chunk.content}
+                continue
+
+            # mode == "updates"
+            for node_name, payload in (chunk or {}).items():
+                if not isinstance(payload, dict):
+                    continue
+                for msg in payload.get("messages", []) or []:
+                    for call in getattr(msg, "tool_calls", None) or []:
+                        yield {
+                            "type": "tool_start",
+                            "name": call["name"],
+                            "arguments": call.get("args", {}),
+                            "id": call.get("id"),
+                        }
+                    if type(msg).__name__ == "ToolMessage":
+                        yield {
+                            "type": "tool_end",
+                            "name": getattr(msg, "name", None),
+                            "id": getattr(msg, "tool_call_id", None),
+                            # Capped: this is display data, and a tool result can be large.
+                            "result": str(msg.content)[:4000],
+                        }
+
+        yield {"type": "done"}
 
         # Update timestamp after streaming completes
         self.conversation_repo.update_timestamp(conversation)
