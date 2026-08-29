@@ -16,7 +16,6 @@ from api.dependencies import get_analysis_configuration_id, get_analysis_service
 from services.analysis.schemas import (
     ConstantQuery,
     DEFAULT_LIMIT,
-    DirectiveFacetsResponse,
     DirectiveListResponse,
     DirectiveSearchQuery,
     HttpRequestFilter,
@@ -28,6 +27,7 @@ from services.analysis.schemas import (
     SourceLocationQuery,
     SymbolSearchResponse,
     UrlMatchRequest,
+    ValueListQuery,
     UrlMatchResponse,
     ValueField,
 )
@@ -49,7 +49,7 @@ def _offset(offset: int = Query(0, ge=0, description="Results to skip")) -> int:
 # ==========================================================================
 # Directive lookup
 #
-# ORDERING MATTERS: the literal-prefix routes (/search, /facets, /values,
+# ORDERING MATTERS: the literal-prefix routes (/search, /values,
 # /by-rule-id, /by-tag, /filter) MUST be declared before /directives/{node_id}. FastAPI matches
 # in declaration order, and with node_id typed as int a request to
 # /directives/by-rule-id/5 would otherwise hit the {node_id} route and fail
@@ -78,20 +78,6 @@ async def search_directives(
     for the sort column (most have no phase and no rule id) sort last in both directions.
     """
     return analysis.search_directives(configuration_id, query, limit, offset)
-
-
-@router.get("/directives/facets", response_model=DirectiveFacetsResponse)
-async def get_directive_facets(
-    configuration_id: int = Depends(get_analysis_configuration_id),
-    analysis: AnalysisService = Depends(get_analysis_service),
-):
-    """
-    Directive types and phases actually present, with counts.
-
-    Populates the filter dropdowns, so they offer what this configuration contains rather
-    than a hardcoded list of every directive ModSecurity defines.
-    """
-    return analysis.get_directive_facets(configuration_id)
 
 
 @router.post("/locations/match-url", response_model=UrlMatchResponse)
@@ -124,28 +110,37 @@ async def match_url(
     return analysis.match_url(configuration_id, query.url)
 
 
-@router.get("/directives/values/{field}", response_model=FacetValuesResponse)
+@router.post("/directives/values/{field}", response_model=FacetValuesResponse)
 async def get_directive_values(
-    field: ValueField = Path(..., description="tag | host | location"),
-    q: str = Query("", max_length=200, description="Case-insensitive substring; empty = top by count"),
-    limit: int = Query(50, ge=1, le=500, description="Max values to return"),
+    field: ValueField = Path(..., description="tag | host | location | type | phase | msg"),
+    query: ValueListQuery = ValueListQuery(),
     configuration_id: int = Depends(get_analysis_configuration_id),
     analysis: AnalysisService = Depends(get_analysis_service),
 ):
     """
-    Searchable list of the values a property actually takes, commonest first.
+    The values a property takes, **counted within the filters already applied**.
 
-    Populates the tag/host/location filter comboboxes. The search runs here rather than in
-    the browser because the value count grows with the configuration — this one already has
-    239 tags and 56 locations, and the latter reaches several hundred once the parser
-    tracks `<LocationMatch>`.
+    Populates every filter dropdown. Each count answers one question: *how many results if
+    I add this value?* — so a value whose count would be zero simply is not listed, and the
+    list narrows as you filter. With `phase 2` applied, `type` drops from 196 values to the
+    2 that still have directives.
 
-    Values are returned **raw**: surrounding quotes included (`"*:80"`, as the dump stores
-    them) and `""` for directives outside any block. That is exactly the form
-    `hosts` / `locations` / `tags` expect, so a value can be handed straight back to
-    `/directives/search`.
+    Two readings, because the two semantics differ:
+
+    - **OR fields** (`type`, `phase`, `host`, `location`, `msg`) are counted with their OWN
+      chips excluded. Adding a value widens the result, so counting with them applied would
+      collapse the list to what is already picked and you could never add a second value.
+      A consequence worth knowing: these counts do **not** sum to the table total.
+    - **`tag`** keeps every chip, because adding a tag narrows — each candidate's count
+      within the current results is exactly what picking it would give.
+
+    The clauses come from the same builder `/directives/search` uses, so a count here always
+    matches what applying it returns. POST rather than GET because a filter set does not
+    belong in a query string.
     """
-    return analysis.get_directive_values(configuration_id, field, q, limit)
+    return analysis.get_directive_values(
+        configuration_id, field, query.q, query.limit, query.filters
+    )
 
 
 @router.get("/directives/by-rule-id/{rule_id}", response_model=DirectiveListResponse)

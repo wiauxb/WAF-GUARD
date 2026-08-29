@@ -140,13 +140,6 @@ class GraphQueryRepository:
         page_cypher, count_cypher = Q.build_directive_search(clauses, sort_by, sort_dir)
         return self.fetch_page(page_cypher, count_cypher, params, limit, offset)
 
-    def directive_facets(self) -> Dict[str, List[Dict[str, Any]]]:
-        """Distinct types and phases present, with counts, for the filter dropdowns."""
-        return {
-            "types": self._run(Q.FACET_TYPES),
-            "phases": self._run(Q.FACET_PHASES),
-        }
-
     def all_locations(self) -> List[Dict[str, Any]]:
         """
         Every distinct location container, uncapped — the input to URL matching.
@@ -161,13 +154,17 @@ class GraphQueryRepository:
         rows = self._run(Q.NO_LOCATION_COUNT)
         return rows[0]["count"] if rows else 0
 
-    def directive_values(self, field: str, q: str, limit: int) -> List[Dict[str, Any]]:
+    def directive_values(
+        self, field: str, q: str, limit: int, clauses: List[str], params: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
         """
-        Searchable distinct values of one property, commonest first.
+        Distinct values of one property WITHIN the current filter set, commonest first.
 
-        `field` indexes a fixed dict of queries, so it can never reach the Cypher as text.
+        The clauses come from AnalysisService._build_clauses -- the same predicates the
+        search uses -- so a dropdown count always matches what applying it would return.
         """
-        return self._run(Q.VALUE_QUERIES[field], {"q": q, "limit": limit})
+        cypher = Q.build_value_query(field, clauses)
+        return self._run(cypher, {**params, "q": q, "limit": limit})
 
     # ---------- request simulation ----------
 

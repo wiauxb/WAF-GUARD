@@ -21,7 +21,7 @@ separate track and are out of scope for this document.
 | ChatbotService | 🟡 TO REVIEW | Works, but its 5 WAF tools return dummy data and checkpoint deletion is a no-op |
 | LogAnalysisService | 🟡 TO REVIEW | Largest doc/code drift; the ML service it calls is not reachable |
 
-**Route totals:** all 47 implemented. See [Route Totals](#route-totals).
+**Route totals:** all 46 implemented. See [Route Totals](#route-totals).
 
 **Critical path:** ~~ParserService~~ ✅ → ~~AnalysisService~~ ✅ →
 ~~re-point the `/directives` page~~ ✅ → swap the chatbot's dummy tools for real calls.
@@ -1192,8 +1192,7 @@ which also validates that the target is actually queryable:
 | Method | Endpoint | Request | Response | Description |
 |--------|----------|---------|----------|-------------|
 | POST | `/directives/search` | `DirectiveSearchQuery` | `DirectiveListResponse` | **Any combination of criteria, any sort order.** Backs the Directives page |
-| GET | `/directives/facets` | - | `DirectiveFacetsResponse` | Types and phases present in this config, with counts — populates the filter dropdowns |
-| GET | `/directives/values/{field}` | Query: `q`, `limit` | `FacetValuesResponse` | Searchable value list for `tag` \| `host` \| `location` — backs the filter comboboxes |
+| POST | `/directives/values/{field}` | `ValueListQuery` | `FacetValuesResponse` | Value list for `tag` \| `host` \| `location` \| `type` \| `phase` \| `msg`, **counted inside the filters already applied** |
 | POST | `/locations/match-url` | `UrlMatchRequest` | `UrlMatchResponse` | Which `<Location>`/`<LocationMatch>` blocks cover a URL from a log |
 | GET | `/directives/{node_id}` | - | `DirectiveListResponse` | Directive by node ID |
 | GET | `/directives/by-rule-id/{rule_id}` | - | `DirectiveListResponse` | Directives carrying a ModSecurity rule ID |
@@ -1252,6 +1251,27 @@ ordinary clause). An empty body returns the whole configuration.
 > initialises both to `""` and never to null. So `locations: [""]` filters to exactly those
 > directives (20,995 once `<LocationMatch>` is tracked, down from 71,236), and needs no
 > sentinel.
+
+### Faceted counts
+
+`POST /directives/values/{field}` counts within the filter set the caller sends, so every
+number answers one question: **how many results if I add this value?** A value whose count
+would be zero has no row and is not listed — with `phase 2` applied, `type` drops from 196
+values to the 2 that still have directives.
+
+The two semantics need opposite treatment, and both are exact in a single aggregation:
+
+| field kind | own chips | why |
+|---|---|---|
+| OR (`type`, `phase`, `host`, `location`, `msg`) | **excluded** | Adding a value widens. Counting with its own chips applied would collapse the list to what is already picked, and a second value could never be added |
+| AND (`tag`) | **kept** | Adding a tag narrows, so each candidate's count within the current results is exactly what picking it gives |
+
+> Consequence worth knowing: for an OR field the counts do **not** sum to the table total,
+> because they ignore that field's own chips. That is what makes multi-select work.
+
+The clauses come from `AnalysisService._build_clauses`, the same builder
+`/directives/search` uses, so a dropdown can never advertise a number the search would not
+reproduce.
 
 **Restricted to directive nodes.** `configuration_id` is not unique to directives — every
 value node the parser MERGEs (`Id`, `Tag`, `Constant`, `Variable`, `Collection`, `Location`,
@@ -1680,13 +1700,13 @@ async def upload_configuration(
 | Auth | `/auth` | 5 | 0 | ✅ |
 | Configurations | `/configurations` | 8 | 0 | 🟡 |
 | Parser | `/parser` | **4** | 0 | ✅ |
-| Analysis | `/analysis` | **17** | 0 | ✅ |
+| Analysis | `/analysis` | **16** | 0 | ✅ |
 | Chatbot | `/chatbot` | 7 | 0 | 🟡 |
 | Logs | `/logs` | 6 | 0 | 🟡 |
-| **Total under `/api/v1`** | | **47** | **0** | |
+| **Total under `/api/v1`** | | **46** | **0** | |
 
 Plus 2 unprefixed routes in [main.py](backend/src/main.py): `GET /` and `GET /health`.
-Grand total of implemented handlers: **49**.
+Grand total of implemented handlers: **48**.
 
 > The old figure of "32 endpoints" counted 3 Parser routes that were never built and 3
 > "Common" entries that are shared schemas, not routes.

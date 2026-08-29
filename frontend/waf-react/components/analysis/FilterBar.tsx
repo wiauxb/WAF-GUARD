@@ -1,11 +1,13 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Plus, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Combobox } from '@/components/ui/combobox'
 import { Input } from '@/components/ui/input'
+// Still used for the "Add filter" kind picker — a closed list of 12, which is what Select
+// is for. The VALUE pickers are all Combobox now.
 import {
   Select,
   SelectContent,
@@ -15,7 +17,6 @@ import {
 } from '@/components/ui/select'
 import { getDirectiveValues } from '@/lib/analysis'
 import type {
-  DirectiveFacetsResponse,
   DirectiveSearchQuery,
   SortDir,
   SortField,
@@ -31,8 +32,8 @@ import type {
  * LIST of tags, so two of those read as "both".
  */
 export type FilterKind =
-  | 'type' | 'phase' | 'rule-id' | 'tag' | 'host' | 'location'   // repeatable
-  | 'node-id' | 'args' | 'msg' | 'has-rule-id' | 'source' | 'url' // one at a time
+  | 'type' | 'phase' | 'rule-id' | 'tag' | 'host' | 'location' | 'msg'  // repeatable
+  | 'node-id' | 'args' | 'has-rule-id' | 'source' | 'url'               // one at a time
 
 export interface Filter {
   kind: FilterKind
@@ -45,16 +46,24 @@ export interface SortState {
   dir: SortDir
 }
 
-/** Kinds that accumulate. Everything else replaces the existing chip of its kind. */
-const REPEATABLE: FilterKind[] = ['type', 'phase', 'rule-id', 'tag', 'host', 'location']
+// toQuery needs a sort, but a facet count is an aggregate — ordering is irrelevant to it.
+// A fixed value keeps it out of the React Query key, so changing the table's sort does not
+// needlessly refetch every dropdown.
+const FACET_SORT: SortState = { by: 'node_id', dir: 'asc' }
 
-type Widget = 'text' | 'number' | 'type' | 'phase' | 'bool' | 'source' | 'values'
+/** Kinds that accumulate. Everything else replaces the existing chip of its kind. */
+const REPEATABLE: FilterKind[] = ['type', 'phase', 'rule-id', 'tag', 'host', 'location', 'msg']
+
+type Widget = 'text' | 'number' | 'bool' | 'source' | 'values'
 
 /** Filter kinds backed by a searchable value list, and the API field that serves it. */
 const VALUE_FIELD: Partial<Record<FilterKind, ValueField>> = {
   tag: 'tag',
   host: 'host',
   location: 'location',
+  type: 'type',
+  phase: 'phase',
+  msg: 'msg',
 }
 
 const KINDS: {
@@ -65,12 +74,12 @@ const KINDS: {
   hint: string
 }[] = [
   { kind: 'url', label: 'URL from a log', widget: 'text', placeholder: '/jira/secure/Dashboard.jspa', hint: 'Finds the <Location>/<LocationMatch> blocks covering this path \u2014 scheme, host and query are ignored' },
-  { kind: 'type', label: 'Directive type', widget: 'type', hint: 'Several types match any of them' },
-  { kind: 'phase', label: 'Phase', widget: 'phase', hint: 'Several phases match any of them' },
+  { kind: 'type', label: 'Directive type', widget: 'values', placeholder: 'Search types…', hint: 'Several types match any of them' },
+  { kind: 'phase', label: 'Phase', widget: 'values', placeholder: 'Search phases…', hint: 'Several phases match any of them' },
   { kind: 'tag', label: 'Tag', widget: 'values', placeholder: 'Search tags…', hint: 'Several tags require ALL of them' },
   { kind: 'rule-id', label: 'Rule ID', widget: 'number', placeholder: 'e.g. 5000402', hint: 'ModSecurity id:NNN — several rows for a chained rule' },
   { kind: 'args', label: 'Arguments contain', widget: 'text', placeholder: 'e.g. REQUEST_URI', hint: 'Case-insensitive substring of the directive arguments' },
-  { kind: 'msg', label: 'Message contains', widget: 'text', placeholder: 'e.g. SQL injection', hint: 'Case-insensitive substring of the rule msg' },
+  { kind: 'msg', label: 'Message', widget: 'values', placeholder: 'Search messages…', hint: 'Several messages match any of them' },
   { kind: 'has-rule-id', label: 'Has rule ID', widget: 'bool', hint: 'Separates real ModSecurity rules from the config directives around them' },
   { kind: 'host', label: 'Host', widget: 'values', placeholder: 'Search hosts…', hint: 'Several hosts match any of them' },
   { kind: 'location', label: 'Location', widget: 'values', placeholder: 'Search locations…', hint: 'Several locations match any of them' },
@@ -168,7 +177,7 @@ export function toQuery(filters: Filter[], sort: SortState): DirectiveSearchQuer
     node_id: one('node-id') ? Number(one('node-id')) : null,
     url: one('url'),
     args_contains: one('args'),
-    msg_contains: one('msg'),
+    msgs: of('msg'),
     has_rule_id: hasRuleId === null ? null : hasRuleId === 'true',
     source: filePath ? { file_path: filePath, line_number: Number(line) } : null,
     sort_by: sort.by,
@@ -186,18 +195,13 @@ export function addFilter(filters: Filter[], next: Filter): Filter[] {
 interface FilterBarProps {
   filters: Filter[]
   onChange: (next: Filter[]) => void
-  facets?: DirectiveFacetsResponse
   loading?: boolean
 }
 
-export function FilterBar({ filters, onChange, facets, loading }: FilterBarProps) {
+export function FilterBar({ filters, onChange, loading }: FilterBarProps) {
   const [kind, setKind] = useState<FilterKind>('type')
   const [draft, setDraft] = useState('')
   const [line, setDraftLine] = useState('')
-  // Bumped on every pick to remount the dropdown. A Radix Select held permanently at ""
-  // will not re-fire onValueChange when the SAME item is chosen twice, which would make
-  // "phase 2, then phase 2 again after removing the chip" silently do nothing.
-  const [pickerKey, setPickerKey] = useState(0)
 
   const spec = KINDS.find((k) => k.kind === kind)!
   const valueField = VALUE_FIELD[kind]
@@ -210,11 +214,16 @@ export function FilterBar({ filters, onChange, facets, loading }: FilterBarProps
     return () => clearTimeout(t)
   }, [draft])
 
+  // Counted INSIDE the filters already applied, so each number says what adding that value
+  // would actually return. The backend decides which chips to ignore -- its own, for an OR
+  // field -- so the whole set is sent as-is. Keyed on `filters` so the list refreshes as
+  // chips change.
   const values = useQuery({
-    queryKey: ['analysis', 'values', valueField, debounced],
+    queryKey: ['analysis', 'values', valueField, debounced, filters],
     enabled: !!valueField,
-    queryFn: () => getDirectiveValues(valueField!, debounced, 50),
-    staleTime: 60_000,
+    queryFn: () => getDirectiveValues(valueField!, debounced, 50, toQuery(filters, FACET_SORT)),
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,   // no flicker while a chip is being added
   })
 
   // `source` needs both halves; everything else just needs a value.
@@ -235,7 +244,6 @@ export function FilterBar({ filters, onChange, facets, loading }: FilterBarProps
   const pick = (value: string) => {
     onChange(addFilter(filters, { kind, value }))
     setDraft('')
-    setPickerKey((k) => k + 1)
   }
 
   return (
@@ -271,63 +279,6 @@ export function FilterBar({ filters, onChange, facets, loading }: FilterBarProps
             </SelectContent>
           </Select>
         </div>
-
-        {spec.widget === 'type' && (
-          <div className="flex-1">
-            <label className="mb-1 block text-xs uppercase tracking-wide text-muted-foreground">
-              Type
-            </label>
-            <Select key={pickerKey} value="" onValueChange={pick}>
-              <SelectTrigger>
-                <SelectValue placeholder="Pick a directive type…" />
-              </SelectTrigger>
-              <SelectContent>
-                {(facets?.types ?? []).map((t) => (
-                  <SelectItem key={String(t.value)} value={String(t.value)}>
-                    {t.value} ({t.count.toLocaleString()})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-
-        {spec.widget === 'phase' && (
-          <div className="flex-1">
-            <label className="mb-1 block text-xs uppercase tracking-wide text-muted-foreground">
-              Phase
-            </label>
-            <Select key={pickerKey} value="" onValueChange={pick}>
-              <SelectTrigger>
-                <SelectValue placeholder="Pick a phase…" />
-              </SelectTrigger>
-              <SelectContent>
-                {(facets?.phases ?? []).map((p) => (
-                  <SelectItem key={String(p.value)} value={String(p.value)}>
-                    Phase {p.value} ({p.count.toLocaleString()})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-
-        {spec.widget === 'bool' && (
-          <div className="flex-1">
-            <label className="mb-1 block text-xs uppercase tracking-wide text-muted-foreground">
-              Rule ID
-            </label>
-            <Select key={pickerKey} value="" onValueChange={pick}>
-              <SelectTrigger>
-                <SelectValue placeholder="Declares one, or not…" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="true">Has a rule ID</SelectItem>
-                <SelectItem value="false">No rule ID</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        )}
 
         {spec.widget === 'values' && (
           <div className="flex-1">
@@ -397,8 +348,9 @@ export function FilterBar({ filters, onChange, facets, loading }: FilterBarProps
           </>
         )}
 
-        {/* The dropdown widgets commit on pick, so the button is only for typed values. */}
-        {!['type', 'phase', 'bool'].includes(spec.widget) && (
+        {/* The value lists commit on pick; the button is for typed values. `bool` has only
+            two options, so it commits on pick too. */}
+        {spec.widget !== 'bool' && (
           <Button type="submit" disabled={!ready || loading}>
             <Plus className="mr-2 h-4 w-4" />
             Add filter

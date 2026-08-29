@@ -23,7 +23,6 @@ from . import queries as Q
 from . import urlmatch
 from .repository import GraphQueryRepository, SymbolQueryRepository
 from .schemas import (
-    DirectiveFacetsResponse,
     DirectiveListResponse,
     DirectiveResponse,
     DirectiveSearchQuery,
@@ -120,13 +119,46 @@ class AnalysisService:
         combine into one MATCH, and it is cheaper too: the relationship form for
         location/host expands every directive's edge to a single shared value node.
         """
+        clauses, params, empty = self._build_clauses(configuration_id, query)
+        if empty:
+            return self._directive_list(configuration_id, [], 0, limit, offset)
+
+        rows, total = self._graph(configuration_id).search_directives(
+            clauses, params, query.sort_by, query.sort_dir, limit, offset
+        )
+        return self._directive_list(configuration_id, rows, total, limit, offset)
+
+    def _build_clauses(
+        self,
+        configuration_id: int,
+        query: DirectiveSearchQuery,
+        exclude: Optional[set] = None,
+    ) -> tuple[List[str], Dict[str, Any], bool]:
+        """
+        Turn a query into (clauses, params, provably_empty).
+
+        Shared by the search and by the facet counts, so a dropdown can never advertise a
+        number the search would not reproduce -- they are literally the same predicates.
+
+        `exclude` names query fields to leave out, which is what makes faceting work. For a
+        facet on an OR field, its own values are excluded: adding a value WIDENS the result,
+        so counting with the field's own chips applied would collapse the list to what is
+        already picked and you could never add a second one. `tags` is the exception and is
+        never excluded -- adding a tag NARROWS, so each candidate's count within the current
+        results is exactly what picking it would give.
+
+        `provably_empty` means a criterion resolved to nothing (a source line that produced
+        no directives, a URL no container covers). The caller short-circuits instead of
+        emitting `IN []`, which is a full scan that can only return nothing.
+        """
+        exclude = exclude or set()
         clauses: List[str] = []
         params: Dict[str, Any] = {}
 
         # OR-within-field: several values of a single-valued property.
-        for field in ("types", "phases", "rule_ids"):
+        for field in ("types", "phases", "rule_ids", "msgs"):
             values = getattr(query, field)
-            if values:
+            if values and field not in exclude:
                 clauses.append(Q.CLAUSES[field])
                 params[field] = values
 
@@ -138,34 +170,34 @@ class AnalysisService:
         # Two IN-sets on one property would be AND-ed, i.e. intersected, so `url` plus an
         # explicit location chip returned zero unless that chip happened to be in the URL's
         # own match set -- including the "All paths" chip the UI recommends. Merged, they
-        # behave like every other multi-value field: any of them.
-        locations = list(query.locations)
-        if query.url and query.url.strip():
-            matched = [m.value for m in self._match_url(configuration_id, query.url)[0]]
-            if not matched and not locations:
-                # No container covers this path and nothing else was asked for.
-                # Short-circuit rather than emitting `IN []`, a full scan that can only
-                # return nothing.
-                return self._directive_list(configuration_id, [], 0, limit, offset)
-            for value in matched:
-                if value not in locations:
-                    locations.append(value)
+        # behave like every other multi-value field: any of them. Faceting `location`
+        # therefore has to exclude BOTH, which is why they share a key here.
+        if "locations" not in exclude:
+            locations = list(query.locations)
+            if query.url and query.url.strip():
+                matched = [m.value for m in self._match_url(configuration_id, query.url)[0]]
+                if not matched and not locations:
+                    return clauses, params, True
+                for value in matched:
+                    if value not in locations:
+                        locations.append(value)
+            if locations:
+                clauses.append(Q.CLAUSES["locations"])
+                params["locations"] = locations
 
-        if query.hosts:
+        if query.hosts and "hosts" not in exclude:
             clauses.append(Q.CLAUSES["hosts"])
             params["hosts"] = query.hosts
-        if locations:
-            clauses.append(Q.CLAUSES["locations"])
-            params["locations"] = locations
 
-        # AND-within-field: the directive must carry every tag asked for.
+        # AND-within-field: the directive must carry every tag asked for. Never excluded --
+        # see the docstring.
         if query.tags:
             clauses.append(Q.CLAUSES["tags"])
             params["tags"] = query.tags
 
         for field in ("node_id", "host", "location", "args_contains", "msg_contains"):
             value = getattr(query, field)
-            if value is not None and value != "":
+            if value is not None and value != "" and field not in exclude:
                 clauses.append(Q.CLAUSES[field])
                 params[field] = value
 
@@ -180,24 +212,56 @@ class AnalysisService:
                 query.source.file_path, query.source.line_number
             )
             if not node_ids:
-                # Nothing was produced by that line. Short-circuit rather than emitting
-                # `IN []`, which is a full scan that can only return nothing.
-                return self._directive_list(configuration_id, [], 0, limit, offset)
+                return clauses, params, True
             clauses.append(Q.CLAUSES["source_node_ids"])
             params["source_node_ids"] = node_ids
 
-        rows, total = self._graph(configuration_id).search_directives(
-            clauses, params, query.sort_by, query.sort_dir, limit, offset
-        )
-        return self._directive_list(configuration_id, rows, total, limit, offset)
+        return clauses, params, False
 
-    def get_directive_facets(self, configuration_id: int) -> DirectiveFacetsResponse:
-        """Distinct types and phases present, with counts — populates the filter dropdowns."""
-        facets = self._graph(configuration_id).directive_facets()
-        return DirectiveFacetsResponse(
+    # Which query fields a facet on each value-field must ignore. Adding a value to an OR
+    # field WIDENS the result, so counting with that field's own chips applied would
+    # collapse the list to what is already picked. `location` also drops `url`, because a
+    # URL resolves into the same location set.
+    #
+    # `tag` is absent on purpose: adding a tag NARROWS, so each candidate's count within the
+    # current results is exactly what picking it would give.
+    _FACET_EXCLUDES = {
+        "type": {"types"},
+        "phase": {"phases"},
+        "msg": {"msgs", "msg_contains"},
+        "host": {"hosts", "host"},
+        "location": {"locations", "location", "url"},
+        "tag": set(),
+    }
+
+    def get_directive_values(
+        self,
+        configuration_id: int,
+        field: str,
+        q: str = "",
+        limit: int = 50,
+        filters: Optional[DirectiveSearchQuery] = None,
+    ) -> FacetValuesResponse:
+        """
+        Searchable value list for one property, counted WITHIN the current filters.
+
+        Each count answers "how many results if I add this value" -- exactly, in a single
+        aggregation, because the clauses come from the same builder the search uses. A value
+        whose count would be zero simply has no row and does not appear, so the list only
+        ever offers choices that lead somewhere.
+        """
+        filters = filters or DirectiveSearchQuery()
+        clauses, params, empty = self._build_clauses(
+            configuration_id, filters, exclude=self._FACET_EXCLUDES.get(field, set())
+        )
+        rows = [] if empty else self._graph(configuration_id).directive_values(
+            field, q, limit, clauses, params
+        )
+        return FacetValuesResponse(
             configuration_id=configuration_id,
-            types=[FacetCount(**r) for r in facets["types"]],
-            phases=[FacetCount(**r) for r in facets["phases"]],
+            field=field,
+            query=q,
+            values=[FacetCount(**r) for r in rows],
         )
 
     def _match_url(self, configuration_id: int, url: str):
@@ -235,23 +299,6 @@ class AnalysisService:
                 for p in patterns
                 if p.warning
             ],
-        )
-
-    def get_directive_values(
-        self, configuration_id: int, field: str, q: str = "", limit: int = 50
-    ) -> FacetValuesResponse:
-        """
-        Searchable value list for one property — backs the tag/host/location comboboxes.
-
-        Counts come from the node property, matching what the filter will actually return.
-        See queries.VALUES_* for why that distinction matters.
-        """
-        rows = self._graph(configuration_id).directive_values(field, q, limit)
-        return FacetValuesResponse(
-            configuration_id=configuration_id,
-            field=field,
-            query=q,
-            values=[FacetCount(**r) for r in rows],
         )
 
     # ==================== Directive lookup ====================

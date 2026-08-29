@@ -108,6 +108,7 @@ CLAUSES = {
     "phases": "n.phase IN $phases",
     "rule_ids": "n.id IN $rule_ids",
     "tags": "ALL(t IN $tags WHERE t IN n.tags)",
+    "msgs": "n.msg IN $msgs",
     "node_id": "n.node_id = $node_id",
     # Exact, and the form the UI uses. The stored values carry their quotes (`"*:80"`) and
     # contain regex metacharacters, so `=~` cannot express them: `*:80` is not even a valid
@@ -188,21 +189,6 @@ def build_directive_search(
 
 # Distinct values present in a configuration, for the filter dropdowns. Both aggregate
 # over one property and materialise nothing else, so they stay cheap at any size.
-FACET_TYPES = """
-MATCH (n {configuration_id: $cid})
-WHERE n.node_id IS NOT NULL AND n.type IS NOT NULL
-RETURN n.type AS value, count(*) AS count
-ORDER BY count DESC, value
-"""
-
-FACET_PHASES = """
-MATCH (n {configuration_id: $cid})
-WHERE n.node_id IS NOT NULL AND n.phase IS NOT NULL
-RETURN n.phase AS value, count(*) AS count
-ORDER BY value
-"""
-
-
 # ==================== Value suggestions ====================
 
 # Backs GET /directives/values/{field}: the searchable dropdowns for tag, host and location.
@@ -218,48 +204,56 @@ ORDER BY value
 # The empty string is a genuine value meaning "outside any block" and is returned like the
 # rest, so "(none)" needs no sentinel.
 
-_VALUE_FILTER_AND_PAGE = """
-WITH value, count(*) AS count
-WHERE $q = '' OR toLower(toString(value)) CONTAINS toLower($q)
-RETURN value, count
-ORDER BY count DESC, value
-LIMIT $limit
-"""
-
-# tags is a list property, so it needs flattening before it can be grouped.
-VALUES_TAG = f"""
-MATCH (n {{configuration_id: $cid}})
-WHERE n.node_id IS NOT NULL
-UNWIND n.tags AS value
-{_VALUE_FILTER_AND_PAGE}
-"""
-
-VALUES_HOST = f"""
-MATCH (n {{configuration_id: $cid}})
-WHERE n.node_id IS NOT NULL AND n.VirtualHost IS NOT NULL
-WITH n.VirtualHost AS value
-{_VALUE_FILTER_AND_PAGE}
-"""
-
-# Carries the kind through, so the combobox can mark a regex as one -- `<LocationMatch ^>`
-# covers 14,138 directives and reads as a typo without it. Grouping on (value, kind) rather
-# than value alone keeps the count honest if the same text appears as both.
-VALUES_LOCATION = """
-MATCH (n {configuration_id: $cid})
-WHERE n.node_id IS NOT NULL AND n.Location IS NOT NULL
-WITH n.Location AS value, n.LocationKind AS kind, count(*) AS count
-WHERE $q = '' OR toLower(toString(value)) CONTAINS toLower($q)
-RETURN value, kind, count
-ORDER BY count DESC, value
-LIMIT $limit
-"""
-
-# The field name in the URL -> its query. Also the whitelist: an unknown field 422s.
-VALUE_QUERIES = {
-    "tag": VALUES_TAG,
-    "host": VALUES_HOST,
-    "location": VALUES_LOCATION,
+# How each facetable field is projected to a `value` to group on. `location` also carries
+# `kind` so the combobox can mark a regex -- `<LocationMatch ^>` covers 14,138 directives
+# and reads as a typo without it; grouping on (value, kind) keeps the count honest if the
+# same text ever appears as both.
+#
+# `tags` is a list property, so it is flattened with UNWIND rather than projected. That is
+# also why a directive with several tags contributes to several rows, which is correct: the
+# count is "directives carrying this tag".
+_VALUE_PROJECTION = {
+    "tag": ("UNWIND n.tags AS value", "n.tags IS NOT NULL", ["value"]),
+    "host": ("WITH n.VirtualHost AS value", "n.VirtualHost IS NOT NULL", ["value"]),
+    "location": ("WITH n.Location AS value, n.LocationKind AS kind",
+                 "n.Location IS NOT NULL", ["value", "kind"]),
+    "type": ("WITH n.type AS value", "n.type IS NOT NULL", ["value"]),
+    "phase": ("WITH n.phase AS value", "n.phase IS NOT NULL", ["value"]),
+    "msg": ("WITH n.msg AS value", "n.msg IS NOT NULL", ["value"]),
 }
+
+# The whitelist: an unknown field 422s before ever reaching Cypher.
+VALUE_FIELDS = tuple(_VALUE_PROJECTION)
+
+
+def build_value_query(field: str, clauses: list[str]) -> str:
+    """
+    Distinct values of one property WITHIN the current filter set, with counts.
+
+    The clauses come from the same builder the search uses, so a dropdown can never
+    advertise a number the search would not reproduce. Values whose count would be zero
+    simply do not appear -- there is no row to group.
+
+    `field` indexes a fixed dict, so it can never reach the query as text.
+    """
+    projection, not_null, group_keys = _VALUE_PROJECTION[field]
+
+    # SEARCH_MATCH already opens the WHERE with the directive restriction.
+    where = "".join(f"\n      AND {c}" for c in [not_null] + list(clauses))
+    keys = ", ".join(group_keys)
+
+    # Projection and aggregation are separate steps: UNWIND cannot carry an aggregate, so
+    # `UNWIND n.tags AS value, count(*)` is a syntax error. Splitting them keeps one shape
+    # for the list property and the scalar ones alike.
+    return f"""
+    {SEARCH_MATCH}{where}
+    {projection}
+    WITH {keys}, count(*) AS count
+    WHERE $q = '' OR toLower(toString(value)) CONTAINS toLower($q)
+    RETURN {keys}, count
+    ORDER BY count DESC, value
+    LIMIT $limit
+    """
 
 # Every distinct location container, uncapped -- the input to URL matching. Unlike
 # VALUES_LOCATION this takes no `q` and no LIMIT: the matcher has to test the URL against

@@ -23,7 +23,6 @@ import {
 } from '@/components/analysis/FilterBar'
 import {
   DEFAULT_PAGE_SIZE,
-  getDirectiveFacets,
   getDirectivesSettingConstant,
   matchUrl,
   getDirectivesUsingConstant,
@@ -74,13 +73,6 @@ export default function DirectivesPage() {
     // Filters apply on every chip change, so without this the table would blank to a
     // spinner each time one is added or removed.
     placeholderData: keepPreviousData,
-  })
-
-  // Dropdown contents: the types and phases this configuration actually contains.
-  const facets = useQuery({
-    queryKey: ['analysis', 'facets', configId],
-    queryFn: getDirectiveFacets,
-    staleTime: 5 * 60_000,       // fixed for a parsed configuration
   })
 
   // Which location blocks the pasted URL falls into. Only fetched when a URL chip exists;
@@ -207,7 +199,6 @@ export default function DirectivesPage() {
             <FilterBar
               filters={filters}
               onChange={applyFilters}
-              facets={facets.data}
               loading={directives.isFetching}
             />
 

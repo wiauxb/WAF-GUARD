@@ -60,7 +60,7 @@ class SourceLocationQuery(BaseModel):
 SortField = Literal["node_id", "type", "rule_id", "phase", "host", "location"]
 
 # Properties offering a searchable value list via GET /directives/values/{field}.
-ValueField = Literal["tag", "host", "location"]
+ValueField = Literal["tag", "host", "location", "type", "phase", "msg"]
 
 
 class DirectiveSearchQuery(BaseModel):
@@ -85,6 +85,9 @@ class DirectiveSearchQuery(BaseModel):
 
     # AND within the field
     tags: List[str] = Field(default_factory=list, description="Tags; must carry ALL of them")
+    # Exact rule messages, any of. The stored value keeps the quotes the dump wrote
+    # (`'Invalid input'`); there are only ~10 distinct messages in a real configuration.
+    msgs: List[str] = Field(default_factory=list, description="Exact rule msg values; any of")
 
     # Exact host/location, any of. This is what the UI sends. The stored values keep the
     # quotes the dump used (`"*:80"`) and contain regex metacharacters, so the regex fields
@@ -171,21 +174,6 @@ class FacetCount(BaseModel):
     kind: Optional[str] = None
 
 
-class DirectiveFacetsResponse(BaseModel):
-    """
-    The values actually present in a configuration, for populating filter dropdowns.
-
-    Without this the type dropdown would need a hardcoded list of directive names, which
-    would be both incomplete and full of entries this configuration never uses.
-
-    Types and phases only: both are small and fixed, so the whole list is worth sending.
-    Tags, hosts and locations are served by /directives/values/{field}, which searches.
-    """
-    configuration_id: int
-    types: List[FacetCount]                # ordered by count, commonest first
-    phases: List[FacetCount]               # ordered by phase number
-
-
 class FacetValuesResponse(BaseModel):
     """
     A searchable slice of one property's distinct values, commonest first.
@@ -231,6 +219,22 @@ class SymbolSearchResponse(BaseModel):
     total_count: int
     limit: int
     offset: int
+
+
+class ValueListQuery(BaseModel):
+    """
+    Ask for one property's values, counted inside the filters already applied.
+
+    `filters` is the caller's current filter set. Facet counts are computed against it, so
+    they say what adding a value would actually return rather than what it means in the
+    configuration as a whole.
+    """
+    q: str = Field(default="", max_length=200,
+                   description="Case-insensitive substring; empty = top by count")
+    limit: int = Field(default=50, ge=1, le=500)
+    filters: Optional["DirectiveSearchQuery"] = Field(
+        default=None, description="Filters already applied; omit for whole-config counts"
+    )
 
 
 class UrlMatchRequest(BaseModel):

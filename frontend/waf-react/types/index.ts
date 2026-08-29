@@ -423,7 +423,7 @@ export type SortField = 'node_id' | 'type' | 'rule_id' | 'phase' | 'host' | 'loc
 export type SortDir = 'asc' | 'desc'
 
 /** Properties offering a searchable value list, for the filter comboboxes. */
-export type ValueField = 'tag' | 'host' | 'location'
+export type ValueField = 'tag' | 'host' | 'location' | 'type' | 'phase' | 'msg'
 
 /**
  * Combinable directive filter — the single query behind the Directives page.
@@ -450,7 +450,8 @@ export interface DirectiveSearchQuery {
   host?: string | null           // regex — API only, not reachable from the UI
   location?: string | null       // regex — API only, not reachable from the UI
   args_contains?: string | null  // case-insensitive substring
-  msg_contains?: string | null   // case-insensitive substring
+  msgs?: string[]                // exact rule messages, any of
+  msg_contains?: string | null   // case-insensitive substring — API only
   has_rule_id?: boolean | null   // null = don't care
   source?: SourceLocationQuery | null
   /**
@@ -501,13 +502,6 @@ export interface FacetCount {
   count: number
   /** Only the `location` list sets this: 'Location' | 'LocationMatch'. */
   kind?: string | null
-}
-
-/** The values present in this configuration, for populating the filter dropdowns. */
-export interface DirectiveFacetsResponse {
-  configuration_id: number
-  types: FacetCount[]            // commonest first
-  phases: FacetCount[]           // by phase number
 }
 
 /**
