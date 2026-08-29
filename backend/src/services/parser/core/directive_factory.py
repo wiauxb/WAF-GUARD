@@ -7,17 +7,17 @@ from .directives import *
 class DirectiveFactory:
 
     @classmethod
-    def create(cls, location, virtual_host, if_level, context, node_id, type, conditions, args):
+    def create(cls, location, virtual_host, if_level, context, node_id, type, conditions, args, location_kind=""):
         if type.lower() == 'secruleremovebytag':
-            directive = SecRuleRemoveByTag(location, virtual_host, if_level, context, node_id, type, conditions, args)
+            directive = SecRuleRemoveByTag(location, virtual_host, if_level, context, node_id, type, conditions, args, location_kind)
         elif type.lower() == 'secruleremovebyid':
-            directive = SecRuleRemoveById(location, virtual_host, if_level, context, node_id, type, conditions, args)
+            directive = SecRuleRemoveById(location, virtual_host, if_level, context, node_id, type, conditions, args, location_kind)
         elif type.lower() in ["definestr", "setenv"]:
-            directive = DefineStr(location, virtual_host, if_level, context, node_id, type, conditions, args)
+            directive = DefineStr(location, virtual_host, if_level, context, node_id, type, conditions, args, location_kind)
         elif type.lower() in ["secrule"]:
-            directive = SecRule(location, virtual_host, if_level, context, node_id, type, conditions, args)
+            directive = SecRule(location, virtual_host, if_level, context, node_id, type, conditions, args, location_kind)
         else:
-            directive = Directive(location, virtual_host, if_level, context, node_id, type, conditions, args)
+            directive = Directive(location, virtual_host, if_level, context, node_id, type, conditions, args, location_kind)
 
         names = recover_used_constants(directive)
         consts, variables = [], []

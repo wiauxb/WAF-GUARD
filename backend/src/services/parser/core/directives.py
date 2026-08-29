@@ -6,8 +6,12 @@ from . import rule_parsing
 
 class Directive:
 
-    def __init__(self, location, virtual_host, if_level, context, node_id, type, conditions, args = ''):
+    def __init__(self, location, virtual_host, if_level, context, node_id, type, conditions, args = '', location_kind = ''):
         self.Location = location
+        # Which container produced Location: "" (none), "Location" (a literal path) or
+        # "LocationMatch" (a regex). Without it the graph cannot tell `/wp` from `(?i)/php/`,
+        # and `<LocationMatch ^>` -- which covers 14,138 directives -- reads as a typo.
+        self.LocationKind = location_kind
         self.VirtualHost = virtual_host
         self.IfLevel = if_level
         self.Context = context.clone()
@@ -80,6 +84,7 @@ class Directive:
             'type': self.type,
             'args': self.args,
             'Location': self.Location,
+            'LocationKind': self.LocationKind,
             'VirtualHost': self.VirtualHost,
             'IfLevel': self.IfLevel,
             'conditions': self.conditions,
@@ -133,8 +138,8 @@ class Directive:
 class SecRuleRemoveByTag(Directive):
     ARG_PATTERN = re.compile(r"\'([^\']*)\'|\"([^\"]*)\"|([^\s,]*)")
 
-    def __init__(self, location, virtual_host, if_level, context, node_id, type, conditions, args):
-        super().__init__(location, virtual_host, if_level, context, node_id, type, conditions, args)
+    def __init__(self, location, virtual_host, if_level, context, node_id, type, conditions, args, location_kind=""):
+        super().__init__(location, virtual_host, if_level, context, node_id, type, conditions, args, location_kind)
         self.tags_to_remove = []
         for match in self.ARG_PATTERN.finditer(self.args):
             for i in [1, 2, 3]:
@@ -143,8 +148,8 @@ class SecRuleRemoveByTag(Directive):
 
 class SecRuleRemoveById(Directive):
 
-    def __init__(self, location, virtual_host, if_level, context, node_id, type, conditions, args):
-        super().__init__(location, virtual_host, if_level, context, node_id, type, conditions, args)
+    def __init__(self, location, virtual_host, if_level, context, node_id, type, conditions, args, location_kind=""):
+        super().__init__(location, virtual_host, if_level, context, node_id, type, conditions, args, location_kind)
         ids_strings = re.split(r"[ ,]", self.args)
         self.ids_to_remove= []
         self.ranges_to_remove = []
@@ -166,8 +171,8 @@ class SecRuleRemoveById(Directive):
 
 class DefineStr(Directive):
 
-    def __init__(self, location, virtual_host, if_level, context, node_id, type, conditions, args):
-        super().__init__(location, virtual_host, if_level, context, node_id, type, conditions, args)
+    def __init__(self, location, virtual_host, if_level, context, node_id, type, conditions, args, location_kind=""):
+        super().__init__(location, virtual_host, if_level, context, node_id, type, conditions, args, location_kind)
         match_definestr = re.match(r"^\s*(?P<name>.+?)(?:\s+(?P<value>.*))?$", self.args)
         if match_definestr:
             self.cst_name = match_definestr.group('name')
@@ -252,8 +257,8 @@ def parse_args_setvar(args):
 
 class SecRule(Directive):
 
-    def __init__(self, location, virtual_host, if_level, context, node_id, type, conditions, args=''):
-        super().__init__(location, virtual_host, if_level, context, node_id, type, conditions, args)
+    def __init__(self, location, virtual_host, if_level, context, node_id, type, conditions, args='', location_kind=""):
+        super().__init__(location, virtual_host, if_level, context, node_id, type, conditions, args, location_kind)
         parsed = rule_parsing.parse_arguments(self.args)
         if len(parsed) != 2 and len(parsed) != 3:
             raise Exception(f"Invalid SecRule directive: {self.args}")

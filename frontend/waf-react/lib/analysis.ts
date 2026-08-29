@@ -23,6 +23,7 @@ import type {
   RemoverListResponse,
   SourceLocationQuery,
   SymbolSearchResponse,
+  UrlMatchResponse,
   ValueField,
 } from '@/types'
 
@@ -68,6 +69,19 @@ export async function getDirectiveFacets() {
  * 239 tags and 56 locations, and the latter reaches several hundred once the parser tracks
  * `<LocationMatch>`. Values come back raw, ready to hand straight to `searchDirectives`.
  */
+/**
+ * Which `<Location>` / `<LocationMatch>` blocks cover a URL from a log.
+ *
+ * Matching runs server-side in Python, not as a Cypher `=~`: Apache uses unanchored PCRE
+ * for `<LocationMatch>` and a path-component prefix for `<Location>`, and Cypher can
+ * express neither. Each `matches[].value` can be handed straight back as a `locations`
+ * filter, and `searchDirectives({ url })` does exactly that in one step.
+ */
+export async function matchUrl(url: string) {
+  const { data } = await api.post<UrlMatchResponse>(`/analysis/locations/match-url`, { url })
+  return data
+}
+
 export async function getDirectiveValues(field: ValueField, q = '', limit = 50) {
   const { data } = await api.get<FacetValuesResponse>(
     `/analysis/directives/values/${field}`,

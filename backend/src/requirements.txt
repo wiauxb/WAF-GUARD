@@ -20,5 +20,11 @@ langgraph-checkpoint-postgres
 python-jose[cryptography]
 bcrypt>=4.0.1,<6.0.0
 python-multipart
-pyvis 
+pyvis
+# PCRE-compatible regex, for matching a URL against <LocationMatch> patterns.
+# NOT interchangeable with the stdlib `re`: Apache/PCRE allows inline flags mid-pattern
+# (`/(?i)(?:TestSecAllow)?SOAP`) and `re` rejects those -- 56 of one real configuration's
+# 545 patterns fail to compile under it. Was already present transitively via tiktoken;
+# pinned here so dropping the chatbot's tokenizer cannot silently break URL matching.
+regex
 # pandashttpx

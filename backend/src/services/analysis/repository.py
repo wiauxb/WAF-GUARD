@@ -147,6 +147,20 @@ class GraphQueryRepository:
             "phases": self._run(Q.FACET_PHASES),
         }
 
+    def all_locations(self) -> List[Dict[str, Any]]:
+        """
+        Every distinct location container, uncapped — the input to URL matching.
+
+        Deliberately not `directive_values("location", ...)`: that one pages, and a URL has
+        to be tested against ALL patterns or the answer silently under-reports.
+        """
+        return self._run(Q.ALL_LOCATIONS)
+
+    def no_location_count(self) -> int:
+        """How many directives sit outside every location container."""
+        rows = self._run(Q.NO_LOCATION_COUNT)
+        return rows[0]["count"] if rows else 0
+
     def directive_values(self, field: str, q: str, limit: int) -> List[Dict[str, Any]]:
         """
         Searchable distinct values of one property, commonest first.

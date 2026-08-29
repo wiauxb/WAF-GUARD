@@ -12,6 +12,8 @@ export interface ComboboxOption {
   label?: string
   /** Optional right-aligned count. */
   count?: number
+  /** Optional small marker beside the label, e.g. "regex" for a pattern value. */
+  note?: string
 }
 
 interface ComboboxProps {
@@ -154,7 +156,14 @@ export function Combobox({
                   i === active ? 'bg-accent text-accent-foreground' : ''
                 )}
               >
-                <span className="truncate font-mono">{o.label ?? o.value}</span>
+                <span className="flex min-w-0 items-baseline gap-1.5">
+                  <span className="truncate font-mono">{o.label ?? o.value}</span>
+                  {o.note && (
+                    <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
+                      {o.note}
+                    </span>
+                  )}
+                </span>
                 {o.count != null && (
                   <span className="shrink-0 tabular-nums text-xs text-muted-foreground">
                     {o.count.toLocaleString()}

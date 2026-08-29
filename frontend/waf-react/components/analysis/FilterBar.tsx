@@ -32,7 +32,7 @@ import type {
  */
 export type FilterKind =
   | 'type' | 'phase' | 'rule-id' | 'tag' | 'host' | 'location'   // repeatable
-  | 'node-id' | 'args' | 'msg' | 'has-rule-id' | 'source'        // one at a time
+  | 'node-id' | 'args' | 'msg' | 'has-rule-id' | 'source' | 'url' // one at a time
 
 export interface Filter {
   kind: FilterKind
@@ -64,6 +64,7 @@ const KINDS: {
   placeholder?: string
   hint: string
 }[] = [
+  { kind: 'url', label: 'URL from a log', widget: 'text', placeholder: '/jira/secure/Dashboard.jspa', hint: 'Finds the <Location>/<LocationMatch> blocks covering this path \u2014 scheme, host and query are ignored' },
   { kind: 'type', label: 'Directive type', widget: 'type', hint: 'Several types match any of them' },
   { kind: 'phase', label: 'Phase', widget: 'phase', hint: 'Several phases match any of them' },
   { kind: 'tag', label: 'Tag', widget: 'values', placeholder: 'Search tags…', hint: 'Several tags require ALL of them' },
@@ -83,17 +84,22 @@ const KIND_LABEL = Object.fromEntries(KINDS.map((k) => [k.kind, k.label])) as Re
 >
 
 /**
- * What the empty string reads as, per kind.
+ * What the empty string reads as, per kind. Neither of these is missing data — an absent
+ * container is itself a scope, and naming it says something true about the directive.
  *
- * For a host it is not missing data: a directive outside every `<VirtualHost>` is
- * server-level configuration, which Apache calls the global context. Naming it says
- * something true about the directive, where "(none)" only says something is absent.
+ * The two are NOT the same word, because the empty value means different things:
  *
- * Location keeps "(none)" deliberately — a directive outside every `<Location>` is not
- * global, it still sits inside whatever VirtualHost encloses it.
+ *   host     — outside every `<VirtualHost>` is server-level config, which is precisely
+ *              what Apache calls the global context.
+ *   location — outside every `<Location>` is NOT global; it applies to every path within
+ *              whatever scope encloses it. Measured on this configuration: of the 20,995
+ *              directives with no location, only 7,373 (35%) are also outside a
+ *              VirtualHost. The other 65% sit inside one, so "Global" would be wrong for
+ *              two out of three. "All paths" is true in both cases.
  */
 const EMPTY_LABEL: Partial<Record<FilterKind, string>> = {
   host: 'Global',
+  location: 'All paths',
 }
 
 /**
@@ -109,10 +115,30 @@ export function displayValue(v: string | null | undefined, kind?: FilterKind): s
   return v.length > 1 && v.startsWith('"') && v.endsWith('"') ? v.slice(1, -1) : v
 }
 
-/** How a chip reads once applied. */
+/** How a chip reads once applied — used for aria-labels and anywhere the kind is not shown. */
 export function describeFilter(f: Filter): string {
   if (f.kind === 'has-rule-id') return f.value === 'true' ? 'Has a rule ID' : 'No rule ID'
   return `${KIND_LABEL[f.kind]}: ${displayValue(f.value, f.kind)}`
+}
+
+/** Just the value: the chip rows print the kind once, as a heading for the group. */
+function chipValue(f: Filter): string {
+  if (f.kind === 'has-rule-id') return f.value === 'true' ? 'yes' : 'no'
+  return displayValue(f.value, f.kind)
+}
+
+/**
+ * Group chips by kind, preserving both the order kinds first appeared and each chip's
+ * index in the flat array — `remove(index)` still operates on the unchanged `Filter[]`.
+ */
+function groupedFilters(filters: Filter[]): [FilterKind, { filter: Filter; index: number }[]][] {
+  const groups = new Map<FilterKind, { filter: Filter; index: number }[]>()
+  filters.forEach((filter, index) => {
+    const list = groups.get(filter.kind)
+    if (list) list.push({ filter, index })
+    else groups.set(filter.kind, [{ filter, index }])
+  })
+  return [...groups.entries()]
 }
 
 /**
@@ -140,6 +166,7 @@ export function toQuery(filters: Filter[], sort: SortState): DirectiveSearchQuer
     hosts: of('host'),
     locations: of('location'),
     node_id: one('node-id') ? Number(one('node-id')) : null,
+    url: one('url'),
     args_contains: one('args'),
     msg_contains: one('msg'),
     has_rule_id: hasRuleId === null ? null : hasRuleId === 'true',
@@ -320,6 +347,8 @@ export function FilterBar({ filters, onChange, facets, loading }: FilterBarProps
                 value: String(v.value),
                 label: displayValue(String(v.value), kind),
                 count: v.count,
+                // Location values from a <LocationMatch> are regexes, not paths.
+                note: v.kind === 'LocationMatch' ? 'regex' : undefined,
               }))}
             />
           </div>
@@ -379,28 +408,43 @@ export function FilterBar({ filters, onChange, facets, loading }: FilterBarProps
 
       <p className="text-xs text-muted-foreground">{spec.hint}</p>
 
+      {/* Chips are grouped by kind with the operator spelled out between them, because the
+          rules are otherwise invisible: several tags require ALL of them, every other field
+          matches ANY. One row per kind, and separate rows all have to hold at once — which
+          is what the layout already implies. */}
       {filters.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 border-t pt-3">
-          {filters.map((f, i) => (
-            <span
-              key={`${f.kind}-${f.value}-${i}`}
-              className="inline-flex max-w-full items-center gap-1 rounded-md border border-primary/30 bg-primary/10 py-0.5 pl-2 pr-1 text-xs font-medium text-primary"
-            >
-              <span className="truncate font-mono">{describeFilter(f)}</span>
-              <button
-                type="button"
-                onClick={() => remove(i)}
-                aria-label={`Remove filter ${describeFilter(f)}`}
-                className="rounded-sm p-0.5 hover:bg-primary/20"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </span>
+        <div className="space-y-1.5 border-t pt-3">
+          {groupedFilters(filters).map(([kind, group]) => (
+            <div key={kind} className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">{KIND_LABEL[kind]}</span>
+              {group.map(({ filter, index }, i) => (
+                <span key={`${filter.value}-${index}`} className="flex items-center gap-1.5">
+                  {i > 0 && (
+                    <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                      {kind === 'tag' ? 'and' : 'or'}
+                    </span>
+                  )}
+                  <span className="inline-flex max-w-full items-center gap-1 rounded-md border border-primary/30 bg-primary/10 py-0.5 pl-2 pr-1 text-xs font-medium text-primary">
+                    <span className="truncate font-mono">{chipValue(filter)}</span>
+                    <button
+                      type="button"
+                      onClick={() => remove(index)}
+                      aria-label={`Remove filter ${describeFilter(filter)}`}
+                      className="rounded-sm p-0.5 hover:bg-primary/20"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                </span>
+              ))}
+            </div>
           ))}
           {filters.length > 1 && (
-            <Button type="button" variant="ghost" size="sm" onClick={() => onChange([])}>
-              Clear all
-            </Button>
+            <div className="pt-0.5">
+              <Button type="button" variant="ghost" size="sm" onClick={() => onChange([])}>
+                Clear all
+              </Button>
+            </div>
           )}
         </div>
       )}

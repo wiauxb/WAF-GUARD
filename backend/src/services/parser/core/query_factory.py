@@ -11,7 +11,8 @@ class QueryFactory:
         WITH node, properties
         
         FOREACH (_ IN CASE WHEN properties.Location IS NOT NULL THEN [1] ELSE [] END |
-            MERGE (l:Location {value: properties.Location, configuration_id: $cid})
+            MERGE (l:Location {value: properties.Location, kind: properties.LocationKind,
+                               configuration_id: $cid})
             MERGE (node)-[:AtLocation]->(l)
         )
 

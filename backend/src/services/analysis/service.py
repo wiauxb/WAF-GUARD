@@ -20,6 +20,7 @@ from shared.config import settings
 from services.configmanager.storage import ConfigFileStorage
 
 from . import queries as Q
+from . import urlmatch
 from .repository import GraphQueryRepository, SymbolQueryRepository
 from .schemas import (
     DirectiveFacetsResponse,
@@ -28,6 +29,8 @@ from .schemas import (
     DirectiveSearchQuery,
     FacetCount,
     FacetValuesResponse,
+    LocationMatchEntry,
+    LocationWarning,
     MacroTraceFrame,
     MacroTraceResponse,
     NodeMetadataEntry,
@@ -36,6 +39,7 @@ from .schemas import (
     RemoverListResponse,
     SymbolMatch,
     SymbolSearchResponse,
+    UrlMatchResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -73,6 +77,7 @@ class AnalysisService:
             type=row["type"],
             args=row.get("args") or "",
             location=row.get("location"),
+            location_kind=row.get("location_kind"),
             virtual_host=row.get("virtual_host"),
             if_level=row.get("if_level") or 0,
             conditions=row.get("conditions") or [],
@@ -128,11 +133,30 @@ class AnalysisService:
         # Exact host/location, any of. Note "" is a legitimate value here -- it means
         # "outside any VirtualHost/Location block" -- so these must not be truthiness-
         # filtered the way the scalar criteria below are.
-        for field in ("hosts", "locations"):
-            values = getattr(query, field)
-            if values:
-                clauses.append(Q.CLAUSES[field])
-                params[field] = values
+        #
+        # A `url` contributes to the SAME location set rather than a clause of its own.
+        # Two IN-sets on one property would be AND-ed, i.e. intersected, so `url` plus an
+        # explicit location chip returned zero unless that chip happened to be in the URL's
+        # own match set -- including the "All paths" chip the UI recommends. Merged, they
+        # behave like every other multi-value field: any of them.
+        locations = list(query.locations)
+        if query.url and query.url.strip():
+            matched = [m.value for m in self._match_url(configuration_id, query.url)[0]]
+            if not matched and not locations:
+                # No container covers this path and nothing else was asked for.
+                # Short-circuit rather than emitting `IN []`, a full scan that can only
+                # return nothing.
+                return self._directive_list(configuration_id, [], 0, limit, offset)
+            for value in matched:
+                if value not in locations:
+                    locations.append(value)
+
+        if query.hosts:
+            clauses.append(Q.CLAUSES["hosts"])
+            params["hosts"] = query.hosts
+        if locations:
+            clauses.append(Q.CLAUSES["locations"])
+            params["locations"] = locations
 
         # AND-within-field: the directive must carry every tag asked for.
         if query.tags:
@@ -174,6 +198,43 @@ class AnalysisService:
             configuration_id=configuration_id,
             types=[FacetCount(**r) for r in facets["types"]],
             phases=[FacetCount(**r) for r in facets["phases"]],
+        )
+
+    def _match_url(self, configuration_id: int, url: str):
+        """
+        Shared by the URL filter and the panel: (matches, warnings, path, patterns).
+
+        Matching runs here in Python rather than as a Cypher `=~` because Apache's
+        semantics cannot be expressed there — see urlmatch's module docstring.
+        """
+        rows = self._graph(configuration_id).all_locations()
+        patterns = urlmatch.prepare((r["value"], r["kind"], r["count"]) for r in rows)
+        path = urlmatch.normalise(url)
+        return urlmatch.match(path, patterns), patterns, path
+
+    def match_url(self, configuration_id: int, url: str) -> UrlMatchResponse:
+        """
+        Which `<Location>` / `<LocationMatch>` blocks cover a URL from a log.
+
+        Directives with no location apply to every path; they are excluded from `matches`
+        (they would be the same block on every URL) but counted in `no_location_count`, so
+        the omission is stated rather than silent.
+        """
+        matches, patterns, path = self._match_url(configuration_id, url)
+        return UrlMatchResponse(
+            configuration_id=configuration_id,
+            url=url,
+            path=path,
+            matches=[
+                LocationMatchEntry(value=m.value, kind=m.kind, count=m.count) for m in matches
+            ],
+            total_directives=sum(m.count for m in matches),
+            no_location_count=self._graph(configuration_id).no_location_count(),
+            warnings=[
+                LocationWarning(value=p.value, kind=p.kind, reason=p.warning)
+                for p in patterns
+                if p.warning
+            ],
         )
 
     def get_directive_values(
@@ -235,8 +296,10 @@ class AnalysisService:
 
         <- POST /parse_http_request + POST /cypher/to_json, collapsed into one call.
 
-        NOTE: PARSER.md defect #1 means directives inside <LocationMatch> blocks carry an
-        empty location, so this under-reports heavily on configurations that use them.
+        NOTE: the location/host REGEX form. `<LocationMatch>` values are themselves regexes
+        now that the parser tracks them (PARSER.md defect #1, resolved), so matching them with
+        `=~` is rarely what you want -- prefer the exact `locations`/`hosts` fields on
+        /directives/search.
         """
         rows, total = self._graph(configuration_id).directives_by_request(
             location, host, limit, offset

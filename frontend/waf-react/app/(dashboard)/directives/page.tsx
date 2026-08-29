@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ConfigGuard } from '@/components/analysis/ConfigGuard'
 import { DirectiveDetail } from '@/components/analysis/DirectiveDetail'
 import { DirectiveTable } from '@/components/analysis/DirectiveTable'
+import { UrlMatchPanel } from '@/components/analysis/UrlMatchPanel'
 import {
   FilterBar,
   toQuery,
@@ -24,6 +25,7 @@ import {
   DEFAULT_PAGE_SIZE,
   getDirectiveFacets,
   getDirectivesSettingConstant,
+  matchUrl,
   getDirectivesUsingConstant,
   getRemovalsByRuleId,
   getRemovalsByTag,
@@ -79,6 +81,15 @@ export default function DirectivesPage() {
     queryKey: ['analysis', 'facets', configId],
     queryFn: getDirectiveFacets,
     staleTime: 5 * 60_000,       // fixed for a parsed configuration
+  })
+
+  // Which location blocks the pasted URL falls into. Only fetched when a URL chip exists;
+  // the same matching backs the `url` search field, so the panel and the table agree.
+  const urlChip = filters.find((f) => f.kind === 'url')?.value ?? null
+  const urlMatch = useQuery({
+    queryKey: ['analysis', 'match-url', configId, urlChip],
+    enabled: !!urlChip,
+    queryFn: () => matchUrl(urlChip!),
   })
 
   const applyFilters = (next: Filter[]) => {
@@ -199,6 +210,21 @@ export default function DirectivesPage() {
               facets={facets.data}
               loading={directives.isFetching}
             />
+
+            {urlChip && (
+              <UrlMatchPanel
+                data={urlMatch.data}
+                loading={urlMatch.isLoading}
+                // Drill from "5 blocks matched" into one: swap the URL chip for that
+                // location, so the chip set always says exactly what is being filtered.
+                onPick={(value) =>
+                  applyFilters([
+                    ...filters.filter((f) => f.kind !== 'url'),
+                    { kind: 'location', value },
+                  ])
+                }
+              />
+            )}
 
             {directives.isLoading ? (
               <LoadingSpinner />

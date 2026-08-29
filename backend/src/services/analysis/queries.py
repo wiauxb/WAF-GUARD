@@ -24,6 +24,7 @@ DIRECTIVE_FIELDS = """
     n.type         AS type,
     n.args         AS args,
     n.Location     AS location,
+    n.LocationKind AS location_kind,
     n.VirtualHost  AS virtual_host,
     n.IfLevel      AS if_level,
     n.conditions   AS conditions,
@@ -110,8 +111,8 @@ CLAUSES = {
     "node_id": "n.node_id = $node_id",
     # Exact, and the form the UI uses. The stored values carry their quotes (`"*:80"`) and
     # contain regex metacharacters, so `=~` cannot express them: `*:80` is not even a valid
-    # pattern. Once the parser tracks <LocationMatch>, Location values will themselves BE
-    # regexes, which makes regex-matching them meaningless as well.
+    # pattern. And now that the parser tracks <LocationMatch>, Location values themselves
+    # ARE regexes, which makes regex-matching them meaningless as well.
     # "" is a real value meaning "outside any block", so IN [""] filters to exactly those.
     "hosts": "n.VirtualHost IN $hosts",
     "locations": "n.Location IN $locations",
@@ -240,11 +241,17 @@ WITH n.VirtualHost AS value
 {_VALUE_FILTER_AND_PAGE}
 """
 
-VALUES_LOCATION = f"""
-MATCH (n {{configuration_id: $cid}})
+# Carries the kind through, so the combobox can mark a regex as one -- `<LocationMatch ^>`
+# covers 14,138 directives and reads as a typo without it. Grouping on (value, kind) rather
+# than value alone keeps the count honest if the same text appears as both.
+VALUES_LOCATION = """
+MATCH (n {configuration_id: $cid})
 WHERE n.node_id IS NOT NULL AND n.Location IS NOT NULL
-WITH n.Location AS value
-{_VALUE_FILTER_AND_PAGE}
+WITH n.Location AS value, n.LocationKind AS kind, count(*) AS count
+WHERE $q = '' OR toLower(toString(value)) CONTAINS toLower($q)
+RETURN value, kind, count
+ORDER BY count DESC, value
+LIMIT $limit
 """
 
 # The field name in the URL -> its query. Also the whitelist: an unknown field 422s.
@@ -253,6 +260,25 @@ VALUE_QUERIES = {
     "host": VALUES_HOST,
     "location": VALUES_LOCATION,
 }
+
+# Every distinct location container, uncapped -- the input to URL matching. Unlike
+# VALUES_LOCATION this takes no `q` and no LIMIT: the matcher has to test the URL against
+# ALL of them, and a truncated list would silently under-report which rules apply.
+# 601 rows on a full configuration.
+ALL_LOCATIONS = """
+MATCH (n {configuration_id: $cid})
+WHERE n.node_id IS NOT NULL AND n.Location <> ''
+RETURN n.Location AS value, n.LocationKind AS kind, count(*) AS count
+ORDER BY count DESC, value
+"""
+
+# Directives outside every location container. They apply to any path, so the URL matcher
+# reports the figure even though it deliberately excludes them from the result set.
+NO_LOCATION_COUNT = """
+MATCH (n {configuration_id: $cid})
+WHERE n.node_id IS NOT NULL AND n.Location = ''
+RETURN count(n) AS count
+"""
 
 
 # ==================== Staleness guard ====================

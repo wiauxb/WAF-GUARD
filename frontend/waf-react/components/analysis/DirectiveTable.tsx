@@ -34,9 +34,9 @@ interface DirectiveTableProps {
  *
  * Columns are chosen from what is actually populated: `if_level` and `conditions` are
  * empty on every directive in practice, so they live in the detail panel instead.
- * `location` IS shown, though it is nearly always empty today: the parser does not yet
- * track <LocationMatch>, so directives inside those blocks carry no location. That is the
- * next parser fix, so the column stays.
+ * `location` and `host` are both populated now that the parser tracks <LocationMatch>
+ * (PARSER.md defect #1). A <LocationMatch> value is a regex rather than a path, so those
+ * rows carry a `regex` marker -- `^` alone otherwise reads as a rendering bug.
  *
  * Sorting is applied by the SERVER over the whole match set, never here over the current
  * page — ordering 50 rows out of ~97,000 would answer a different question than the one
@@ -157,11 +157,23 @@ export function DirectiveTable({
                     <span className="text-muted-foreground">Global</span>
                   )}
                 </TableCell>
-                <TableCell className="max-w-[160px] truncate font-mono text-xs">
+                <TableCell className="max-w-[160px] font-mono text-xs">
                   {d.location ? (
-                    displayValue(d.location, 'location')
+                    <span className="flex items-baseline gap-1">
+                      <span className="truncate">{displayValue(d.location, 'location')}</span>
+                      {/* A <LocationMatch> value is a REGEX, not a path — `^` or
+                          `(?i)[.]axd($|/)` read as typos without saying so. */}
+                      {d.location_kind === 'LocationMatch' && (
+                        <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
+                          regex
+                        </span>
+                      )}
+                    </span>
                   ) : (
-                    <span className="text-muted-foreground">—</span>
+                    // Also a scope, not missing data: no <Location> means the directive
+                    // applies to every path within whatever encloses it. Deliberately NOT
+                    // "Global" like the Host column — 65% of these sit inside a VirtualHost.
+                    <span className="text-muted-foreground">All paths</span>
                   )}
                 </TableCell>
                 <TableCell>

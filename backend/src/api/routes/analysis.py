@@ -27,6 +27,8 @@ from services.analysis.schemas import (
     RemoverListResponse,
     SourceLocationQuery,
     SymbolSearchResponse,
+    UrlMatchRequest,
+    UrlMatchResponse,
     ValueField,
 )
 from services.analysis.service import AnalysisService
@@ -90,6 +92,36 @@ async def get_directive_facets(
     than a hardcoded list of every directive ModSecurity defines.
     """
     return analysis.get_directive_facets(configuration_id)
+
+
+@router.post("/locations/match-url", response_model=UrlMatchResponse)
+async def match_url(
+    query: UrlMatchRequest,
+    configuration_id: int = Depends(get_analysis_configuration_id),
+    analysis: AnalysisService = Depends(get_analysis_service),
+):
+    """
+    Which `<Location>` / `<LocationMatch>` blocks cover a URL from a log?
+
+    Paste a URL or path — `https://host/jira/x?a=1` or `/jira/x`. Scheme, host, query and
+    fragment are ignored: `VirtualHost` holds bind specs (`*:80`), not hostnames, so a
+    log's host has nothing to match against.
+
+    Matching follows Apache: `<Location>` is a **path-component prefix** (`/wp` covers
+    `/wp/admin` but not `/wpfoo`), `<LocationMatch>` is an **unanchored PCRE search**.
+
+    `matches[].value` is the raw stored value, so it can be handed straight back as
+    `locations` on `/directives/search` to drill into one container. The same result is
+    available in one step via that endpoint's `url` field.
+
+    Directives with **no** location apply to every path and are excluded from `matches` —
+    they would be the same large block on every URL — but reported as `no_location_count`.
+
+    `warnings` names containers that can never match a request, most usefully a
+    `<Location>` written with regex syntax: Apache matches those literally, so the block is
+    dead. That is a configuration bug, and this is the only place it surfaces.
+    """
+    return analysis.match_url(configuration_id, query.url)
 
 
 @router.get("/directives/values/{field}", response_model=FacetValuesResponse)

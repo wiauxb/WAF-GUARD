@@ -332,7 +332,12 @@ export interface DirectiveResponse {
   node_id: number
   type: string                 // lowercased directive name == the Neo4j label
   args: string
-  location: string | null      // empty for ~99% until parser defect #1 is fixed
+  location: string | null
+  /**
+   * Which container produced `location`: 'Location' (a literal path) or 'LocationMatch'
+   * (a regex). '' / null when the directive is outside any location block.
+   */
+  location_kind: string | null
   virtual_host: string | null
   if_level: number
   conditions: string[]
@@ -448,13 +453,54 @@ export interface DirectiveSearchQuery {
   msg_contains?: string | null   // case-insensitive substring
   has_rule_id?: boolean | null   // null = don't care
   source?: SourceLocationQuery | null
+  /**
+   * Shorthand for `locations`: the server works out which `<Location>`/`<LocationMatch>`
+   * blocks cover this path and filters on exactly those. Paste a URL from a log — scheme,
+   * host, query and fragment are ignored.
+   */
+  url?: string | null
   sort_by?: SortField
   sort_dir?: SortDir
+}
+
+export interface LocationMatchEntry {
+  value: string                  // raw, as stored — usable directly as a `locations` filter
+  kind: string                   // Location | LocationMatch
+  count: number
+}
+
+export interface LocationWarning {
+  value: string
+  kind: string
+  reason: string
+}
+
+/**
+ * Which location containers cover a request path.
+ *
+ * Directives with NO location apply to every path, so they are excluded from `matches`
+ * (they would be the same block on every URL) and reported as `no_location_count` instead.
+ */
+export interface UrlMatchResponse {
+  configuration_id: number
+  url: string                    // what was submitted
+  path: string                   // the normalised path actually matched on
+  matches: LocationMatchEntry[]  // commonest first
+  total_directives: number
+  no_location_count: number
+  /**
+   * Containers the backend judges unreachable. Computed and returned, but deliberately
+   * NOT rendered: the analysis is subtle enough that showing it risks asserting something
+   * wrong in front of an audience. Available via the API if it is ever wanted back.
+   */
+  warnings: LocationWarning[]
 }
 
 export interface FacetCount {
   value: string | number
   count: number
+  /** Only the `location` list sets this: 'Location' | 'LocationMatch'. */
+  kind?: string | null
 }
 
 /** The values present in this configuration, for populating the filter dropdowns. */

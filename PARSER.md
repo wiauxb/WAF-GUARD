@@ -259,63 +259,75 @@ Line references point at the original code in `old/`; the ported copies under
 
 ---
 
-### 🔴 #1 — `<LocationMatch>` is ignored entirely (80.2% of directives)
+### ✅ #1 — `<LocationMatch>` was ignored entirely — RESOLVED
 
-**The code.** The scanner has exactly one pattern for location containers:
+**The code.** The scanner had exactly one pattern for location containers:
 
 ```python
 location_pattern = re.compile(r'[ \t]*<Location\s+(.*?)>')   # gérer locationMatch & directory
 ```
 
-The trailing comment is the original author's own note: *handle LocationMatch & directory*.
-It was never done. `<LocationMatch …>` does not match this pattern — after `<Location`
-comes `Match`, not whitespace — so the block is invisible to the parser. The same is true
-of `<Directory>`, `<DirectoryMatch>` and `<Proxy>`.
+The trailing comment was the original author's own note: *handle LocationMatch & directory*.
+`<LocationMatch …>` does not match it — after `<Location` comes `Match`, not whitespace — so
+1,468 blocks were invisible, and every directive inside them kept whatever `current_location`
+already held, almost always the empty string.
 
-**Why it is wrong.** Directives inside an untracked container keep whatever
-`current_location` was already set, which is almost always the empty string. They are
-recorded as applying to *no location at all*.
-
-**Measured impact.**
+**Measured impact**, on `config_3` / `config_5` (byte-identical dumps, md5 `62d0e4011cf6`):
 
 | | count | share |
 |---|---:|---:|
-| directives inside `<LocationMatch>` — recorded as `location=""` | **74,131** | **80.2%** |
-| …of which are SecRules | **40,290** | |
-| directives inside `<Location>` — correct | 9,720 | 10.5% |
-| directives genuinely outside any location | 8,592 | 9.3% |
+| inside `<LocationMatch>` — was recorded as `location=""` | **50,241** | 54.3% |
+| inside `<Location>` — always correct | 21,207 | 22.9% |
+| inside `<Directory>`/`<DirectoryMatch>`/`<Proxy>` — still `""` | 294 | 0.3% |
+| genuinely outside any container | 20,701 | 22.4% |
 
-`config_5` contains 1,468 `<LocationMatch>` blocks against 217 `<Location>` — plus 14
-`<Directory>`, 28 `<DirectoryMatch>` and 7 `<Proxy>`.
+> ⚠️ **An earlier version of this table was wrong** — it claimed 74,131 / 9,720 / 8,592. The
+> figures above are confirmed against the live database, which reports exactly 21,207
+> non-empty locations, matching the `<Location>` row.
 
-**What it means for you.** A real block from your dump:
+**The fix.** Both container kinds are matched, and *which* one produced the value is recorded
+as `LocationKind` (`""` | `"Location"` | `"LocationMatch"`):
 
-```apache
-<LocationMatch "^/SecError/>
-  AddType "application/problem+json" "json"
-  RewriteOptions InheritBefore
-  RewriteRule "[.](?:json)$" - [E=fix-type:application/problem+json,NE,DPI]
-</LocationMatch>
+```python
+location_pattern     = re.compile(r'[ \t]*<(Location|LocationMatch)\s+(.*?)>', re.I)
+location_end_pattern = re.compile(r'[ \t]*</(Location|LocationMatch)>', re.I)
 ```
 
-All three directives are stored with no location. Ask *"what applies to `/SecError/`?"* and
-you get nothing back. Ask *"what applies globally?"* and you get these three plus 74,128
-others that do not.
+The kind has to travel with the value: a `<Location>` value is a literal path, a
+`<LocationMatch>` value is a **regex**. 14,138 directives sit under `<LocationMatch ^>`,
+which reads as a typo unless it is flagged as a pattern.
 
-This is the input to `filter_directives_by_request` — the flagship analysis query, and the
-chatbot's `filter_rule` tool. Built on today's data, it is right about 20% of the
-configuration.
+**Why a single string is still sufficient — no stack.** Two properties of the compiled dump
+were measured before choosing this:
 
-**Fixing it is not a one-liner**, because the two container types are semantically
-different: `<Location />` is a literal path, `<LocationMatch ^/api>` is a regex. Matching a
-request against them requires knowing which is which, so the container kind has to be
-stored, not just its value.
+- **Location containers are never nested.** Ancestor depth is only ever 0 or 1, never more.
+- **The dump omits `</LocationMatch>` for *empty* blocks** — 7 of them. Line 79271 opens
+  `<LocationMatch (?i)SlowRequest>` and line 79273 opens another before it ever closes. A
+  *stack* would treat the first as still open and leak that location onto everything
+  downstream; a single string is simply overwritten by the next open, and no directives sit
+  in between.
 
-```bash
-# reproduce
-grep -c '<LocationMatch' backend/src/storage/configs/config_5/dump.conf   # 1468
-grep -c '<Location '     backend/src/storage/configs/config_5/dump.conf   # 217
-```
+Cross-checked against a full indentation-driven container stack (which resolves all 2,119
+explicit closes cleanly and leaves nothing open at EOF): **zero disagreements across all
+92,443 directives.**
+
+**Proven additive before any re-parse.** The modified scanner was diffed against the previous
+output field by field under `PYTHONHASHSEED=0`:
+
+| | |
+|---|---|
+| directives gaining a location | **50,241** |
+| directives losing one | **0** |
+| locations changed to a different value | **0** |
+| every other field (`args`, `tags`, `phase`, `node_id`, …) | byte-identical |
+| empty locations | **71,236 → 20,995** |
+
+Also fixed here: the end-pattern branch was missing its `continue`, and `</VirtualHost>` did
+not clear the location — only the opening tag did.
+
+**Still out of scope.** `<Directory>`, `<DirectoryMatch>` and `<Proxy>` (294 directives)
+remain `""` on purpose: those are *filesystem* paths, a different namespace from the URL
+paths this field holds. They need their own field, not this one.
 
 ---
 
@@ -607,7 +619,7 @@ Sorting the set before iterating fixes it in one line.
 
 | # | Defect | Severity | Measured blast radius | Recommendation |
 |---|--------|----------|----------------------|----------------|
-| 1 | `<LocationMatch>` / `<Directory>` / `<Proxy>` untracked | 🔴 Critical | 74,131 directives (80.2%), 40,290 SecRules | **Fix first.** Blocks meaningful request filtering |
+| 1 | `<LocationMatch>` untracked | ✅ Resolved | was 50,241 directives (54.3%) | **Done** — scanner now tracks both container kinds and records which. `<Directory>`/`<Proxy>` (294) deliberately still out: filesystem paths, not URL paths |
 | 2 | Macro `Context` string truncated | ✅ Resolved | was 91,032 directives (98.5%) | **Done** — field removed; provenance served by `/nodes/{id}/metadata` |
 | 3 | `RemoveById` ranges produce no edges | 🟠 High | All range-only removals | Fix with #4 |
 | 4 | Tag-removal edges resolved too early | 🟠 High | Up to 10,000 directives per run | Fix with #3, as a post-pass |

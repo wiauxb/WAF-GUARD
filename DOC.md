@@ -21,7 +21,7 @@ separate track and are out of scope for this document.
 | ChatbotService | 🟡 TO REVIEW | Works, but its 5 WAF tools return dummy data and checkpoint deletion is a no-op |
 | LogAnalysisService | 🟡 TO REVIEW | Largest doc/code drift; the ML service it calls is not reachable |
 
-**Route totals:** all 46 implemented. See [Route Totals](#route-totals).
+**Route totals:** all 47 implemented. See [Route Totals](#route-totals).
 
 **Critical path:** ~~ParserService~~ ✅ → ~~AnalysisService~~ ✅ →
 ~~re-point the `/directives` page~~ ✅ → swap the chatbot's dummy tools for real calls.
@@ -1194,6 +1194,7 @@ which also validates that the target is actually queryable:
 | POST | `/directives/search` | `DirectiveSearchQuery` | `DirectiveListResponse` | **Any combination of criteria, any sort order.** Backs the Directives page |
 | GET | `/directives/facets` | - | `DirectiveFacetsResponse` | Types and phases present in this config, with counts — populates the filter dropdowns |
 | GET | `/directives/values/{field}` | Query: `q`, `limit` | `FacetValuesResponse` | Searchable value list for `tag` \| `host` \| `location` — backs the filter comboboxes |
+| POST | `/locations/match-url` | `UrlMatchRequest` | `UrlMatchResponse` | Which `<Location>`/`<LocationMatch>` blocks cover a URL from a log |
 | GET | `/directives/{node_id}` | - | `DirectiveListResponse` | Directive by node ID |
 | GET | `/directives/by-rule-id/{rule_id}` | - | `DirectiveListResponse` | Directives carrying a ModSecurity rule ID |
 | GET | `/directives/by-tag/{tag}` | - | `DirectiveListResponse` | Directives carrying a tag |
@@ -1220,6 +1221,21 @@ surprises people:
 | `types`, `phases`, `rule_ids`, `hosts`, `locations` | *any of* | A directive has one type, one phase, one id, one host, one location — so a list can only mean "either" |
 | `tags` | *all of* | A directive carries a **list** of tags, so a list narrows to those carrying every one |
 
+**`url`** is shorthand for `locations`: paste a URL or path from a log and the server
+resolves which location blocks cover it, then **merges them into the `locations` set** —
+so a URL and explicit location chips combine as "any of", like every other multi-value
+field. (They used to be separate clauses, which AND-ed two sets on the same property and
+returned zero whenever a chip was not already in the URL's match set.) Scheme, host,
+query and fragment are ignored — `VirtualHost` holds bind specs (`*:80`), not hostnames.
+`POST /locations/match-url` returns the same match set with per-block counts, for showing
+*which* patterns hit.
+
+> Matching runs in **Python, not Cypher**. Apache's `<LocationMatch>` is an unanchored
+> **PCRE** search while Cypher's `=~` is Java-flavoured and fully anchored, and `<Location>`
+> is not a regex at all but a path-component prefix (`/wp` covers `/wp/admin`, not
+> `/wpfoo`). The `regex` module is pinned in requirements for this: the stdlib `re` rejects
+> PCRE's mid-pattern inline flags and fails on 56 of one real configuration's 545 patterns.
+
 Other fields: `node_id`, `args_contains` / `msg_contains` (case-insensitive substring),
 `has_rule_id` (separates real ModSecurity rules from the config directives around them),
 and `source` (a file+line, resolved through PostgreSQL to node IDs and then joined as an
@@ -1228,13 +1244,14 @@ ordinary clause). An empty body returns the whole configuration.
 > **`hosts`/`locations` are exact; `host`/`location` are regex and API-only.** The stored
 > values keep the quotes the dump used — `"*:80"`, `".well-known/acme-challenge"` — and
 > contain regex metacharacters, so `*:80` is not even a valid pattern (it used to 500; an
-> invalid regex now returns 400). Once the parser tracks `<LocationMatch>` the Location
-> values will themselves BE regexes like `(?i)[.]axd($|/)`, which makes regex-matching them
+> invalid regex now returns 400). And now that the parser tracks `<LocationMatch>`, Location
+> values themselves ARE regexes like `(?i)[.]axd($|/)`, which makes regex-matching them
 > meaningless as well. The UI therefore sends only the exact forms.
 >
 > `""` is a real value meaning **outside any VirtualHost/Location block** — the parser
 > initialises both to `""` and never to null. So `locations: [""]` filters to exactly those
-> 71,236 directives, and needs no sentinel.
+> directives (20,995 once `<LocationMatch>` is tracked, down from 71,236), and needs no
+> sentinel.
 
 **Restricted to directive nodes.** `configuration_id` is not unique to directives — every
 value node the parser MERGEs (`Id`, `Tag`, `Constant`, `Variable`, `Collection`, `Location`,
@@ -1663,13 +1680,13 @@ async def upload_configuration(
 | Auth | `/auth` | 5 | 0 | ✅ |
 | Configurations | `/configurations` | 8 | 0 | 🟡 |
 | Parser | `/parser` | **4** | 0 | ✅ |
-| Analysis | `/analysis` | **16** | 0 | ✅ |
+| Analysis | `/analysis` | **17** | 0 | ✅ |
 | Chatbot | `/chatbot` | 7 | 0 | 🟡 |
 | Logs | `/logs` | 6 | 0 | 🟡 |
-| **Total under `/api/v1`** | | **46** | **0** | |
+| **Total under `/api/v1`** | | **47** | **0** | |
 
 Plus 2 unprefixed routes in [main.py](backend/src/main.py): `GET /` and `GET /health`.
-Grand total of implemented handlers: **48**.
+Grand total of implemented handlers: **49**.
 
 > The old figure of "32 endpoints" counted 3 Parser routes that were never built and 3
 > "Common" entries that are shared schemas, not routes.
@@ -2048,7 +2065,7 @@ All carry `configuration_id` in addition to the properties listed.
 
 | Label | Properties | Created from |
 |-------|-----------|--------------|
-| `:Location` | `value` | `<Location>` context |
+| `:Location` | `value`, `kind` | `<Location>` (literal path) or `<LocationMatch>` (regex) context; `kind` says which, and is part of the MERGE key |
 | `:VirtualHost` | `value` | `<VirtualHost>` context |
 | `:Predicate` | `value` | `<If>` condition expressions |
 | `:Constant` | `name`, `value` *(optional)* | `Define` / `SetEnv`, and taint recovery |
@@ -2063,7 +2080,7 @@ All carry `configuration_id` in addition to the properties listed.
 
 | Relationship | From → To | Meaning |
 |--------------|-----------|---------|
-| `AtLocation` | directive → `:Location` | Directive sits in this `<Location>` |
+| `AtLocation` | directive → `:Location` | Directive sits in this `<Location>` / `<LocationMatch>` |
 | `InVirtualHost` | directive → `:VirtualHost` | Directive sits in this vhost |
 | `Has` | directive → `:Predicate` \| `:Id` \| `:Tag` | Guarded by an `<If>`, or declares an id/tag |
 | `InPhase` | directive → `:Phase` | ModSecurity processing phase |

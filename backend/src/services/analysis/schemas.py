@@ -111,6 +111,13 @@ class DirectiveSearchQuery(BaseModel):
     source: Optional[SourceLocationQuery] = Field(
         default=None, description="Only directives produced by this configuration line"
     )
+    # Shorthand for `locations`: the server works out which containers cover this path and
+    # filters on exactly those. Paste a URL from a log; scheme/host/query are ignored.
+    url: Optional[str] = Field(
+        default=None, max_length=2000,
+        description="Request URL or path; matches the <Location>/<LocationMatch> blocks "
+                    "covering it",
+    )
 
     sort_by: SortField = "node_id"
     sort_dir: Literal["asc", "desc"] = "asc"
@@ -130,6 +137,9 @@ class DirectiveResponse(BaseModel):
     type: str                              # lowercased directive name == the Neo4j label
     args: str
     location: Optional[str] = None
+    # Which container produced `location`: "Location" (a literal path) or "LocationMatch"
+    # (a regex). "" / None when the directive is outside any location block.
+    location_kind: Optional[str] = None
     virtual_host: Optional[str] = None
     if_level: int = 0
     conditions: List[str] = Field(default_factory=list)
@@ -156,6 +166,9 @@ class FacetCount(BaseModel):
     """One distinct value of a directive property, with how many directives carry it."""
     value: Any
     count: int
+    # Only the `location` value list populates this: "Location" | "LocationMatch", so the
+    # caller can tell a literal path from a pattern.
+    kind: Optional[str] = None
 
 
 class DirectiveFacetsResponse(BaseModel):
@@ -178,8 +191,7 @@ class FacetValuesResponse(BaseModel):
     A searchable slice of one property's distinct values, commonest first.
 
     Only a page of matches, never the whole set: this configuration already has 56 distinct
-    locations and will have several hundred once the parser tracks <LocationMatch>, so the
-    search runs server-side and the caller sends `q` as the user types.
+    locations, so the search runs server-side and the caller sends `q` as the user types.
 
     `value` is raw — surrounding quotes included, and "" for "outside any block". That is
     the form the filter takes; prettifying it is the UI's job.
@@ -219,6 +231,45 @@ class SymbolSearchResponse(BaseModel):
     total_count: int
     limit: int
     offset: int
+
+
+class UrlMatchRequest(BaseModel):
+    """A URL or path from a log, to be matched against the location containers."""
+    url: str = Field(min_length=1, max_length=2000)
+
+
+class LocationMatchEntry(BaseModel):
+    """One location container that covers the path, and how much lives inside it."""
+    value: str                             # raw, as stored — feed straight back as a filter
+    kind: str                              # Location | LocationMatch
+    count: int
+
+
+class LocationWarning(BaseModel):
+    """A container that cannot match any request path, and why."""
+    value: str
+    kind: str
+    reason: str
+
+
+class UrlMatchResponse(BaseModel):
+    """
+    Which location containers cover a given request path.
+
+    `matches` is ordered commonest first and its `value`s are exactly what
+    `DirectiveSearchQuery.locations` expects, so the caller can drill into any single one.
+
+    Directives with NO location apply to every path and are therefore *excluded* from
+    `matches` and `total_directives` — they would be the same large block on every URL.
+    `no_location_count` reports them so the omission is visible rather than silent.
+    """
+    configuration_id: int
+    url: str                               # what was submitted
+    path: str                              # the normalised path actually matched on
+    matches: List[LocationMatchEntry]
+    total_directives: int                  # sum over matches
+    no_location_count: int
+    warnings: List[LocationWarning]        # containers that can never match
 
 
 class NodeMetadataEntry(BaseModel):
