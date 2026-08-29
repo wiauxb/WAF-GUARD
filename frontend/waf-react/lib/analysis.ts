@@ -14,6 +14,7 @@ import type {
   ConstantQuery,
   DirectiveListResponse,
   DirectiveSearchQuery,
+  DirectiveStatsResponse,
   FacetValuesResponse,
   HttpRequestFilter,
   MacroTraceResponse,
@@ -65,6 +66,21 @@ export async function searchDirectives(query: DirectiveSearchQuery, page?: PageP
  */
 export async function matchUrl(url: string) {
   const { data } = await api.post<UrlMatchResponse>(`/analysis/locations/match-url`, { url })
+  return data
+}
+
+/**
+ * Summary statistics for a filter set — headline counts and distributions.
+ *
+ * Honours the whole filter set, unlike getDirectiveValues which excludes a field's own
+ * chips. Several aggregations, so ~850 ms on a 92k-directive configuration: fetch it on
+ * demand, not on page load.
+ */
+export async function getDirectiveStats(filters: DirectiveSearchQuery) {
+  const { data } = await api.post<DirectiveStatsResponse>(
+    `/analysis/directives/stats`,
+    filters,
+  )
   return data
 }
 

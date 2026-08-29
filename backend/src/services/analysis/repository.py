@@ -166,6 +166,16 @@ class GraphQueryRepository:
         cypher = Q.build_value_query(field, clauses)
         return self._run(cypher, {**params, "q": q, "limit": limit})
 
+    def stats_counts(self, clauses: List[str], params: Dict[str, Any]) -> Dict[str, int]:
+        """Every headline count for the filtered set, from one scan."""
+        rows = self._run(Q.build_stats_counts(clauses), params)
+        return dict(rows[0]) if rows else {}
+
+    def distinct_count(self, field: str, clauses: List[str], params: Dict[str, Any]) -> int:
+        """How many distinct values of a property the filtered set contains."""
+        rows = self._run(Q.build_distinct_count(field, clauses), params)
+        return rows[0]["count"] if rows else 0
+
     # ---------- request simulation ----------
 
     def directives_by_request(self, location: str, host: str, limit: int, offset: int):

@@ -464,6 +464,31 @@ export interface DirectiveSearchQuery {
   sort_dir?: SortDir
 }
 
+/**
+ * A summary of the directives a filter set matches — the statistics panel.
+ *
+ * Every figure honours the WHOLE filter set, unlike the dropdown value lists which drop a
+ * field's own chips so another value stays addable.
+ */
+export interface DirectiveStatsResponse {
+  configuration_id: number
+  total: number
+  secrules: number
+  with_rule_id: number
+  in_location: number
+  in_vhost: number
+  distinct_tags: number
+  distinct_locations: number
+  /** Ordered 1..5 then null — phase is ORDINAL, so never re-sort this by count. */
+  phases: FacetCount[]
+  /** Top 8 plus an "Other" row, so these still sum to `total`. */
+  types: FacetCount[]
+  /** Top 8. NOT part-to-whole: a directive carries several tags, so these sum to MORE
+   *  than `total` and must never be rendered as shares. */
+  tags: FacetCount[]
+  locations: FacetCount[]
+}
+
 export interface LocationMatchEntry {
   value: string                  // raw, as stored — usable directly as a `locations` filter
   kind: string                   // Location | LocationMatch

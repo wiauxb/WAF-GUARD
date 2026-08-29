@@ -15,6 +15,7 @@ import { ConfigGuard } from '@/components/analysis/ConfigGuard'
 import { DirectiveDetail } from '@/components/analysis/DirectiveDetail'
 import { DirectiveTable } from '@/components/analysis/DirectiveTable'
 import { UrlMatchPanel } from '@/components/analysis/UrlMatchPanel'
+import { StatsPanel } from '@/components/analysis/StatsPanel'
 import {
   FilterBar,
   toQuery,
@@ -216,6 +217,8 @@ export default function DirectivesPage() {
                 }
               />
             )}
+
+            <StatsPanel filters={filters} fallbackTotal={directives.data?.total_count} />
 
             {directives.isLoading ? (
               <LoadingSpinner />

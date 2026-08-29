@@ -18,6 +18,7 @@ from services.analysis.schemas import (
     DEFAULT_LIMIT,
     DirectiveListResponse,
     DirectiveSearchQuery,
+    DirectiveStatsResponse,
     HttpRequestFilter,
     MacroTraceResponse,
     MAX_LIMIT,
@@ -108,6 +109,28 @@ async def match_url(
     dead. That is a configuration bug, and this is the only place it surfaces.
     """
     return analysis.match_url(configuration_id, query.url)
+
+
+@router.post("/directives/stats", response_model=DirectiveStatsResponse)
+async def get_directive_stats(
+    query: DirectiveSearchQuery = DirectiveSearchQuery(),
+    configuration_id: int = Depends(get_analysis_configuration_id),
+    analysis: AnalysisService = Depends(get_analysis_service),
+):
+    """
+    A summary of the directives a filter set matches — headline counts and distributions.
+
+    Every figure honours the **whole** filter set, because this describes the slice on
+    screen. That is the deliberate difference from `/directives/values/{field}`, which
+    drops a field's own chips so another value stays addable: the panel summarises what is,
+    the dropdowns offer what could be added next.
+
+    `phases` is ordered **1..5 then null**, not by count — phase is the request lifecycle
+    and reading it in order is the point. `types` carries an `Other` row so it still sums to
+    `total`. `tags` does **not**: a directive carries several, so those counts sum to more
+    than `total` and are occurrences, never shares.
+    """
+    return analysis.get_directive_stats(configuration_id, query)
 
 
 @router.post("/directives/values/{field}", response_model=FacetValuesResponse)

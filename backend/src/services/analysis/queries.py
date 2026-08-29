@@ -255,6 +255,50 @@ def build_value_query(field: str, clauses: list[str]) -> str:
     LIMIT $limit
     """
 
+# ==================== Statistics panel ====================
+
+# Scalar counts for the stats panel. Each is the caller's clause list plus one extra
+# predicate, so they describe exactly the slice the table is showing.
+#
+# Note these take the FULL filter set -- unlike the dropdown value lists, which drop the
+# field's own chips so a second value stays addable. The panel summarises what is on
+# screen; the dropdowns offer what could be added next. Different questions.
+# The scalar headline counts, all in ONE statement. Conditional aggregation gets every
+# figure from a single scan -- as five separate count queries this was five round trips and
+# roughly half the panel's latency.
+#
+# Note these take the FULL filter set, unlike the dropdown value lists which drop the
+# field's own chips so a second value stays addable. The panel summarises what is on
+# screen; the dropdowns offer what could be added next. Different questions.
+def build_stats_counts(clauses: list[str]) -> str:
+    """Every headline count for the filtered set, in one scan."""
+    where = "".join(f"\n      AND {c}" for c in clauses)
+    return f"""
+    {SEARCH_MATCH}{where}
+    RETURN count(n)                                          AS total,
+           count(CASE WHEN n.type = 'secrule'   THEN 1 END)  AS secrules,
+           count(CASE WHEN n.id IS NOT NULL     THEN 1 END)  AS with_rule_id,
+           count(CASE WHEN n.Location <> ''     THEN 1 END)  AS in_location,
+           count(CASE WHEN n.VirtualHost <> ''  THEN 1 END)  AS in_vhost
+    """
+
+
+def build_distinct_count(field: str, clauses: list[str]) -> str:
+    """
+    How many DISTINCT values of a property the filtered set contains.
+
+    `tags` is a list, so it is flattened first -- otherwise this would count distinct
+    lists rather than distinct tags.
+    """
+    projection, not_null, _ = _VALUE_PROJECTION[field]
+    where = "".join(f"\n      AND {c}" for c in [not_null] + list(clauses))
+    return f"""
+    {SEARCH_MATCH}{where}
+    {projection}
+    RETURN count(DISTINCT value) AS count
+    """
+
+
 # Every distinct location container, uncapped -- the input to URL matching. Unlike
 # VALUES_LOCATION this takes no `q` and no LIMIT: the matcher has to test the URL against
 # ALL of them, and a truncated list would silently under-report which rules apply.

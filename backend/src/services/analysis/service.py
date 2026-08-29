@@ -26,6 +26,7 @@ from .schemas import (
     DirectiveListResponse,
     DirectiveResponse,
     DirectiveSearchQuery,
+    DirectiveStatsResponse,
     FacetCount,
     FacetValuesResponse,
     LocationMatchEntry,
@@ -217,6 +218,68 @@ class AnalysisService:
             params["source_node_ids"] = node_ids
 
         return clauses, params, False
+
+    def get_directive_stats(
+        self, configuration_id: int, filters: Optional[DirectiveSearchQuery] = None
+    ) -> "DirectiveStatsResponse":
+        """
+        Summarise the directives currently matched — backs the statistics panel.
+
+        Every figure honours the WHOLE filter set (`exclude` is empty), because the panel
+        describes the slice on screen. The dropdown value lists deliberately do the
+        opposite; see _FACET_EXCLUDES.
+        """
+        filters = filters or DirectiveSearchQuery()
+        clauses, params, empty = self._build_clauses(configuration_id, filters)
+        graph = self._graph(configuration_id)
+
+        if empty:
+            return DirectiveStatsResponse(
+                configuration_id=configuration_id, total=0, secrules=0, with_rule_id=0,
+                in_location=0, in_vhost=0, distinct_tags=0, distinct_locations=0,
+                phases=[], types=[], tags=[], locations=[],
+            )
+
+        counts = graph.stats_counts(clauses, params)
+        total = counts["total"]
+
+        def top(field: str, n: int = 8) -> List[FacetCount]:
+            rows = graph.directive_values(field, "", n, clauses, params)
+            return [FacetCount(**r) for r in rows]
+
+        # Phase is ORDINAL: the request lifecycle runs 1->5, and reading it in that order is
+        # the point. Fetch every phase (there are only 5), then order by phase rather than by
+        # count, with the no-phase directives last since they belong to no stage.
+        phase_rows = {
+            str(r["value"]): r["count"]
+            for r in graph.directive_values("phase", "", 50, clauses, params)
+        }
+        phases = [FacetCount(value=p, count=phase_rows.get(str(p), 0)) for p in (1, 2, 3, 4, 5)]
+        no_phase = total - sum(p.count for p in phases)
+        if no_phase:
+            phases.append(FacetCount(value=None, count=no_phase))
+
+        # Top types plus an "Other" row, so the section still sums to `total` and the long
+        # tail is visible as a quantity rather than silently dropped.
+        types = top("type")
+        other = total - sum(t.count for t in types)
+        if other > 0:
+            types.append(FacetCount(value="Other", count=other))
+
+        return DirectiveStatsResponse(
+            configuration_id=configuration_id,
+            total=total,
+            secrules=counts["secrules"],
+            with_rule_id=counts["with_rule_id"],
+            in_location=counts["in_location"],
+            in_vhost=counts["in_vhost"],
+            distinct_tags=graph.distinct_count("tag", clauses, params),
+            distinct_locations=graph.distinct_count("location", clauses, params),
+            phases=phases,
+            types=types,
+            tags=top("tag"),
+            locations=top("location"),
+        )
 
     # Which query fields a facet on each value-field must ignore. Adding a value to an OR
     # field WIDENS the result, so counting with that field's own chips applied would

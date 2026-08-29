@@ -276,6 +276,35 @@ class UrlMatchResponse(BaseModel):
     warnings: List[LocationWarning]        # containers that can never match
 
 
+class DirectiveStatsResponse(BaseModel):
+    """
+    A summary of the directives currently matched, for the statistics panel.
+
+    Every figure describes the slice the table is showing, so all filters apply. That is
+    the deliberate difference from `/directives/values/{field}`, which drops a field's own
+    chips so another value stays addable — the panel summarises what IS, the dropdowns
+    offer what could be added.
+    """
+    configuration_id: int
+    total: int
+    secrules: int
+    with_rule_id: int
+    in_location: int
+    in_vhost: int
+    distinct_tags: int
+    distinct_locations: int
+
+    # Ordered 1..5 then "(none)" — phase is ORDINAL (the request lifecycle), so this is
+    # deliberately NOT sorted by count. The UI must render it in the order given.
+    phases: List[FacetCount]
+    # Top 8 plus an "Other" row, so the counts still sum to `total`.
+    types: List[FacetCount]
+    # Top 8. NOT part-to-whole: a directive carries several tags, so these sum to more
+    # than `total` and must never be shown as shares.
+    tags: List[FacetCount]
+    locations: List[FacetCount]
+
+
 class NodeMetadataEntry(BaseModel):
     """
     One frame of a directive's context chain.

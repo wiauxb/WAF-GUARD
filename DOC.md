@@ -21,7 +21,7 @@ separate track and are out of scope for this document.
 | ChatbotService | 🟡 TO REVIEW | Works, but its 5 WAF tools return dummy data and checkpoint deletion is a no-op |
 | LogAnalysisService | 🟡 TO REVIEW | Largest doc/code drift; the ML service it calls is not reachable |
 
-**Route totals:** all 46 implemented. See [Route Totals](#route-totals).
+**Route totals:** all 47 implemented. See [Route Totals](#route-totals).
 
 **Critical path:** ~~ParserService~~ ✅ → ~~AnalysisService~~ ✅ →
 ~~re-point the `/directives` page~~ ✅ → swap the chatbot's dummy tools for real calls.
@@ -1193,6 +1193,7 @@ which also validates that the target is actually queryable:
 |--------|----------|---------|----------|-------------|
 | POST | `/directives/search` | `DirectiveSearchQuery` | `DirectiveListResponse` | **Any combination of criteria, any sort order.** Backs the Directives page |
 | POST | `/directives/values/{field}` | `ValueListQuery` | `FacetValuesResponse` | Value list for `tag` \| `host` \| `location` \| `type` \| `phase` \| `msg`, **counted inside the filters already applied** |
+| POST | `/directives/stats` | `DirectiveSearchQuery` | `DirectiveStatsResponse` | Summary of the matched slice — headline counts and distributions, for the statistics panel |
 | POST | `/locations/match-url` | `UrlMatchRequest` | `UrlMatchResponse` | Which `<Location>`/`<LocationMatch>` blocks cover a URL from a log |
 | GET | `/directives/{node_id}` | - | `DirectiveListResponse` | Directive by node ID |
 | GET | `/directives/by-rule-id/{rule_id}` | - | `DirectiveListResponse` | Directives carrying a ModSecurity rule ID |
@@ -1268,6 +1269,17 @@ The two semantics need opposite treatment, and both are exact in a single aggreg
 
 > Consequence worth knowing: for an OR field the counts do **not** sum to the table total,
 > because they ignore that field's own chips. That is what makes multi-select work.
+
+`POST /directives/stats` does the **opposite** and deliberately so: it honours every filter,
+because it describes the slice on screen rather than offering what could be added next. Same
+`_build_clauses`, empty `exclude`. Two of its sections carry conventions the UI must respect:
+
+- **`phases` is ordered 1..5 then null, never by count.** Phase is ordinal — the request
+  lifecycle — so reading it in order is the point. That ordering is also why the panel draws
+  it as a bar rather than a pie.
+- **`tags` is not part-to-whole.** A directive carries several tags, so those counts sum to
+  more than `total` (196,641 tag-uses across 92,443 directives) and are occurrences, never
+  shares. The panel shows no percentage for that section.
 
 The clauses come from `AnalysisService._build_clauses`, the same builder
 `/directives/search` uses, so a dropdown can never advertise a number the search would not
@@ -1700,13 +1712,13 @@ async def upload_configuration(
 | Auth | `/auth` | 5 | 0 | ✅ |
 | Configurations | `/configurations` | 8 | 0 | 🟡 |
 | Parser | `/parser` | **4** | 0 | ✅ |
-| Analysis | `/analysis` | **16** | 0 | ✅ |
+| Analysis | `/analysis` | **17** | 0 | ✅ |
 | Chatbot | `/chatbot` | 7 | 0 | 🟡 |
 | Logs | `/logs` | 6 | 0 | 🟡 |
-| **Total under `/api/v1`** | | **46** | **0** | |
+| **Total under `/api/v1`** | | **47** | **0** | |
 
 Plus 2 unprefixed routes in [main.py](backend/src/main.py): `GET /` and `GET /health`.
-Grand total of implemented handlers: **48**.
+Grand total of implemented handlers: **49**.
 
 > The old figure of "32 endpoints" counted 3 Parser routes that were never built and 3
 > "Common" entries that are shared schemas, not routes.
