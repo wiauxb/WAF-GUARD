@@ -48,9 +48,12 @@ logger = logging.getLogger(__name__)
 
 # These bound what one call can put back into the context window. A WAF config is small
 # (~200 files, ~1 MB) so the caps are about the model's budget, not the filesystem's.
-MAX_MATCHES = 60
-MAX_READ_LINES = 200
-MAX_LINE_CHARS = 500
+# Sized against the TOKENS-PER-MINUTE budget, not the context window: an agent resends the
+# whole conversation at every step, so each of these payloads is billed once per remaining
+# step. See context.DEFAULT_LIMIT for the measurement.
+MAX_MATCHES = 30
+MAX_READ_LINES = 120
+MAX_LINE_CHARS = 220
 MAX_FILE_BYTES = 2_000_000
 
 
@@ -238,7 +241,7 @@ def read_config_file(
     runtime: ToolRuntime[ChatContext],
     path: str,
     offset: int = 1,
-    limit: int = 100,
+    limit: int = 60,
 ) -> dict:
     """
     Read a slice of one ORIGINAL configuration file, with line numbers.

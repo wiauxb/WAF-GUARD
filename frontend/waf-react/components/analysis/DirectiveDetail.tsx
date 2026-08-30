@@ -191,7 +191,7 @@ export function DirectiveDetail({
                   <button
                     onClick={() => onSourceClick(f.file_path, f.line_number)}
                     className="w-full rounded px-2 py-1 text-left hover:bg-muted"
-                    title="Find every directive produced by this line"
+                    title="Open this file at this line"
                   >
                     <span className="font-medium">
                       {f.macro_name === '/' ? (

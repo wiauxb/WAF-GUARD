@@ -25,8 +25,18 @@ logger = logging.getLogger(__name__)
 # Tool results re-enter the model's context window on every subsequent turn, so they are
 # capped hard. A `search_directives` that returned 1,000 rows of 10 KB `args` would exhaust
 # the window in a single call.
-DEFAULT_LIMIT = 20
-MAX_LIMIT = 50
+#
+# These numbers are set by the TOKENS-PER-MINUTE budget, not by the context window. An agent
+# resends the whole conversation at every step, so one tool result is billed once per
+# remaining step -- cost is quadratic in the number of tool calls. Measured on a real
+# question: 7 model calls, 158k input tokens, of which two 20-row `search_directives`
+# results (~5,900 tokens each) accounted for the largest share. At a 200k TPM tier that was
+# 80% of a minute's budget for ONE question, and the second question got a 429.
+#
+# 20 rows are rarely read by the model anyway: it wants the shape and the total_count, and
+# `total_count` is exact regardless of how many rows come back.
+DEFAULT_LIMIT = 8
+MAX_LIMIT = 25
 
 
 @dataclass
@@ -130,6 +140,7 @@ def compact_directive(d) -> dict:
     confusing them is the likeliest way for an answer to be quietly wrong.
     """
     args = d.args or ""
+    # 300 chars of args on 20 rows was ~6,000 tokens per call, resent every step.
     return {
         "node_id": d.node_id,                       # parser id, on every directive
         "rule_id": d.rule_id,                       # ModSecurity id:NNN, may be null
@@ -138,7 +149,7 @@ def compact_directive(d) -> dict:
         "host": d.virtual_host or "(global)",
         "location": d.location or "(all paths)",
         "location_kind": d.location_kind,
-        "tags": d.tags[:6],
+        "tags": d.tags[:4],
         "msg": d.msg,
-        "args": args[:300] + ("…" if len(args) > 300 else ""),
+        "args": args[:160] + ("…" if len(args) > 160 else ""),
     }

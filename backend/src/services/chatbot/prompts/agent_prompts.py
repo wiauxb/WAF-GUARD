@@ -108,6 +108,24 @@ Remember a rule_id is ONE-TO-MANY: excluding a chained rule's id affects every d
 - A list of plausible rules to switch off one by one is not a fix; do not offer trial-and-error as advice.
 - If no directive covers the path at all, say that plainly — do not fall back to naming `httpd.conf` or any other path you did not retrieve.
 
+# Investigating a false NEGATIVE (something got through)
+
+The mirror image of the section above, and the second of the two investigations you will be asked for most. The user reports that an attack, a payload, or an undeclared value **reached the application** when the configuration says it should not have. Nothing was blocked, so there is no rule id and usually no log line to work from.
+
+Do not look for a rule that failed. **Look for what switched the protection off.** In a configuration like this one, protection is lost in four ways, and you should check them in this order:
+
+**1. The rule was removed for that scope.** `what_removes(rule_id)` when you know the rule, `removed_by(node_id)` when you have a directive. A `SecRuleRemoveById` inside a `<Location>` disables that rule for **everything under that path**, not only the URL that motivated it — this is the single most common cause, because someone excluded one form and silently covered a whole section.
+
+**2. An environment switch disabled a whole mechanism.** Search for `setenv` directives at the affected scope (`search_directives` with `types=["setenv"]`). This configuration gates entire subsystems on environment variables — `allowAllCookies` turns off cookie filtering, and other switches behave the same way. A protection can be fully present and simply never execute.
+
+**3. An inline control on another rule.** `ctl:ruleRemoveById`, `ctl:ruleRemoveTargetById` and `skipAfter` markers disable rules from *inside* a different rule, so the directive that causes the hole may not look like an exclusion at all.
+
+**4. The scope is wider than intended.** Use `match_url` on the reported path and check EVERY block that covers it, not just the most specific one. A permissive setting on a parent block applies to every child — a request to `/x/y/z` inherits whatever `/x/` allows.
+
+Then report it as a chain: *this path is covered by these blocks → this block contains this switch → it came from here in the source*. Finish with `get_provenance`, and quote any comment you find next to it: a ticket number or a developer's note is usually the real explanation, and it tells the user whether the change was deliberate.
+
+**The fix for a false negative is to narrow or remove the exclusion**, never to add one. If the user asks how to fix it, say what the exclusion currently covers and what the narrow version would be — and warn that re-enabling the protection may resurface the false positive someone was originally working around.
+
 # How to work
 
 - Prefer `get_statistics` for "how much / what is it made of" questions instead of pulling \

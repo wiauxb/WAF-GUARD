@@ -388,7 +388,7 @@ def get_provenance(runtime: ToolRuntime[ChatContext], node_id: int) -> dict:
                     "macro": f.macro_name,
                     "file": f.file_path,
                     "line": f.line_number,
-                    "source": (f.content or "")[:400],
+                    "source": (f.content or "")[:220],
                 }
                 for f in trace.frames
             ],

@@ -13,6 +13,7 @@ import { Pagination } from '@/components/ui/pagination'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ConfigGuard } from '@/components/analysis/ConfigGuard'
 import { DirectiveDetail } from '@/components/analysis/DirectiveDetail'
+import { SourceFileDialog } from '@/components/analysis/SourceFileDialog'
 import { DirectiveTable } from '@/components/analysis/DirectiveTable'
 import { UrlMatchPanel } from '@/components/analysis/UrlMatchPanel'
 import { StatsPanel } from '@/components/analysis/StatsPanel'
@@ -106,8 +107,12 @@ export default function DirectivesPage() {
     replaceWith({ kind: 'rule-id', value: String(ruleId) })
   const searchByNodeId = (nodeId: number) =>
     replaceWith({ kind: 'node-id', value: String(nodeId) })
-  const searchBySource = (filePath: string, lineNumber: number) =>
-    replaceWith({ kind: 'source', value: `${filePath}:${lineNumber}` })
+  // Clicking a Source frame opens the FILE, not another filter. The chain ends where the
+  // edit is made; re-filtering the table by source line answered a different question and
+  // cost the reader an extra hop to get back to the text.
+  const [sourceFile, setSourceFile] = useState<{ path: string; line: number } | null>(null)
+  const openSource = (filePath: string, lineNumber: number) =>
+    setSourceFile({ path: filePath, line: lineNumber })
   const inspectSymbol = (name: string) => {
     setTab('symbols')
     setSymbolQuery(name)
@@ -279,7 +284,7 @@ export default function DirectivesPage() {
                       onTagClick={searchByTag}
                       onRuleIdClick={searchByRuleId}
                       onSymbolClick={inspectSymbol}
-                      onSourceClick={searchBySource}
+                      onSourceClick={openSource}
                       onNodeIdClick={searchByNodeId}
                     />
                   </div>
@@ -471,6 +476,17 @@ export default function DirectivesPage() {
             )}
           </TabsContent>
         </Tabs>
+      )}
+
+      {/* Opened from the Source chain in the directive detail panel. Rendered at page level
+          so it survives the detail panel closing behind it. */}
+      {configId != null && (
+        <SourceFileDialog
+          configurationId={configId}
+          filePath={sourceFile?.path ?? null}
+          lineNumber={sourceFile?.line ?? null}
+          onClose={() => setSourceFile(null)}
+        />
       )}
     </div>
   )
