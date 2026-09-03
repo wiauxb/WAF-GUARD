@@ -11,17 +11,8 @@ services:
       # neo4j stores anything.
       - neo4j_data:/data
       - neo4j_logs:/logs
-      # - ${DOCKER_DATA_PATH}/neo4j/config:/config
-      # - ${DOCKER_DATA_PATH}/neo4j/import:/import
-      # - ${EXPORT_DIR}:/import/exports
     environment:
       - NEO4J_AUTH=${NEO4J_USER}/${NEO4J_PASSWORD}
-      - NEO4J_PLUGINS=["apoc"]
-      - NEO4J_dbms_security_procedures_unrestricted=apoc.*
-      - NEO4J_apoc_export_file_enabled=true
-      - NEO4J_apoc_import_file_enabled=true
-      - NEO4J_apoc_import_file_use__neo4j__config=true
-
     ports:
       - "7474:7474"
       - "7687:7687"
@@ -34,7 +25,11 @@ services:
 
   postgres_na:
     container_name: postgres_na
-    image: postgres:latest
+    # Pinned: the postgres_data mount below is correct for 18's layout
+    # (PGDATA=/var/lib/postgresql/18/docker under VOLUME /var/lib/postgresql).
+    # Postgres never auto-upgrades PGDATA across majors, so a floating `latest`
+    # would one day start against a data dir it cannot read.
+    image: postgres:18
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -42,8 +37,6 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      # - ${DOCKER_DATA_PATH}/postgres:/var/lib/postgresql
-      # - ${EXPORT_DIR}:/exports
       - postgres_data:/var/lib/postgresql
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}"]
@@ -67,12 +60,8 @@ services:
     build: ./backend
     volumes:
       - ./backend/src:/app
-      # - ${DOCKER_DATA_PATH}/shared:/shared
-      # - ${EXPORT_DIR}:/exports
     environment:
-      - ENVIRONMENT=${ENVIRONMENT}
       - NEO4J_URL=${NEO4J_URL}
-      - NEO4J_URL_PROD=${NEO4J_URL_PROD}
       - NEO4J_USER=${NEO4J_USER}
       - NEO4J_PASSWORD=${NEO4J_PASSWORD}
       - POSTGRES_HOST=${POSTGRES_HOST}
@@ -81,7 +70,6 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - WAF_URL=${WAF_URL}
       - DELETE_BATCH_SIZE=${DELETE_BATCH_SIZE}
-      - EXPORT_DIR=${EXPORT_DIR}
       - POSTGRES_DB_CWAF=${POSTGRES_DB}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
@@ -104,7 +92,7 @@ services:
     container_name: react_na
     build: ./frontend
     volumes:
-      - ${PWD}/frontend/waf-react:/app/waf-react
+      - ./frontend/waf-react:/app/waf-react
     ports:
       - "8002:8002"
     working_dir: /app/waf-react
@@ -114,39 +102,21 @@ services:
         condition: service_started
         restart: true
 
-
-  # streamlit:
-  #   container_name: streamlit
-  #   build: ./streamlit
-  #   volumes:
-  #     - ${WEB_APP_PATH}:/app
-  #     - ${DOCKER_DATA_PATH}/shared:/shared
-  #   environment:
-  #     - API_URL=${API_URL}
-  #     - CHAT_URL=${CHAT_URL}
-  #   working_dir: /app
-  #   ports:
-  #     - "8501:8501"
-  #   entrypoint: "streamlit run Interactions.py --server.port=8501 --server.address=0.0.0.0"
-  #   depends_on:
-  #     fastapi:
-  #       condition: service_started
-  #       restart: true
-
   waf_na:
     container_name: waf_na
     build: ./waf
     privileged: true
     volumes:
-      - ${PWD}/waf/src:/opt/api
+      - ./waf/src:/opt/api
     ports:
       - "9090:8000"
     working_dir: /opt/api
     command: "fastapi dev main.py --host 0.0.0.0 --port 8000"
 
+  # Log classifier. Reached at http://model_na:8102 — hardcoded in services/logs/service.py.
   model_na:
     image: nelver28/modernbert:latest
-    container_name: modernbert
+    container_name: model_na
     ports:
       - "8102:8102"
     restart: always
