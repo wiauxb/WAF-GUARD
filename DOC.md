@@ -19,7 +19,7 @@ separate track and are out of scope for this document.
 | **ParserService** | ✅ DONE | Ported from `old/services/analyzer/`, behaviour-identical. Carries 12 known defects — see [PARSER.md](PARSER.md) |
 | **AnalysisService** | ✅ DONE | 13 methods / 13 routes, scoped to the active configuration |
 | ChatbotService | 🟡 TO REVIEW | Works, but its 5 WAF tools return dummy data and checkpoint deletion is a no-op |
-| LogAnalysisService | 🟡 TO REVIEW | Largest doc/code drift; the ML service it calls is not reachable |
+| **LogAnalysisService** | ✅ DONE | Two-step pipeline (local FP/TP model + `model_na` attack-type). Needs `backend/src/storage/models/fp_model/` populated manually (571 MB, not versioned) — see [README.md](README.md#log-classification-model) |
 
 **Route totals:** all 47 implemented. See [Route Totals](#route-totals).
 
@@ -885,22 +885,34 @@ class MacroTraceResponse(BaseModel):
 
 ### LogAnalysisService
 
-> 🟡 **TO REVIEW** — implemented in [services/logs/](backend/src/services/logs/), but this
-> is the largest doc/code drift in the file **and it cannot currently run**.
+> ✅ **DONE** — implemented in [services/logs/](backend/src/services/logs/). Two-step
+> classification, ported from `/home/dassi/my_parser/false_positives_classification/`:
 >
-> **Blocking:** the ML classifier is unreachable. `model_na` is commented out in
-> [docker-compose.yaml](docker-compose.yaml), *and* the code targets hostname `model`,
-> not `model_na` ([service.py:38](backend/src/services/logs/service.py#L38)). Both need
-> fixing before `POST /classify` can succeed.
+> 1. **Local FP/TP model** ([fp_classifier.py](backend/src/services/logs/fp_classifier.py)) —
+>    a ModernBERT model fine-tuned for this task, loaded once in `main.py`'s `lifespan` and
+>    run in-process (`torch`/`transformers`, `backend/src/requirements.txt`). Weights are
+>    not versioned (571 MB) — see [README.md](README.md#log-classification-model). If the
+>    model directory is missing at startup, `app.state.fp_classifier` is `None` and
+>    `POST /classify` returns `503` instead of crashing the backend.
+> 2. **Attack-type model** ([attack_client.py](backend/src/services/logs/attack_client.py))
+>    — only entries the step-1 model calls `true_positive` are sent to `model_na:8102/predict`
+>    (`settings.LOG_MODEL_SERVICE_URL`), same service and contract as before.
 >
-> **Contract drift** (each is flagged inline below):
-> - `GET /sessions` in this doc is `POST /sessions` in the code
->   ([api/routes/logs.py:54](backend/src/api/routes/logs.py#L54)).
-> - `include_logs` and `FilteredLogsResponse.logs` do not exist.
-> - `get_category_details` additionally requires `log_indices`.
-> - `LogEntryResponse.id` is `str` and required, not `int = 0`.
-> - Stored `categories` is a dict-of-dicts, not `{name: count}`.
-> - `CategoryDetailsResponse.logs` is `List[Dict]`, not `List[LogEntryResponse]`.
+> Parsing ([parser.py](backend/src/services/logs/parser.py)) captures every `Message:` line
+> in section H (the old parser silently kept only the first) and also reads sections `I`
+> (request body) and `J` (upload info), present on the production WAF's audit logs. Feature
+> extraction ([features.py](backend/src/services/logs/features.py)) produces 26 structured
+> fields (`rule_ids`, `severities`, `max_severity`, `tags`, `matched_data`,
+> `matched_locations`, `has_bot_rule`, `has_access_denied`, ...); `processor.py::format_log_text`
+> turns them into the exact natural-language template the FP/TP model was fine-tuned on —
+> it must not drift from that template, or classification accuracy degrades silently with no
+> error.
+>
+> This resolves every drift a previous version of this doc flagged: `POST /sessions` (not
+> `GET`), `get_category_details` requiring `log_indices`, and the stored `categories` shape
+> are now all correctly documented below. `FilteredLogsResponse` now carries the full matching
+> entries (`results`), which the old `fillna(-1)`/DataFrame-based implementation could not
+> provide.
 
 ```python
 async def classify_logs(user_id: int, file: UploadFile, configuration_id: Optional[int] = None) -> LogClassificationResponse
@@ -908,30 +920,28 @@ async def classify_logs(user_id: int, file: UploadFile, configuration_id: Option
     # Process:
     # 1. Validate file (.san, .txt, audit.log, max 500MB)
     # 2. Create session with UUID
-    # 3. Parse ModSecurity audit logs
-    # 4. Normalize and format logs
-    # 5. Send to ML service for classification
-    # 6. Store results in JSON file (backend/src/storage/logs/{session_id}.json)
-    # 7. Return summary with categories and counts
-    
+    # 3. Parse ModSecurity audit logs (parser.py)
+    # 4. Extract features + format text (features.py, processor.py)
+    # 5. Step 1: local FP/TP model, off the event loop (fp_classifier.py)
+    # 6. Step 2: attack-type model, true positives only (attack_client.py)
+    # 7. Store results in JSON file (backend/src/storage/logs/{session_id}.json)
+    # 8. Return summary with FP/TP counts and attack categories
+
 def get_filtered_logs(session_id: str, filters: LogFilter) -> FilteredLogsResponse
-    # 🟡 TO REVIEW — no include_logs parameter exists. The response has no `logs` field,
-    # so there is no way to get full log bodies out of this endpoint today.
-    # Apply pandas filters to logs (time, columns, exact/contains/greater_than/less_than)
-    # Recalculates categories based on filtered data
-    # Returns statistics with log indices
+    # Apply filters (prediction, category, time range, features.* columns)
+    # Recalculates categories over the filtered (true-positive) entries
+    # Returns the full matching entries in `results`
 
 def get_log_by_transaction(session_id: str, transaction_id: str) -> Optional[LogDetailResponse]
     # Get detailed log entry by transaction ID
 
 def get_category_details(session_id: str, category: str, log_indices: List[int], limit: int = 100, offset: int = 0) -> CategoryDetailsResponse
-    # 🟡 TO REVIEW — log_indices is REQUIRED and undocumented. The caller must first get
-    # the indices from classify_logs/get_filtered_logs and hand them back here.
-    # Get detailed logs for a specific category with pagination
-    
+    # log_indices comes from the category summary (classify_logs/get_filtered_logs)
+    # Get detailed logs for a specific attack category, paginated
+
 def get_user_sessions(user_id: int, limit: int = 50, offset: int = 0) -> List[LogAnalysisSessionResponse]
     # List all analysis sessions for a user
-    
+
 def delete_session(session_id: str, user_id: int) -> bool
     # Delete a session JSON file (with authorization check)
 ```
@@ -939,10 +949,12 @@ def delete_session(session_id: str, user_id: int) -> bool
 #### Request Schemas
 ```python
 class LogFilter(BaseModel):
+    prediction: Optional[Literal["false_positive", "true_positive"]] = None
+    category: Optional[str] = None  # partial match on attack_type.labels
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
-    columns: List[Dict[str, Any]] = []  # [{"name": "status_code", "value": 403, "type": "exact"}]
-    # Filter types: 'exact', 'contains', 'greater_than', 'less_than'
+    columns: List[Dict[str, Any]] = []  # [{"name": "response_status_code", "value": 403, "type": "exact"}]
+    # columns filter on LogFeatures.* fields. Filter types: 'exact', 'contains', 'greater_than', 'less_than'
 
 class CategoryRequest(BaseModel):
     category: str
@@ -957,50 +969,81 @@ class UserSessionRequest(BaseModel):
 
 #### Response Schemas
 ```python
-class LogClassificationResponse(BaseModel):
-    session_id: str  # UUID
-    total_logs: int
-    categories: List[LogCategoryResponse]
-    columns: List[str]
+class LogFeatures(BaseModel):
+    """26 structured fields extracted from a parsed log entry."""
+    transaction_id: str
+    timestamp: str
+    remote_address: str
+    request_method: str
+    request_url: str
+    request_protocol: str
+    host: str
+    user_agent: str
+    cookie: str
+    payload: str
+    response_status_code: str
+    response_status: str
+    rule_ids: str          # "|"-joined
+    rule_count: int
+    severities: str        # "|"-joined
+    max_severity: str
+    tags: str               # "|"-joined
+    messages: str           # " || "-joined msg: values
+    matched_data: str       # " || "-joined data: values
+    matched_locations: str  # "|"-joined
+    has_bot_rule: bool      # rule 444444 present
+    has_access_denied: bool
+    action: str
+    webapp_info: str
+    h_raw: str               # " || "-joined raw Message: lines
+
+class ParsedLog(BaseModel):
+    """Full parsed structure (sections A/B/C/F/H/I/J) for one audit log entry."""
+    id: str
+    A: ParsedSectionA   # Time, Transaction_id, Remote/Local address+port
+    B: ParsedSectionB   # Http_request, Request_url, Request_protocol, + raw headers
+    C: Dict[str, Any]   # payload
+    F: Dict[str, Any]   # HTTP response + response headers
+    H: ParsedSectionH   # Messages: List[str] (every Message: line), + raw metadata
+    I: Dict[str, Any]   # request body (production WAF)
+    J: Dict[str, Any]   # upload info (production WAF)
+
+class AttackTypeResult(BaseModel):
+    """Passed through from model_na as-is. Only set on true-positive entries."""
+    labels: List[str] = []
+    probabilities: List[Any] = []
+
+class LogEntryResponse(BaseModel):
+    parsed: ParsedLog
+    features: LogFeatures
+    prediction: Literal["false_positive", "true_positive"]
+    confidence: float
+    fp_probability: float
+    tp_probability: float
+    attack_type: Optional[AttackTypeResult]  # None for false_positive entries
 
 class LogCategoryResponse(BaseModel):
+    """Attack-category aggregate. Only true-positive entries have a category."""
     category: str
     count: int
     percentage: Optional[float]
-    log_indices: Optional[List[int]]  # Indices in DataFrame
+    log_indices: Optional[List[int]]
+
+class LogClassificationResponse(BaseModel):
+    session_id: str  # UUID
+    filename: str
+    total_logs: int
+    false_positives: int
+    true_positives: int
+    categories: List[LogCategoryResponse]
 
 class FilteredLogsResponse(BaseModel):
     session_id: str
-    total_logs: int  # Before filtering
-    filtered_logs: int  # After filtering
-    categories: List[LogCategoryResponse]  # Recalculated for filtered data
-    columns: List[str]
-    applied_filters: Dict[str, Any]
-    # 🟡 TO REVIEW — this field does not exist on the real schema. Either add it (plus the
-    # include_logs param) or drop it from the doc and the frontend types.
-    logs: Optional[List[Dict[str, Any]]]  # Full logs if include_logs=True
+    total_logs: int      # before filtering
+    filtered_logs: int   # after filtering
+    categories: List[LogCategoryResponse]  # recalculated over the filtered set
+    results: List[LogEntryResponse]
 
-class LogEntryResponse(BaseModel):
-    id: int = 0  # 🟡 TO REVIEW — actual field is `id: str`, required, no default
-    transaction_id: str
-    timestamp: Optional[datetime]
-    remote_address: Optional[str]
-    remote_port: Optional[int]
-    http_method: Optional[str]
-    request_url: Optional[str]
-    user_agent: Optional[str]
-    response_status_code: Optional[int]
-    response_status: Optional[str]
-    payload: Optional[str]
-    messages: Optional[List[str]]
-    message_tags: Optional[List[str]]
-    predicted_category: Optional[str]
-    prediction_probabilities: Optional[Dict[str, float]]
-    formatted_log: Optional[str]
-
-# 🟡 TO REVIEW — real schema: `id: int` (required, service passes 0 explicitly),
-# `created_at: datetime` and `completed_at: Optional[datetime]` (not str),
-# `categories: Optional[List[LogCategoryResponse]]` (not Dict[str, int]).
 class LogAnalysisSessionResponse(BaseModel):
     id: int = 0
     session_id: str  # UUID
@@ -1010,51 +1053,59 @@ class LogAnalysisSessionResponse(BaseModel):
     file_size: Optional[int]
     status: str  # "processing", "completed", "failed"
     total_logs: Optional[int]
+    false_positives: Optional[int]
+    true_positives: Optional[int]
     error_message: Optional[str]
-    created_at: str  # ISO format
+    created_at: str   # ISO format
     completed_at: Optional[str]
-    categories: Optional[Dict[str, int]]  # Not included in list view
+    categories: Optional[List[LogCategoryResponse]]  # excluded from the list view (metadata only)
 
 class LogDetailResponse(BaseModel):
     session_id: str
     transaction_id: str
-    log: Dict[str, Any]  # Raw parsed log data
+    log: LogEntryResponse
 
 class CategoryDetailsResponse(BaseModel):
     session_id: str
     category: str
     total_count: int
-    logs: List[LogEntryResponse]  # 🟡 TO REVIEW — actually List[Dict[str, Any]]
+    logs: List[LogEntryResponse]
 ```
 
 **Storage Details:**
 - Sessions stored as JSON files in `backend/src/storage/logs/{session_id}.json`
-- Each file contains: metadata, all logs, categories, and DataFrame (for filtering)
-- No database tables - pure file-based storage
-- Pandas DataFrame serialized as dict for filtering support
+- Each file holds session metadata plus `entries: List[LogEntryResponse dict]` and
+  `categories: List[LogCategoryResponse dict]` — no DataFrame, no `fillna(-1)` sentinel
+- No database tables — pure file-based storage
+- Sessions written by the previous single-step pipeline use a different, incompatible shape
+  and are not read by this version — there is no migration path, they are dev/test data
 
 **JSON Structure:**
-
-> 🟡 **TO REVIEW** — `categories` is a **dict of dicts**, not `{name: count}`. The shape
-> below is what [service.py:125](backend/src/services/logs/service.py#L125) actually
-> writes, and `get_category_details` depends on it (`categories[category]["count"]`).
 
 ```json
 {
   "session_id": "uuid",
   "user_id": 1,
+  "configuration_id": null,
   "filename": "audit.log",
   "status": "completed",
   "total_logs": 1500,
-  "categories": {
-    "SQL Injection": {
-      "category": "SQL Injection",
-      "count": 450,
-      "log_indices": [0, 3, 7]
+  "false_positives": 420,
+  "true_positives": 1080,
+  "categories": [
+    {"category": "SQL Injection", "count": 450, "percentage": 30.0, "log_indices": [0, 3, 7]}
+  ],
+  "entries": [
+    {
+      "parsed": {"...": "..."},
+      "features": {"...": "..."},
+      "prediction": "true_positive",
+      "confidence": 0.97,
+      "fp_probability": 0.03,
+      "tp_probability": 0.97,
+      "attack_type": {"labels": ["SQL Injection"], "probabilities": [{"SQL Injection": 0.97}]}
     }
-  },
-  "logs": [{...}],
-  "dataframe": [{...}]  // Serialized for pandas filtering
+  ]
 }
 ```
 
@@ -1547,18 +1598,21 @@ class ErrorResponse(BaseModel):
 
 ## Logs Routes (`/logs`)
 
-> 🟡 **TO REVIEW** — 6/6 implemented in [api/routes/logs.py](backend/src/api/routes/logs.py),
-> but `POST /classify` cannot succeed: the ML service it calls is not running (see the
-> LogAnalysisService marker). Also note `list_user_sessions` is a **POST** taking a body,
-> which the row below gets wrong.
+> ✅ **DONE** — 6/6 implemented in [api/routes/logs.py](backend/src/api/routes/logs.py).
+> `POST /classify` runs the two-step pipeline described under
+> [LogAnalysisService](#loganalysisservice) — it 503s if the local FP/TP model directory
+> ([README.md](README.md#log-classification-model)) is missing, otherwise it always
+> succeeds (the attack-type step degrades to a fallback label rather than failing the whole
+> request if `model_na` is unreachable). Note `list_user_sessions` is a **POST** taking a
+> body, not a `GET`.
 
 | Method | Endpoint | Auth | Request | Response | Description |
 |--------|----------|------|---------|----------|-------------|
-| POST | `/classify` | ✅ | File Upload + Query | `LogClassificationResponse` | Upload and classify logs |
-| POST | `/sessions` | ✅ | `UserSessionRequest` | `List[LogAnalysisSessionResponse]` | List user's sessions (🟡 doc said GET) |
+| POST | `/classify` | ✅ | File Upload + Query | `LogClassificationResponse` | Upload and classify logs (FP/TP, then attack-type) |
+| POST | `/sessions` | ✅ | `UserSessionRequest` | `List[LogAnalysisSessionResponse]` | List user's sessions |
 | GET | `/sessions/{session_id}/log/{transaction_id}` | ✅ | - | `LogDetailResponse` | Get specific log detail |
-| POST | `/sessions/{session_id}/filter` | ✅ | `LogFilter` | `FilteredLogsResponse` | Filter logs with pandas |
-| POST | `/sessions/{session_id}/categories` | ✅ | `CategoryRequest` | `CategoryDetailsResponse` | Get logs by category |
+| POST | `/sessions/{session_id}/filter` | ✅ | `LogFilter` | `FilteredLogsResponse` | Filter logs (prediction, category, time, features.*) |
+| POST | `/sessions/{session_id}/categories` | ✅ | `CategoryRequest` | `CategoryDetailsResponse` | Get logs by attack category |
 | DELETE | `/sessions/{session_id}` | ✅ | - | `SuccessResponse` | Delete session |
 
 ### Request Schemas
@@ -1574,11 +1628,14 @@ async def classify_log_file(
     # configuration_id: Optional link to configuration
 
 class LogFilter(BaseModel):
-    """Filters for querying log entries"""
+    """Filters for querying log entries within a session"""
+    prediction: Optional[Literal["false_positive", "true_positive"]] = None
+    category: Optional[str] = None  # partial match on attack_type.labels
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
     columns: List[Dict[str, Any]] = []
-    # Column filter format: {"name": "column_name", "value": filter_value, "type": "exact|contains|greater_than|less_than"}
+    # Column filter format: {"name": "features_field", "value": filter_value, "type": "exact|contains|greater_than|less_than"}
+    # features_field is any LogFeatures.* field, e.g. "response_status_code", "request_url", "rule_ids"
 
 class CategoryRequest(BaseModel):
     """Request for category details"""
@@ -1597,52 +1654,83 @@ class UserSessionRequest(BaseModel):
 
 ```python
 class LogClassificationResponse(BaseModel):
-    """Response after log classification"""
+    """Response after two-step log classification"""
     session_id: str  # UUID for the analysis session
+    filename: str
     total_logs: int
-    categories: List[LogCategoryResponse]
-    columns: List[str]  # Available columns in the dataset
+    false_positives: int
+    true_positives: int
+    categories: List[LogCategoryResponse]  # attack categories, true positives only
 
 class LogCategoryResponse(BaseModel):
-    """Category statistics"""
+    """Attack-category statistics"""
     category: str
     count: int
     percentage: Optional[float] = None
-    log_indices: Optional[List[int]] = None  # DataFrame indices for filtered results
+    log_indices: Optional[List[int]] = None  # indices into the session's entries
 
 class FilteredLogsResponse(BaseModel):
     """Response for filtered log queries"""
     session_id: str
     total_logs: int  # Total before filtering
     filtered_logs: int  # Total after filtering
-    categories: List[LogCategoryResponse]  # Recalculated for filtered data
-    columns: List[str]
-    applied_filters: Dict[str, Any]
-    # 🟡 TO REVIEW — field does not exist in the code. See LogAnalysisService marker.
-    logs: Optional[List[Dict[str, Any]]] = None  # Full logs if include_logs=True
+    categories: List[LogCategoryResponse]  # Recalculated over the filtered set
+    results: List[LogEntryResponse]  # the full matching entries
+
+class ParsedLog(BaseModel):
+    """Full parsed structure for one audit log entry (sections A/B/C/F/H/I/J)"""
+    id: str
+    A: ParsedSectionA  # Time, Transaction_id, Remote/Local address+port
+    B: ParsedSectionB  # Http_request, Request_url, Request_protocol, + raw headers
+    C: Dict[str, Any]  # payload
+    F: Dict[str, Any]  # HTTP response + response headers
+    H: ParsedSectionH  # Messages: List[str] (every Message: line), + raw metadata
+    I: Dict[str, Any]  # request body (production WAF)
+    J: Dict[str, Any]  # upload info (production WAF)
+
+class LogFeatures(BaseModel):
+    """26 structured fields extracted from a parsed log entry"""
+    transaction_id: str
+    timestamp: str
+    remote_address: str
+    request_method: str
+    request_url: str
+    request_protocol: str
+    host: str
+    user_agent: str
+    cookie: str
+    payload: str
+    response_status_code: str
+    response_status: str
+    rule_ids: str            # "|"-joined
+    rule_count: int
+    severities: str          # "|"-joined
+    max_severity: str
+    tags: str                # "|"-joined
+    messages: str             # " || "-joined
+    matched_data: str         # " || "-joined
+    matched_locations: str    # "|"-joined
+    has_bot_rule: bool
+    has_access_denied: bool
+    action: str
+    webapp_info: str
+    h_raw: str
+
+class AttackTypeResult(BaseModel):
+    """Passed through from model_na as-is. Only set on true-positive entries."""
+    labels: List[str] = []
+    probabilities: List[Any] = []
 
 class LogEntryResponse(BaseModel):
-    """Individual log entry details"""
-    id: int = 0  # 🟡 TO REVIEW — actual field is `id: str`, required
-    transaction_id: str
-    timestamp: Optional[datetime]
-    remote_address: Optional[str]
-    remote_port: Optional[int]
-    http_method: Optional[str]
-    request_url: Optional[str]
-    user_agent: Optional[str]
-    response_status_code: Optional[int]
-    response_status: Optional[str]
-    payload: Optional[str]
-    messages: Optional[List[str]]
-    message_tags: Optional[List[str]]
-    predicted_category: Optional[str]
-    prediction_probabilities: Optional[Dict[str, float]]
-    formatted_log: Optional[str]
+    """Individual log entry: parsed structure + features + classification"""
+    parsed: ParsedLog
+    features: LogFeatures
+    prediction: Literal["false_positive", "true_positive"]
+    confidence: float
+    fp_probability: float
+    tp_probability: float
+    attack_type: Optional[AttackTypeResult]  # None for false_positive entries
 
-# 🟡 TO REVIEW — real schema uses `created_at: datetime`, `completed_at: Optional[datetime]`,
-# `categories: Optional[List[LogCategoryResponse]]`, and `id: int` is required (the service
-# passes 0 explicitly rather than defaulting).
 class LogAnalysisSessionResponse(BaseModel):
     """Log analysis session metadata"""
     id: int = 0  # Always 0 (no DB storage)
@@ -1653,23 +1741,25 @@ class LogAnalysisSessionResponse(BaseModel):
     file_size: Optional[int]
     status: str  # "processing", "completed", "failed"
     total_logs: Optional[int]
+    false_positives: Optional[int]
+    true_positives: Optional[int]
     error_message: Optional[str]
     created_at: str  # ISO datetime string
     completed_at: Optional[str]
-    categories: Optional[Dict[str, int]] = None  # Only included in detail view
+    categories: Optional[List[LogCategoryResponse]] = None
 
 class LogDetailResponse(BaseModel):
-    """Single log detail with raw data"""
+    """Single log detail"""
     session_id: str
     transaction_id: str
-    log: Dict[str, Any]  # Complete raw parsed log structure
+    log: LogEntryResponse
 
 class CategoryDetailsResponse(BaseModel):
-    """Detailed logs for a specific category"""
+    """Detailed logs for a specific attack category"""
     session_id: str
     category: str
     total_count: int
-    logs: List[LogEntryResponse]  # 🟡 TO REVIEW — actually List[Dict[str, Any]]
+    logs: List[LogEntryResponse]
 ```
 
 ### Storage Implementation
@@ -1677,8 +1767,10 @@ class CategoryDetailsResponse(BaseModel):
 **File-Based Storage (JSON):**
 - Location: `backend/src/storage/logs/{session_id}.json`
 - No database tables required
-- Each session = one JSON file
-- Includes complete DataFrame for pandas filtering
+- Each session = one JSON file, holding metadata plus `entries: List[LogEntryResponse]`
+  and `categories: List[LogCategoryResponse]` (no DataFrame, no `fillna(-1)` sentinel)
+- Sessions written by the previous single-step pipeline use an incompatible shape and are
+  not read by this version — no migration path, they are dev/test data
 
 **Session File Structure:**
 ```json
@@ -1691,69 +1783,64 @@ class CategoryDetailsResponse(BaseModel):
   "file_hash": "sha256...",
   "status": "completed",
   "total_logs": 1500,
+  "false_positives": 420,
+  "true_positives": 1080,
   "error_message": null,
   "created_at": "2024-12-10T10:30:00",
   "completed_at": "2024-12-10T10:35:00",
-  "categories": {
-    "SQL Injection": 450,
-    "XSS": 300,
-    "Normal": 750
-  },
-  "logs": [
-    {
-      "transaction_id": "xyz123",
-      "timestamp": "2024-12-10T10:30:00Z",
-      "remote_address": "192.168.1.1",
-      "http_method": "POST",
-      "request_url": "/login",
-      "response_status_code": 403,
-      "predicted_category": "SQL Injection",
-      "prediction_probabilities": {
-        "SQL Injection": 0.95,
-        "XSS": 0.03
-      },
-      "formatted_log": "...",
-      "raw_data": {...}
-    }
+  "categories": [
+    {"category": "SQL Injection", "count": 450, "percentage": 30.0, "log_indices": [0, 3, 7]}
   ],
-  "dataframe": [...]  // Serialized pandas DataFrame for filtering
+  "entries": [
+    {
+      "parsed": {"id": "xyz123", "A": {"...": "..."}, "B": {"...": "..."}, "...": "..."},
+      "features": {
+        "transaction_id": "xyz123",
+        "request_url": "/login",
+        "response_status_code": "403",
+        "...": "..."
+      },
+      "prediction": "true_positive",
+      "confidence": 0.97,
+      "fp_probability": 0.03,
+      "tp_probability": 0.97,
+      "attack_type": {"labels": ["SQL Injection"], "probabilities": [{"SQL Injection": 0.97}]}
+    }
+  ]
 }
 ```
 
 ### Filtering Examples
 
-**Time-based filtering:**
+**Prediction + time-based filtering:**
 ```json
 POST /api/v1/logs/sessions/{session_id}/filter
 {
+  "prediction": "true_positive",
   "start_time": "2024-12-01T00:00:00Z",
   "end_time": "2024-12-31T23:59:59Z"
 }
 ```
 
-**Column-based filtering:**
+**Column-based filtering (on `features.*` fields):**
 ```json
 POST /api/v1/logs/sessions/{session_id}/filter
 {
   "columns": [
     {"name": "response_status_code", "value": 403, "type": "exact"},
     {"name": "request_url", "value": "/admin", "type": "contains"},
-    {"name": "remote_port", "value": 1024, "type": "greater_than"}
+    {"name": "rule_count", "value": 1, "type": "greater_than"}
   ]
 }
 ```
 
-**Combined filtering:**
-
-> 🟡 **TO REVIEW** — `?include_logs=true` is **not** supported; the endpoint takes no such
-> parameter and never returns log bodies. This example only works without it.
-
+**Combined filtering (category + column):**
 ```json
 POST /api/v1/logs/sessions/{session_id}/filter
 {
-  "start_time": "2024-12-10T00:00:00Z",
+  "category": "SQL Injection",
   "columns": [
-    {"name": "predicted_category", "value": "SQL Injection", "type": "exact"}
+    {"name": "response_status_code", "value": 403, "type": "exact"}
   ]
 }
 ```
@@ -1807,7 +1894,7 @@ async def upload_configuration(
 | Parser | `/parser` | **4** | 0 | ✅ |
 | Analysis | `/analysis` | **17** | 0 | ✅ |
 | Chatbot | `/chatbot` | 7 | 0 | 🟡 |
-| Logs | `/logs` | 6 | 0 | 🟡 |
+| Logs | `/logs` | 6 | 0 | ✅ |
 | **Total under `/api/v1`** | | **47** | **0** | |
 
 Plus 2 unprefixed routes in [main.py](backend/src/main.py): `GET /` and `GET /health`.

@@ -3,6 +3,8 @@
 FastAPI application entry point.
 """
 import logging
+import httpx
+import torch
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -15,6 +17,7 @@ from shared.database import (
     init_postgres_db
 )
 from api.routes import auth, configs, parser, analysis, chatbot, logs
+from services.logs.fp_classifier import FPClassifier
 # from api.middleware import LoggingMiddleware
 
 
@@ -27,7 +30,7 @@ async def lifespan(app: FastAPI):
     """
     # Startup
     logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
-    
+
     try:
         # Initialize storage directories
         ensure_storage_directories()
@@ -38,19 +41,39 @@ async def lifespan(app: FastAPI):
         # Check database health
         health = check_database_health()
         logger.info(f"Database health check: {health}")
-        
+
         if not all(health.values()):
             logger.warning("Some databases are not healthy!")
-        
+
+        # Load the local FP/TP log classifier once. Not versioned (571 MB) -- may be absent
+        # on a fresh clone, so a missing model degrades /logs/classify to a 503 rather than
+        # crashing the whole backend.
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        model_dir = settings.FP_MODEL_DIR_RESOLVED
+        try:
+            logger.info(f"Loading FP/TP log classifier from {model_dir} on {device}")
+            app.state.fp_classifier = FPClassifier(
+                model_dir, device, max_seq_len=settings.LOG_CLASSIFIER_MAX_SEQ_LEN
+            )
+            logger.info("FP/TP log classifier loaded")
+        except Exception as exc:
+            app.state.fp_classifier = None
+            logger.warning(
+                f"FP/TP log classifier unavailable at {model_dir} -- /logs/classify will "
+                f"503 until it is populated (see README): {exc}"
+            )
+        app.state.log_http_client = httpx.AsyncClient(timeout=30.0)
+
         logger.info("Application startup done")
     except Exception as e:
         logger.error(f"Startup failed: {e}")
         raise
-    
+
     yield  # Application runs here
-    
+
     # Shutdown
     # logger.info("Shutting down application")
+    await app.state.log_http_client.aclose()
     close_databases()
     # logger.info("Application shutdown complete")
 

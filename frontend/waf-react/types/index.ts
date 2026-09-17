@@ -212,22 +212,102 @@ export interface FileUpdateRequest {
 }
 
 // ==================== Log Analysis Types ====================
-export interface LogClassificationResponse {
-  session_id: string
-  filename: string
-  total_logs: number
-  categories: { [category: string]: number }
-  columns: string[]
+// Mirrors backend/src/services/logs/schemas.py — two-step FP/TP + attack-type pipeline.
+
+export interface ParsedSectionA {
+  Time: string
+  Transaction_id: string
+  Remote_address: string
+  Remote_port: number
+  Local_address: string
+  Local_port: number
+}
+
+export interface ParsedSectionB {
+  Http_request: string
+  Request_url: string
+  Request_protocol: string
+  [key: string]: any
+}
+
+export interface ParsedSectionH {
+  Messages: string[]
+  [key: string]: any
+}
+
+export interface ParsedLog {
+  id: string
+  A: ParsedSectionA
+  B: ParsedSectionB
+  C: { [key: string]: any }
+  F: { [key: string]: any }
+  H: ParsedSectionH
+  I: { [key: string]: any }
+  J: { [key: string]: any }
+}
+
+export interface LogFeatures {
+  transaction_id: string
+  timestamp: string
+  remote_address: string
+  request_method: string
+  request_url: string
+  request_protocol: string
+  host: string
+  user_agent: string
+  cookie: string
+  payload: string
+  response_status_code: string
+  response_status: string
+  rule_ids: string
+  rule_count: number
+  severities: string
+  max_severity: string
+  tags: string
+  messages: string
+  matched_data: string
+  matched_locations: string
+  has_bot_rule: boolean
+  has_access_denied: boolean
+  action: string
+  webapp_info: string
+  h_raw: string
+}
+
+export interface AttackTypeResult {
+  labels: string[]
+  probabilities: any[]
+}
+
+export interface LogEntryResponse {
+  parsed: ParsedLog
+  features: LogFeatures
+  prediction: 'false_positive' | 'true_positive'
+  confidence: number
+  fp_probability: number
+  tp_probability: number
+  attack_type?: AttackTypeResult | null
 }
 
 export interface LogCategoryResponse {
   category: string
   count: number
-  percentage: number
+  percentage?: number | null
   log_indices?: number[] | null
 }
 
+export interface LogClassificationResponse {
+  session_id: string
+  filename: string
+  total_logs: number
+  false_positives: number
+  true_positives: number
+  categories: LogCategoryResponse[]
+}
+
 export interface LogFilter {
+  prediction?: 'false_positive' | 'true_positive' | null
+  category?: string | null
   start_time?: string | null
   end_time?: string | null
   columns?: Array<{
@@ -242,55 +322,7 @@ export interface FilteredLogsResponse {
   total_logs: number
   filtered_logs: number
   categories: LogCategoryResponse[]
-  columns: string[]
-  applied_filters: LogFilter
-  logs?: Array<{ [key: string]: any }> | null
-}
-
-export interface LogEntryResponse {
-  id: string
-  A_transaction_id: string
-  A_remote_address: string
-  A_remote_port: number
-  A_local_address: string
-  A_local_port: number
-  B_http_request: string
-  B_request_url: string
-  B_request_protocol: string
-  B_host: string
-  B_user_agent: string
-  F_response_protocol: string
-  F_response_status_code: number
-  F_response_status: string
-  F_x_unique_id?: string
-  F_strict_transport_security?: string
-  F_content_length?: string
-  F_content_type?: string
-  H_messages: string[] | "empty"
-  H_action?: string
-  H_webapp_info?: string
-  H_sensor_id?: string
-  H_engine_mode?: string
-  Z_categories: string
-  Z_blocked: string
-  time: string
-  payloads: string
-  formatted_log: string
-  msgtags: string[]
-  new_categories: {
-    labels: string[]
-    probabilities: Array<Record<string, number>>
-  }
-  // Legacy fields for backward compatibility
-  transaction_id?: string
-  timestamp?: string
-  severity?: string
-  category?: string
-  message?: string
-  source_ip?: string | null
-  destination_ip?: string | null
-  rule_id?: string | null
-  [key: string]: any
+  results: LogEntryResponse[]
 }
 
 export interface LogAnalysisSessionResponse {
@@ -300,16 +332,17 @@ export interface LogAnalysisSessionResponse {
   filename: string
   configuration_id?: number | null
   total_logs: number
+  false_positives?: number | null
+  true_positives?: number | null
   created_at: string
   file_size: number
-  columns: string[]
-  categories?: { [category: string]: number } | null
+  categories?: LogCategoryResponse[] | null
 }
 
 export interface LogDetailResponse {
   session_id: string
   transaction_id: string
-  log: { [key: string]: any }
+  log: LogEntryResponse
 }
 
 export interface CategoryDetailsResponse {

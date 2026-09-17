@@ -179,32 +179,38 @@ export default function LogsPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="grid grid-cols-3 gap-2 text-sm">
                     <div>
                       <p className="text-muted-foreground">Total Logs</p>
                       <p className="font-semibold">{session.total_logs.toLocaleString()}</p>
                     </div>
                     <div>
-                      <p className="text-muted-foreground">Categories</p>
-                      <p className="font-semibold">
-                        {session.categories ? Object.keys(session.categories).length : 0}
+                      <p className="text-muted-foreground">False Positives</p>
+                      <p className="font-semibold text-green-600">
+                        {(session.false_positives ?? 0).toLocaleString()}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">True Positives</p>
+                      <p className="font-semibold text-red-600">
+                        {(session.true_positives ?? 0).toLocaleString()}
                       </p>
                     </div>
                   </div>
-                  
-                  {session.categories && (
+
+                  {session.categories && session.categories.length > 0 && (
                     <div className="flex flex-wrap gap-1 pt-2 border-t">
-                      {Object.entries(session.categories).slice(0, 3).map(([category, count]) => (
+                      {session.categories.slice(0, 3).map((cat) => (
                         <span
-                          key={category}
+                          key={cat.category}
                           className="text-xs px-2 py-1 bg-primary/10 text-primary rounded"
                         >
-                          {category}: {count}
+                          {cat.category}: {cat.count}
                         </span>
                       ))}
-                      {Object.keys(session.categories).length > 3 && (
+                      {session.categories.length > 3 && (
                         <span className="text-xs px-2 py-1 bg-muted text-muted-foreground rounded">
-                          +{Object.keys(session.categories).length - 3} more
+                          +{session.categories.length - 3} more
                         </span>
                       )}
                     </div>

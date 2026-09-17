@@ -5,8 +5,9 @@ The **W**eb **A**pplication **F**irewall **G**raph-based **U**nderstanding, **A*
 ## Project
 
 The project operates in two steps:
- - The analysis of a configuration
- - The exploitation and exploration of the extracted information
+
+- The analysis of a configuration
+- The exploitation and exploration of the extracted information
 
 You upload a configuration on the **Configurations** page, which sends it to the WAF container to
 produce an `httpd -S`-style dump, then parses that dump into PostgreSQL and Neo4j. Everything
@@ -34,21 +35,22 @@ databases.
 ```
 
 ### Services Architecture
+
 ![Architecture](_images/archiV2.png)
 
 The backend is one container: the API layer fronts the parser, config manager, analysis, chatbot
 and log services, which share the PostgreSQL and Neo4j connections. Adminer is not shown — it is
 a stand-alone web client for PostgreSQL.
 
-| Service | Container | Port | Role |
-|---|---|---|---|
-| Frontend | `react_na` | 8002 | Next.js web interface |
-| API | `backend_na` | 8000 | FastAPI backend, OpenAPI docs at `/docs` |
-| WAF | `waf_na` | 9090 → 8000 | Apache + ModSecurity, produces the config dump |
-| Neo4j | `neo4j_na` | 7474, 7687 | directive graph, browser at 7474 |
-| PostgreSQL | `postgres_na` | 5432 | users, configurations, directives, symbol table |
-| Adminer | `adminer_na` | 8080 | PostgreSQL web client |
-| Log classifier | `model_na` | 8102 | ModernBERT model used by the log analysis service |
+| Service        | Container       | Port         | Role                                              |
+| -------------- | --------------- | ------------ | ------------------------------------------------- |
+| Frontend       | `react_na`    | 8002         | Next.js web interface                             |
+| API            | `backend_na`  | 8000         | FastAPI backend, OpenAPI docs at`/docs`         |
+| WAF            | `waf_na`      | 9090 → 8000 | Apache + ModSecurity, produces the config dump    |
+| Neo4j          | `neo4j_na`    | 7474, 7687   | directive graph, browser at 7474                  |
+| PostgreSQL     | `postgres_na` | 5432         | users, configurations, directives, symbol table   |
+| Adminer        | `adminer_na`  | 8080         | PostgreSQL web client                             |
+| Log classifier | `model_na`    | 8102         | ModernBERT model used by the log analysis service |
 
 ## Installation
 
@@ -73,6 +75,16 @@ directory is gitignored, so it is empty on a fresh clone). It must contain an ex
 `install.sh`, which the [Dockerfile](waf/Dockerfile) runs at build time, and a `modules/`
 directory whose contents are copied into `/usr/local/lib64/httpd/modules/`.
 
+### Log classification model
+
+`POST /logs/classify` runs a two-step pipeline: a local, fine-tuned ModernBERT model first
+separates false positives from true positives, then only the true positives are sent to the
+`model_na` container for attack-type classification. The first step's weights are not
+versioned (571 MB) — put them in `backend/src/storage/models/fp_model/` (gitignored, so it is
+empty on a fresh clone; it needs `config.json`, `model.safetensors`, `tokenizer.json` and
+`tokenizer_config.json`). The backend logs a warning and `/logs/classify` returns `503` if this
+directory is missing or incomplete — every other page keeps working.
+
 ### Docker containers
 
 1. Ensure Docker and Docker Compose are installed on your system (the [docker engine](https://docs.docker.com/engine/install/) and the [compose](https://docs.docker.com/compose/install/) plugin or compose standalone).
@@ -81,6 +93,7 @@ directory whose contents are copied into `/usr/local/lib64/httpd/modules/`.
    docker compose up -d
    ```
 3. You should see 7 services running:
+
 ```
 [+] Running 7/7
  ✔ Container neo4j_na       Healthy
@@ -98,27 +111,29 @@ survive `docker compose down`. `docker compose down -v` deletes them.
 ## Quick Start
 
 1. Open `http://localhost:8002`, register an account and log in.
-
 2. On the **Configurations** page, create a configuration and upload a zip of your config. The zip
    can either contain the `conf` directory at its root, or the contents of `conf` directly. This
    stores the files and asks the WAF container for a dump — up to a minute.
-
 3. Parse it from the same page. Parsing is a background job: the request returns immediately and
    the page polls for the result, which for a large configuration takes minutes. To watch it:
+
    ```console
    docker compose logs backend_na -f
    ```
+
    Once it completes, the configuration is marked parsed and becomes selectable as your active
    configuration. Every analysis route is scoped to that selection.
-
 4. Explore: **Directives** to search and filter directives or simulate an HTTP request,
    **Dashboard** for configuration statistics, **Chatbot** to ask questions about the config in
    natural language, **Logs** to classify WAF log sessions.
+
    > You can also query Neo4j directly at `http://localhost:7474` and PostgreSQL through Adminer
    > at `http://localhost:8080`.
+   >
 
    > The **Query Graph** (`/cypher`) page is still wired to endpoints that the migration dropped
    > and currently fails on every action — see [DOC.md](DOC.md).
+   >
 
 ## Documentation
 

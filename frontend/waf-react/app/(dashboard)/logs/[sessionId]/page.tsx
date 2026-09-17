@@ -177,8 +177,23 @@ export default function LogSessionPage({ params }: { params: Promise<{ sessionId
             </CardHeader>
             {showFilters && (
               <CardContent className="space-y-4">
-                {/* Time Filters */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Prediction + Time Filters */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Prediction</label>
+                    <select
+                      className="flex h-9 w-full rounded-md border border-input bg-white px-3 py-1 text-sm"
+                      value={filters.prediction || ''}
+                      onChange={(e) => setFilters(prev => ({
+                        ...prev,
+                        prediction: (e.target.value || undefined) as 'false_positive' | 'true_positive' | undefined
+                      }))}
+                    >
+                      <option value="">All</option>
+                      <option value="false_positive">False Positive</option>
+                      <option value="true_positive">True Positive</option>
+                    </select>
+                  </div>
                   <div>
                     <label className="text-sm font-medium mb-2 block">Start Time</label>
                     <Input
@@ -273,7 +288,7 @@ export default function LogSessionPage({ params }: { params: Promise<{ sessionId
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.15 }}
-          className="grid grid-cols-1 md:grid-cols-4 gap-4"
+          className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4"
         >
           <Card className="bg-gradient-to-r from-blue-500 to-blue-600 text-white border-0 shadow-lg">
             <CardContent className="p-6">
@@ -311,14 +326,30 @@ export default function LogSessionPage({ params }: { params: Promise<{ sessionId
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-r from-orange-500 to-orange-600 text-white border-0 shadow-lg">
+          <Card className="bg-gradient-to-r from-emerald-500 to-emerald-600 text-white border-0 shadow-lg">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-orange-100 text-sm font-medium">Columns</p>
-                  <p className="text-3xl font-bold">{logsData?.columns.length}</p>
+                  <p className="text-emerald-100 text-sm font-medium">False Positives</p>
+                  <p className="text-3xl font-bold">
+                    {logsData?.results.filter(r => r.prediction === 'false_positive').length ?? 0}
+                  </p>
                 </div>
-                <Hash className="h-10 w-10 text-orange-200" />
+                <Hash className="h-10 w-10 text-emerald-200" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-r from-red-500 to-red-600 text-white border-0 shadow-lg">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-red-100 text-sm font-medium">True Positives</p>
+                  <p className="text-3xl font-bold">
+                    {logsData?.results.filter(r => r.prediction === 'true_positive').length ?? 0}
+                  </p>
+                </div>
+                <Hash className="h-10 w-10 text-red-200" />
               </div>
             </CardContent>
           </Card>
@@ -354,7 +385,7 @@ export default function LogSessionPage({ params }: { params: Promise<{ sessionId
                           {category.category}
                         </h3>
                         <p className="text-sm opacity-80">
-                          {category.count} logs ({category.percentage.toFixed(1)}%)
+                          {category.count} logs ({(category.percentage ?? 0).toFixed(1)}%)
                         </p>
                       </div>
                       <div className="flex items-center space-x-3">
@@ -375,7 +406,7 @@ export default function LogSessionPage({ params }: { params: Promise<{ sessionId
                       <div 
                         className="bg-current h-2 rounded-full transition-all duration-500"
                         style={{ 
-                          width: `${category.percentage}%`,
+                          width: `${category.percentage ?? 0}%`,
                           opacity: 0.7 
                         }}
                       />

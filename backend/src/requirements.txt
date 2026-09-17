@@ -31,4 +31,9 @@ pyvis
 # 545 patterns fail to compile under it. Was already present transitively via tiktoken;
 # pinned here so dropping the chatbot's tokenizer cannot silently break URL matching.
 regex
-# pandashttpx
+httpx
+# Local FP/TP ModernBERT classifier (services/logs/fp_classifier.py) -- loaded in-process
+# at backend startup from storage/models/fp_model/. Heavy: this is what makes the backend_na
+# image big and the first `docker compose build` slow.
+torch
+transformers

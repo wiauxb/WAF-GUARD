@@ -116,7 +116,7 @@ services:
   # Log classifier. Reached at http://model_na:8102 — hardcoded in services/logs/service.py.
   model_na:
     image: nelver28/modernbert:latest
-    container_name: model_na
+    container_name: modernbert
     ports:
       - "8102:8102"
     restart: always

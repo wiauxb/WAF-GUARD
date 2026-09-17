@@ -66,6 +66,22 @@ class Settings(BaseSettings):
     STORAGE_ROOT: str = "/app/storage"  # Container path
     MAX_FILE_SIZE: int = 50 * 1024 * 1024  # 50 MB
     ALLOWED_CONFIG_EXTENSIONS: list[str] = [".conf", ".config", ".txt", ".rules"]
+
+    # ==================== Log Classification Settings ====================
+    # Local FP/TP ModernBERT model directory. Not versioned (571 MB) -- populate manually,
+    # see README. Left unset -> derived from STORAGE_ROOT below.
+    FP_MODEL_DIR: Optional[str] = None
+    # Attack-type model service (step 2, true positives only). Reached at http://model_na:8102
+    # -- see the model_na service in docker-compose.yaml.
+    LOG_MODEL_SERVICE_URL: str = "http://model_na:8102"
+    LOG_CLASSIFIER_BATCH_SIZE: int = 16
+    # ModernBERT natively supports up to 8192 tokens. The bundled fp_model was fine-tuned at
+    # 2048 -- 512 (BERT-era default) truncates the Messages/payload evidence on long requests.
+    LOG_CLASSIFIER_MAX_SEQ_LEN: int = 2048
+
+    @property
+    def FP_MODEL_DIR_RESOLVED(self) -> str:
+        return self.FP_MODEL_DIR or str(Path(self.STORAGE_ROOT) / "models" / "fp_model")
     
     # ==================== LLM Settings ====================
     OPENAI_API_KEY: Optional[str] = None

@@ -227,19 +227,26 @@ export default function CategoryDetailsPage({ params }: { params: Promise<{ sess
                       <div className="flex items-center space-x-4 flex-1">
                         <span className="text-sm font-mono text-slate-500">#{index + 1}</span>
                         <span className="font-mono text-sm bg-slate-100 px-2 py-1 rounded">
-                          {log.A_transaction_id}
+                          {log.features.transaction_id}
                         </span>
                         <span className="text-sm text-slate-600">
-                          {log.time}
+                          {log.features.timestamp}
                         </span>
                         <span className={`text-xs px-2 py-1 rounded ${
-                          log.F_response_status_code >= 200 && log.F_response_status_code < 300 
-                            ? 'bg-green-100 text-green-800' 
-                            : log.F_response_status_code >= 400 
-                            ? 'bg-red-100 text-red-800' 
+                          Number(log.features.response_status_code) >= 200 && Number(log.features.response_status_code) < 300
+                            ? 'bg-green-100 text-green-800'
+                            : Number(log.features.response_status_code) >= 400
+                            ? 'bg-red-100 text-red-800'
                             : 'bg-yellow-100 text-yellow-800'
                         }`}>
-                          {log.F_response_status_code}
+                          {log.features.response_status_code}
+                        </span>
+                        <span className={`text-xs px-2 py-1 rounded font-semibold ${
+                          log.prediction === 'true_positive'
+                            ? 'bg-red-100 text-red-800'
+                            : 'bg-green-100 text-green-800'
+                        }`}>
+                          {log.prediction === 'true_positive' ? 'True Positive' : 'False Positive'}
                         </span>
                       </div>
                       <div className="flex items-center space-x-2">
@@ -271,19 +278,19 @@ export default function CategoryDetailsPage({ params }: { params: Promise<{ sess
                             <div className="space-y-2 text-sm">
                               <div className="flex justify-between">
                                 <span className="text-slate-500">Time:</span>
-                                <span className="font-mono">{log.time}</span>
+                                <span className="font-mono">{log.features.timestamp}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-slate-500">Transaction ID:</span>
-                                <span className="font-mono">{log.A_transaction_id}</span>
+                                <span className="font-mono">{log.features.transaction_id}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-slate-500">Remote:</span>
-                                <span className="font-mono">{log.A_remote_address}:{log.A_remote_port}</span>
+                                <span className="font-mono">{log.parsed.A.Remote_address}:{log.parsed.A.Remote_port}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-slate-500">Local:</span>
-                                <span className="font-mono">{log.A_local_address}:{log.A_local_port}</span>
+                                <span className="font-mono">{log.parsed.A.Local_address}:{log.parsed.A.Local_port}</span>
                               </div>
                             </div>
                           </div>
@@ -296,19 +303,19 @@ export default function CategoryDetailsPage({ params }: { params: Promise<{ sess
                             <div className="space-y-2 text-sm">
                               <div className="flex justify-between">
                                 <span className="text-slate-500">Status:</span>
-                                <span className="font-mono">{log.F_response_status_code} - {log.F_response_status}</span>
+                                <span className="font-mono">{log.features.response_status_code} - {log.features.response_status}</span>
                               </div>
                               <div className="flex justify-between">
-                                <span className="text-slate-500">Categories:</span>
-                                <span className="font-mono">{log.Z_categories}</span>
+                                <span className="text-slate-500">Prediction:</span>
+                                <span className="font-mono">{log.prediction} ({(log.confidence * 100).toFixed(1)}%)</span>
                               </div>
                               <div className="flex justify-between">
-                                <span className="text-slate-500">Blocked:</span>
-                                <span className="font-mono">{log.Z_blocked === "0" ? "No" : "Yes"}</span>
+                                <span className="text-slate-500">Attack Type:</span>
+                                <span className="font-mono">{log.attack_type?.labels.join(', ') || 'N/A'}</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-slate-500">Action:</span>
-                                <span className="font-mono">{log.H_action || 'N/A'}</span>
+                                <span className="font-mono">{log.features.action || 'N/A'}</span>
                               </div>
                             </div>
                           </div>
@@ -320,23 +327,23 @@ export default function CategoryDetailsPage({ params }: { params: Promise<{ sess
                           <div className="space-y-2 text-sm bg-slate-50 p-3 rounded">
                             <div className="flex justify-between">
                               <span className="text-slate-500">Method:</span>
-                              <span className="font-mono">{log.B_http_request}</span>
+                              <span className="font-mono">{log.features.request_method}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-slate-500">Host:</span>
-                              <span className="font-mono">{log.B_host}</span>
+                              <span className="font-mono">{log.features.host}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-slate-500">Protocol:</span>
-                              <span className="font-mono">{log.B_request_protocol}</span>
+                              <span className="font-mono">{log.features.request_protocol}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-slate-500">User Agent:</span>
-                              <span className="font-mono">{log.B_user_agent}</span>
+                              <span className="font-mono">{log.features.user_agent}</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-slate-500">Payloads:</span>
-                              <span className="font-mono">{log.payloads}</span>
+                              <span className="text-slate-500">Payload:</span>
+                              <span className="font-mono">{log.features.payload}</span>
                             </div>
                           </div>
                         </div>
@@ -345,16 +352,16 @@ export default function CategoryDetailsPage({ params }: { params: Promise<{ sess
                         <div>
                           <h4 className="font-semibold text-slate-700 mb-2">Request URL</h4>
                           <p className="text-sm bg-slate-50 p-3 rounded font-mono text-slate-600 break-all">
-                            {log.B_request_url}
+                            {log.features.request_url}
                           </p>
                         </div>
 
                         {/* Messages */}
-                        {log.H_messages && Array.isArray(log.H_messages) && log.H_messages.length > 0 && (
+                        {log.parsed.H.Messages && log.parsed.H.Messages.length > 0 && (
                           <div>
                             <h4 className="font-semibold text-slate-700 mb-2">Messages</h4>
                             <div className="space-y-2">
-                              {log.H_messages.map((message, msgIndex) => (
+                              {log.parsed.H.Messages.map((message, msgIndex) => (
                                 <div key={msgIndex} className="text-sm bg-slate-50 p-3 rounded">
                                   {message}
                                 </div>
@@ -364,11 +371,11 @@ export default function CategoryDetailsPage({ params }: { params: Promise<{ sess
                         )}
 
                         {/* Message Tags */}
-                        {log.msgtags && log.msgtags.length > 0 && (
+                        {log.features.tags && log.features.tags.length > 0 && (
                           <div>
                             <h4 className="font-semibold text-slate-700 mb-2">Message Tags</h4>
                             <div className="flex flex-wrap gap-2">
-                              {log.msgtags.map((tag, tagIndex) => (
+                              {log.features.tags.split('|').map((tag, tagIndex) => (
                                 <span key={tagIndex} className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
                                   {tag}
                                 </span>
@@ -377,12 +384,12 @@ export default function CategoryDetailsPage({ params }: { params: Promise<{ sess
                           </div>
                         )}
 
-                        {/* Classification Probabilities */}
-                        {log.new_categories && log.new_categories.probabilities && (
+                        {/* Classification Probabilities (attack type -- true positives only) */}
+                        {log.attack_type && log.attack_type.probabilities && log.attack_type.probabilities.length > 0 && (
                           <div>
-                            <h4 className="font-semibold text-slate-700 mb-2">Classification Probabilities</h4>
+                            <h4 className="font-semibold text-slate-700 mb-2">Attack Type Probabilities</h4>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                              {Object.entries(log.new_categories.probabilities[0])
+                              {Object.entries(log.attack_type.probabilities[0] as Record<string, number>)
                                 .sort(([, a], [, b]) => b - a)
                                 .slice(0, 5)
                                 .map(([label, prob]) => (
@@ -390,7 +397,7 @@ export default function CategoryDetailsPage({ params }: { params: Promise<{ sess
                                     <span className="text-sm font-medium">{label}</span>
                                     <div className="flex items-center space-x-2">
                                       <div className="w-20 bg-slate-200 rounded-full h-2">
-                                        <div 
+                                        <div
                                           className="bg-blue-500 h-2 rounded-full transition-all duration-300"
                                           style={{ width: `${prob * 100}%` }}
                                         />

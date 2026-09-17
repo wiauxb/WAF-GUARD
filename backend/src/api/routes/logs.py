@@ -13,7 +13,7 @@ from services.logs.schemas import (
 )
 from services.auth.schemas import UserInfo
 from shared.schemas import SuccessResponse
-from api.dependencies import get_current_user
+from api.dependencies import get_current_user, get_log_analysis_service
 
 router = APIRouter(prefix="/logs", tags=["logs"])
 
@@ -22,22 +22,20 @@ router = APIRouter(prefix="/logs", tags=["logs"])
 async def classify_log_file(
     file: UploadFile = File(..., description="Log file (.san, .txt, or audit.log)"),
     configuration_id: Optional[int] = Query(None, description="Optional configuration context"),
-    current_user: UserInfo = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user),
+    log_service: LogAnalysisService = Depends(get_log_analysis_service),
 ):
-    log_service = LogAnalysisService()
     """
     Upload and classify a log file.
-    
-    Process:
-    1. Parse ModSecurity audit logs
-    2. Normalize and format log entries
-    3. Send to ML service for classification
-    4. Store results in database
-    
+
+    Two-step pipeline:
+    1. Local ModernBERT model classifies every entry as false_positive / true_positive.
+    2. True-positive entries only are sent to the attack-type model service.
+
     - **file**: Log file (max 500MB)
     - **configuration_id**: Optional link to a configuration
-    
-    Returns session ID and category statistics.
+
+    Returns session ID, FP/TP counts and attack-category statistics.
     """
     try:
         return await log_service.classify_logs(
@@ -54,18 +52,17 @@ async def classify_log_file(
 @router.post("/sessions", response_model=List[LogAnalysisSessionResponse])
 async def list_user_sessions(
     user_session: UserSessionRequest,
-    current_user: UserInfo = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user),
+    log_service: LogAnalysisService = Depends(get_log_analysis_service),
 ):
     """
     List all log analysis sessions for current user.
-    
+
     - **limit**: Maximum number of sessions to return (1-100)
     - **offset**: Number of sessions to skip
-    
+
     Returns list of sessions with status and summary information.
     """
-
-    log_service = LogAnalysisService()
     return log_service.get_user_sessions(
         user_id=current_user.id,
         limit=user_session.limit,
@@ -77,26 +74,25 @@ async def list_user_sessions(
 async def get_log_detail(
     session_id: str,
     transaction_id: str,
-    current_user: UserInfo = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user),
+    log_service: LogAnalysisService = Depends(get_log_analysis_service),
 ):
     """
     Get detailed information for a specific log entry.
-    
+
     - **session_id**: Analysis session UUID
     - **transaction_id**: ModSecurity transaction ID
-    
-    Returns complete log data including raw parsed structure.
-    """
 
-    log_service = LogAnalysisService()
+    Returns the full parsed log, extracted features and classification result.
+    """
     result = log_service.get_log_by_transaction(session_id, transaction_id)
-    
+
     if not result:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Log not found"
         )
-    
+
     return result
 
 
@@ -104,22 +100,22 @@ async def get_log_detail(
 async def filter_logs(
     session_id: str,
     filters: LogFilter = Body(default=LogFilter()),
-    current_user: UserInfo = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user),
+    log_service: LogAnalysisService = Depends(get_log_analysis_service),
 ):
     """
-    Apply filters to logs in a session using pandas.
-    
+    Apply filters to logs in a session.
+
     - **session_id**: Analysis session UUID
     - **filters**: Filter criteria
-        - **start_time**: Filter logs after this timestamp
-        - **end_time**: Filter logs before this timestamp
-        - **columns**: Column-based filters with name, value, and type
+        - **prediction**: 'false_positive' or 'true_positive'
+        - **category**: partial match on attack category label
+        - **start_time** / **end_time**: filter logs by timestamp
+        - **columns**: filters on any `features.*` field
             - type: 'exact', 'contains', 'greater_than', 'less_than'
-    
-    Returns filtered log statistics and categories with log indices.
-    """
 
-    log_service = LogAnalysisService()
+    Returns filtered log statistics, categories and the full matching entries.
+    """
     try:
         return log_service.get_filtered_logs(session_id, filters)
     except ValueError as e:
@@ -130,18 +126,18 @@ async def filter_logs(
 async def get_category_logs(
     session_id: str,
     category_request: CategoryRequest,
-    current_user: UserInfo = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user),
+    log_service: LogAnalysisService = Depends(get_log_analysis_service),
 ):
     """
-    Get detailed logs for a specific category.
-    
+    Get detailed logs for a specific attack category.
+
     - **session_id**: Analysis session UUID
     - **category**: Category name (e.g., "SQL Injection", "XSS")
-    
+    - **log_indices**: Indices returned in the category summary (from /classify or /filter)
+
     Returns list of log entries for the specified category.
     """
-
-    log_service = LogAnalysisService()
     try:
         return log_service.get_category_details(
             session_id=session_id,
@@ -157,17 +153,16 @@ async def get_category_logs(
 @router.delete("/sessions/{session_id}", response_model=SuccessResponse)
 async def delete_session(
     session_id: str,
-    current_user: UserInfo = Depends(get_current_user)
+    current_user: UserInfo = Depends(get_current_user),
+    log_service: LogAnalysisService = Depends(get_log_analysis_service),
 ):
     """
     Delete a log analysis session and all associated data.
-    
+
     - **session_id**: Analysis session UUID
-    
+
     Only the session owner can delete their sessions.
     """
-
-    log_service = LogAnalysisService()
     try:
         log_service.delete_session(session_id, current_user.id)
         return SuccessResponse(message="Session deleted successfully")

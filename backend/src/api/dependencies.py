@@ -13,7 +13,7 @@
 #     return ChatbotService(db, checkpointer)
 
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi import Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional
@@ -27,6 +27,7 @@ from services.chatbot.service import ChatbotService
 from services.parser.service import ParserService
 from services.analysis.service import AnalysisService
 from services.analysis.repository import GraphQueryRepository
+from services.logs.service import LogAnalysisService
 
 security = HTTPBearer()
 
@@ -48,6 +49,16 @@ def get_analysis_service(
 ) -> AnalysisService:
     """Get AnalysisService instance with both database sessions"""
     return AnalysisService(db, neo4j_session)
+
+def get_log_analysis_service(request: Request) -> LogAnalysisService:
+    """
+    Get LogAnalysisService instance, backed by the classifier and HTTP client loaded
+    once at backend startup (see main.py's lifespan) rather than per-request.
+    """
+    return LogAnalysisService(
+        classifier=request.app.state.fp_classifier,
+        http_client=request.app.state.log_http_client,
+    )
 
 def get_chatbot_service(db: Session = Depends(get_postgres_db)) -> ChatbotService:
     """
