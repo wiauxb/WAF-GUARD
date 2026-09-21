@@ -308,6 +308,8 @@ export interface LogClassificationResponse {
 export interface LogFilter {
   prediction?: 'false_positive' | 'true_positive' | null
   category?: string | null
+  search?: string | null
+  include_parsed?: boolean
   start_time?: string | null
   end_time?: string | null
   columns?: Array<{

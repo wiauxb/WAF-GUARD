@@ -121,6 +121,17 @@ services:
       - "8102:8102"
     restart: always
 
+  # FP/TP log classifier (step 1 of log classification). Reached at http://fp_classifier_na:8103
+  # -- see LOG_FP_SERVICE_URL in backend/src/shared/config.py. The weights are baked into the
+  # image; to build it yourself, put them in fp_classifier/fp_model/ first (see README).
+  fp_classifier_na:
+    image: nelver28/fp-classifier:latest
+    build: ./fp_classifier
+    container_name: fp_classifier_na
+    ports:
+      - "8103:8103"
+    restart: always
+
 volumes:
   neo4j_data:      # graph — must stay named, see the neo4j_na comment
   neo4j_logs:      # neo4j's other declared VOLUME; named so it stops spawning anonymous ones

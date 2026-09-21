@@ -12,3 +12,4 @@ src/web_app/lib
 tmp.html
 dump.txt
 backend/src/storage/*
+fp_classifier/fp_model/*

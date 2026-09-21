@@ -19,7 +19,7 @@ separate track and are out of scope for this document.
 | **ParserService** | ✅ DONE | Ported from `old/services/analyzer/`, behaviour-identical. Carries 12 known defects — see [PARSER.md](PARSER.md) |
 | **AnalysisService** | ✅ DONE | 13 methods / 13 routes, scoped to the active configuration |
 | ChatbotService | 🟡 TO REVIEW | Works, but its 5 WAF tools return dummy data and checkpoint deletion is a no-op |
-| **LogAnalysisService** | ✅ DONE | Two-step pipeline (local FP/TP model + `model_na` attack-type). Needs `backend/src/storage/models/fp_model/` populated manually (571 MB, not versioned) — see [README.md](README.md#log-classification-model) |
+| **LogAnalysisService** | ✅ DONE | Two-step pipeline (`fp_classifier_na` FP/TP + `model_na` attack-type). Step 1 runs in the `fp_classifier_na` container — see [README.md](README.md#log-classification-model) |
 
 **Route totals:** all 47 implemented. See [Route Totals](#route-totals).
 
@@ -888,12 +888,14 @@ class MacroTraceResponse(BaseModel):
 > ✅ **DONE** — implemented in [services/logs/](backend/src/services/logs/). Two-step
 > classification, ported from `/home/dassi/my_parser/false_positives_classification/`:
 >
-> 1. **Local FP/TP model** ([fp_classifier.py](backend/src/services/logs/fp_classifier.py)) —
->    a ModernBERT model fine-tuned for this task, loaded once in `main.py`'s `lifespan` and
->    run in-process (`torch`/`transformers`, `backend/src/requirements.txt`). Weights are
->    not versioned (571 MB) — see [README.md](README.md#log-classification-model). If the
->    model directory is missing at startup, `app.state.fp_classifier` is `None` and
->    `POST /classify` returns `503` instead of crashing the backend.
+> 1. **FP/TP model** ([fp_classifier.py](backend/src/services/logs/fp_classifier.py)) —
+>    a ModernBERT model fine-tuned for this task, served by its own container
+>    (`fp_classifier_na`, source in [fp_classifier/](fp_classifier/), image
+>    `nelver28/fp-classifier`, weights baked in). The backend parses the log, extracts features,
+>    formats the training template and calls `POST /predict` on it
+>    (`settings.LOG_FP_SERVICE_URL`). See [README.md](README.md#log-classification-model) to
+>    build/publish the image. If the service is down, `POST /classify` fails with an error
+>    naming it; the backend itself still starts.
 > 2. **Attack-type model** ([attack_client.py](backend/src/services/logs/attack_client.py))
 >    — only entries the step-1 model calls `true_positive` are sent to `model_na:8102/predict`
 >    (`settings.LOG_MODEL_SERVICE_URL`), same service and contract as before.
@@ -922,8 +924,8 @@ async def classify_logs(user_id: int, file: UploadFile, configuration_id: Option
     # 2. Create session with UUID
     # 3. Parse ModSecurity audit logs (parser.py)
     # 4. Extract features + format text (features.py, processor.py)
-    # 5. Step 1: local FP/TP model, off the event loop (fp_classifier.py)
-    # 6. Step 2: attack-type model, true positives only (attack_client.py)
+    # 5. Step 1: FP/TP model via the fp_classifier service (fp_classifier.py)
+    # 6. Step 2: attack-type model, true positives only, in batches (attack_client.py)
     # 7. Store results in JSON file (backend/src/storage/logs/{session_id}.json)
     # 8. Return summary with FP/TP counts and attack categories
 
@@ -951,6 +953,8 @@ def delete_session(session_id: str, user_id: int) -> bool
 class LogFilter(BaseModel):
     prediction: Optional[Literal["false_positive", "true_positive"]] = None
     category: Optional[str] = None  # partial match on attack_type.labels
+    search: Optional[str] = None  # case-insensitive text search (url, ip, host, rules, messages, payload...)
+    include_parsed: bool = False  # True: results carry the full parsed sections (~10x heavier). GET .../log/{tid} always does
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
     columns: List[Dict[str, Any]] = []  # [{"name": "response_status_code", "value": 403, "type": "exact"}]
@@ -1600,9 +1604,8 @@ class ErrorResponse(BaseModel):
 
 > ✅ **DONE** — 6/6 implemented in [api/routes/logs.py](backend/src/api/routes/logs.py).
 > `POST /classify` runs the two-step pipeline described under
-> [LogAnalysisService](#loganalysisservice) — it 503s if the local FP/TP model directory
-> ([README.md](README.md#log-classification-model)) is missing, otherwise it always
-> succeeds (the attack-type step degrades to a fallback label rather than failing the whole
+> [LogAnalysisService](#loganalysisservice) — it fails if the fp_classifier
+> service is unreachable, otherwise it always succeeds (the attack-type step degrades to a fallback label rather than failing the whole
 > request if `model_na` is unreachable). Note `list_user_sessions` is a **POST** taking a
 > body, not a `GET`.
 
@@ -1631,6 +1634,8 @@ class LogFilter(BaseModel):
     """Filters for querying log entries within a session"""
     prediction: Optional[Literal["false_positive", "true_positive"]] = None
     category: Optional[str] = None  # partial match on attack_type.labels
+    search: Optional[str] = None  # case-insensitive text search (url, ip, host, rules, messages, payload...)
+    include_parsed: bool = False  # True: results carry the full parsed sections (~10x heavier). GET .../log/{tid} always does
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
     columns: List[Dict[str, Any]] = []

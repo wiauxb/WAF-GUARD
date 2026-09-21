@@ -27,6 +27,7 @@ databases.
 ├── waf/                    # Apache + ModSecurity container
 │   ├── src/main.py         #   REST API that dumps a configuration
 │   └── scripts/            #   your WAF installer — see below (gitignored)
+├── fp_classifier/          # FP/TP log classifier service (weights gitignored — see below)
 ├── old/                    # pre-migration code, kept for reference
 ├── DOC.md                  # backend reference: services, routes, migration status
 ├── PARSER.md               # how the parser works and its known defects
@@ -50,7 +51,8 @@ a stand-alone web client for PostgreSQL.
 | Neo4j          | `neo4j_na`    | 7474, 7687   | directive graph, browser at 7474                  |
 | PostgreSQL     | `postgres_na` | 5432         | users, configurations, directives, symbol table   |
 | Adminer        | `adminer_na`  | 8080         | PostgreSQL web client                             |
-| Log classifier | `model_na`    | 8102         | ModernBERT model used by the log analysis service |
+| Log classifier (attack type) | `model_na` | 8102 | ModernBERT model, step 2 of log classification |
+| Log classifier (FP/TP) | `fp_classifier_na` | 8103 | fine-tuned ModernBERT, step 1 of log classification |
 
 ## Installation
 
@@ -77,13 +79,24 @@ directory whose contents are copied into `/usr/local/lib64/httpd/modules/`.
 
 ### Log classification model
 
-`POST /logs/classify` runs a two-step pipeline: a local, fine-tuned ModernBERT model first
-separates false positives from true positives, then only the true positives are sent to the
-`model_na` container for attack-type classification. The first step's weights are not
-versioned (571 MB) — put them in `backend/src/storage/models/fp_model/` (gitignored, so it is
-empty on a fresh clone; it needs `config.json`, `model.safetensors`, `tokenizer.json` and
-`tokenizer_config.json`). The backend logs a warning and `/logs/classify` returns `503` if this
-directory is missing or incomplete — every other page keeps working.
+`POST /logs/classify` runs a two-step pipeline: a fine-tuned ModernBERT model separates false
+positives from true positives, then only the true positives go to the `model_na` container
+for attack-type classification. Step 1 runs in its own container, `fp_classifier_na`
+(source in [fp_classifier/](fp_classifier/), port 8103), image `nelver28/fp-classifier`, with
+the weights baked in — `docker compose up -d` pulls it, nothing to copy.
+
+To build the image yourself (or publish a new version), the weights are not in git (575 MB):
+put `config.json`, `model.safetensors`, `tokenizer.json` and `tokenizer_config.json` in
+`fp_classifier/fp_model/`, then:
+
+```bash
+docker compose build fp_classifier_na
+docker login
+docker push nelver28/fp-classifier:latest
+```
+
+If the service is down, the backend logs a warning at startup and `/logs/classify` fails with
+an error naming it; every other page keeps working.
 
 ### Docker containers
 
@@ -92,15 +105,16 @@ directory is missing or incomplete — every other page keeps working.
    ```
    docker compose up -d
    ```
-3. You should see 7 services running:
+3. You should see 8 services running:
 
 ```
-[+] Running 7/7
+[+] Running 8/8
  ✔ Container neo4j_na       Healthy
  ✔ Container postgres_na    Healthy
  ✔ Container waf_na         Started
  ✔ Container adminer_na     Started
  ✔ Container model_na       Started
+ ✔ Container fp_classifier_na Started
  ✔ Container backend_na     Started
  ✔ Container react_na       Started
 ```

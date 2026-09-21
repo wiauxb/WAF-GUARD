@@ -4,7 +4,6 @@ FastAPI application entry point.
 """
 import logging
 import httpx
-import torch
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -45,24 +44,17 @@ async def lifespan(app: FastAPI):
         if not all(health.values()):
             logger.warning("Some databases are not healthy!")
 
-        # Load the local FP/TP log classifier once. Not versioned (571 MB) -- may be absent
-        # on a fresh clone, so a missing model degrades /logs/classify to a 503 rather than
-        # crashing the whole backend.
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        model_dir = settings.FP_MODEL_DIR_RESOLVED
-        try:
-            logger.info(f"Loading FP/TP log classifier from {model_dir} on {device}")
-            app.state.fp_classifier = FPClassifier(
-                model_dir, device, max_seq_len=settings.LOG_CLASSIFIER_MAX_SEQ_LEN
-            )
-            logger.info("FP/TP log classifier loaded")
-        except Exception as exc:
-            app.state.fp_classifier = None
-            logger.warning(
-                f"FP/TP log classifier unavailable at {model_dir} -- /logs/classify will "
-                f"503 until it is populated (see README): {exc}"
-            )
+        # Step 1 of log classification runs in the fp_classifier service. Its absence only
+        # degrades /logs/classify (which will fail with a clear error), so it is a warning.
         app.state.log_http_client = httpx.AsyncClient(timeout=30.0)
+        app.state.fp_classifier = FPClassifier(settings.LOG_FP_SERVICE_URL, app.state.log_http_client)
+        if await app.state.fp_classifier.is_available():
+            logger.info(f"fp_classifier service ready at {settings.LOG_FP_SERVICE_URL}")
+        else:
+            logger.warning(
+                f"fp_classifier service not reachable at {settings.LOG_FP_SERVICE_URL} -- "
+                f"/logs/classify will fail until it is up (docker compose up -d fp_classifier_na)"
+            )
 
         logger.info("Application startup done")
     except Exception as e:

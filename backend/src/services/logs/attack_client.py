@@ -1,37 +1,31 @@
 """
-Step 2: Batch attack-type classification via the external model service.
+Step 2: Batched attack-type classification via the external model service.
 
 POST /predict with {"logs": [text1, text2, ...]}
 response       ->    {"predictions": [{"labels": [...], "probabilities": [...]}, ...]}
 
-Ported from false_positives_classification/api/services/attack_client.py.
+Ported from false_positives_classification/api/services/attack_client.py, with one change:
+texts are sent in fixed-size chunks instead of one request. A single request carrying
+~1000 logs made model_na drop the connection.
 """
+import logging
 from typing import List
 
 import httpx
 
 from .schemas import AttackTypeResult
 
-_FALLBACK_LABELS = {
-    "connect": "service_unavailable",
-    "status": "service_error",
-    "timeout": "service_timeout",
-}
+logger = logging.getLogger(__name__)
+
+DEFAULT_BATCH_SIZE = 64
 
 
-async def get_attack_types_batch(
+async def _predict_chunk(
     texts: List[str],
     client: httpx.AsyncClient,
     model_service_url: str,
 ) -> List[AttackTypeResult]:
-    """Send all TP texts in a single batch call and return one AttackTypeResult per text.
-
-    On any error, every entry receives a fallback AttackTypeResult so the
-    caller always gets a list of the same length as `texts`.
-    """
-    if not texts:
-        return []
-
+    """One request. Always returns exactly len(texts) results, fallback labels on error."""
     fallback_label = None
     try:
         response = await client.post(
@@ -40,24 +34,50 @@ async def get_attack_types_batch(
             timeout=3600,
         )
         response.raise_for_status()
-        data = response.json()
-        predictions = data.get("predictions", [])
+        predictions = response.json().get("predictions", [])
 
-        results = []
-        for pred in predictions:
-            results.append(
-                AttackTypeResult(
-                    labels=pred.get("labels", ["unknown"]) or ["unknown"],
-                    probabilities=pred.get("probabilities", []),
-                )
+        results = [
+            AttackTypeResult(
+                labels=pred.get("labels", ["unknown"]) or ["unknown"],
+                probabilities=pred.get("probabilities", []),
             )
-        return results
+            for pred in predictions
+        ]
+        if len(results) != len(texts):
+            logger.error(f"model service returned {len(results)} predictions for {len(texts)} logs")
+            fallback_label = "service_error"
+        else:
+            return results
 
     except httpx.ConnectError:
-        fallback_label = _FALLBACK_LABELS["connect"]
+        fallback_label = "service_unavailable"
     except httpx.HTTPStatusError:
-        fallback_label = _FALLBACK_LABELS["status"]
+        fallback_label = "service_error"
     except httpx.TimeoutException:
-        fallback_label = _FALLBACK_LABELS["timeout"]
+        fallback_label = "service_timeout"
+    except httpx.TransportError:
+        # e.g. RemoteProtocolError when the service drops the connection mid-request
+        fallback_label = "service_unavailable"
 
     return [AttackTypeResult(labels=[fallback_label]) for _ in texts]
+
+
+async def get_attack_types_batch(
+    texts: List[str],
+    client: httpx.AsyncClient,
+    model_service_url: str,
+    batch_size: int = DEFAULT_BATCH_SIZE,
+) -> List[AttackTypeResult]:
+    """Classify `texts` in chunks of `batch_size`, one AttackTypeResult per text.
+
+    Chunks are sent sequentially. A failing chunk only marks its own entries with a
+    fallback label; the other chunks are unaffected. The result always has len(texts) items.
+    """
+    if not texts:
+        return []
+
+    results: List[AttackTypeResult] = []
+    for start in range(0, len(texts), batch_size):
+        chunk = texts[start:start + batch_size]
+        results.extend(await _predict_chunk(chunk, client, model_service_url))
+    return results

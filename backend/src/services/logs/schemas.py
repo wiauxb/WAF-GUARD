@@ -162,6 +162,10 @@ class LogFilter(BaseModel):
     """Filters for querying log entries within a session."""
     prediction: Optional[Literal["false_positive", "true_positive"]] = None
     category: Optional[str] = None  # partial match on attack_type.labels
+    search: Optional[str] = None  # case-insensitive text search across the main features
+    # The parsed structure (all sections, raw headers) is ~10x the size of the features.
+    # List views do not need it; GET /sessions/{id}/log/{tid} returns it in full.
+    include_parsed: bool = False
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
     columns: List[Dict[str, Any]] = Field(default_factory=list)  # filters on features.* fields

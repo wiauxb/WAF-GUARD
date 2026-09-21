@@ -68,21 +68,16 @@ class Settings(BaseSettings):
     ALLOWED_CONFIG_EXTENSIONS: list[str] = [".conf", ".config", ".txt", ".rules"]
 
     # ==================== Log Classification Settings ====================
-    # Local FP/TP ModernBERT model directory. Not versioned (571 MB) -- populate manually,
-    # see README. Left unset -> derived from STORAGE_ROOT below.
-    FP_MODEL_DIR: Optional[str] = None
-    # Attack-type model service (step 2, true positives only). Reached at http://model_na:8102
-    # -- see the model_na service in docker-compose.yaml.
+    # Step 1 (FP/TP): fp_classifier service, see fp_classifier/ and docker-compose.yaml.
+    LOG_FP_SERVICE_URL: str = "http://fp_classifier_na:8103"
+    # Step 2 (attack type, true positives only): model_na.
     LOG_MODEL_SERVICE_URL: str = "http://model_na:8102"
+    # Texts per request to the fp_classifier service.
     LOG_CLASSIFIER_BATCH_SIZE: int = 16
-    # ModernBERT natively supports up to 8192 tokens. The bundled fp_model was fine-tuned at
-    # 2048 -- 512 (BERT-era default) truncates the Messages/payload evidence on long requests.
-    LOG_CLASSIFIER_MAX_SEQ_LEN: int = 2048
+    # Logs per request to the attack-type service. One request with ~1000 logs made it drop
+    # the connection.
+    LOG_ATTACK_BATCH_SIZE: int = 64
 
-    @property
-    def FP_MODEL_DIR_RESOLVED(self) -> str:
-        return self.FP_MODEL_DIR or str(Path(self.STORAGE_ROOT) / "models" / "fp_model")
-    
     # ==================== LLM Settings ====================
     OPENAI_API_KEY: Optional[str] = None
     LLM_API_URL: Optional[str] = None

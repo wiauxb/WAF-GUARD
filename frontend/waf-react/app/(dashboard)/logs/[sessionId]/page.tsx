@@ -1,423 +1,98 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { Suspense, use, useMemo } from 'react'
+import Link from 'next/link'
+import { useQuery } from '@tanstack/react-query'
+import { ArrowLeft, FileText, Loader2 } from 'lucide-react'
 import { api } from '@/lib/api'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
+import { formatDate } from '@/lib/utils'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
-import { 
-  ArrowLeft, 
-  BarChart3, 
-  Filter,
-  X,
-  Plus,
-  Trash2,
-  RefreshCw,
-  FileText,
-  Hash,
-  ArrowRight
-} from 'lucide-react'
-import toast from 'react-hot-toast'
-import { 
-  FilteredLogsResponse, 
-  LogFilter, 
-  LogCategoryResponse
-} from '@/types'
-import { useRouter } from 'next/navigation'
-import { use } from 'react'
-import { motion } from 'framer-motion'
+import { EmptyState } from '@/components/ui/empty-state'
+import { CategoryChart, PredictionDonut, TimelineChart, TopRulesChart } from '@/components/logs/charts'
+import { LogFilters } from '@/components/logs/LogFilters'
+import { LogsTable } from '@/components/logs/LogsTable'
+import { SessionStats } from '@/components/logs/SessionStats'
+import { useLogFilters } from '@/components/logs/useLogFilters'
+import type { FilteredLogsResponse, LogAnalysisSessionResponse } from '@/types'
 
-export default function LogSessionPage({ params }: { params: Promise<{ sessionId: string }> }) {
-  const [showFilters, setShowFilters] = useState(false)
-  const [filters, setFilters] = useState<LogFilter>({ columns: [] })
-  const router = useRouter()
-  const resolvedParams = use(params)
-  const sessionId = resolvedParams.sessionId
+function SessionView({ sessionId }: { sessionId: string }) {
+  const { state, update, clear, request, activeCount } = useLogFilters()
 
-  console.log('Session ID:', sessionId)
+  // Session summary: title, unfiltered totals, category names for the filter.
+  const { data: sessions } = useQuery({
+    queryKey: ['log-sessions'],
+    queryFn: async () =>
+      (await api.post<LogAnalysisSessionResponse[]>('/logs/sessions', { limit: 100, offset: 0 })).data,
+  })
+  const session = sessions?.find((s) => s.session_id === sessionId)
 
-  // Fetch filtered logs
-  const { data: logsData, isLoading, refetch } = useQuery({
-    queryKey: ['log-session', sessionId, filters],
-    queryFn: async () => {
-      const response = await api.post<FilteredLogsResponse>(
-        `/logs/sessions/${sessionId}/filter`,
-        filters
-      )
-      return response.data
-    },
+  // The table and all four charts read this one filtered result set, so they never disagree.
+  const { data, isLoading, isError, isFetching } = useQuery({
+    queryKey: ['log-session', sessionId, request],
+    queryFn: async () =>
+      (await api.post<FilteredLogsResponse>(`/logs/sessions/${sessionId}/filter`, request)).data,
+    placeholderData: (prev) => prev,
   })
 
-  // Handle category click - navigate to details page
-  const handleCategoryClick = (categoryData: LogCategoryResponse) => {
-    // Store in localStorage for the details page
-    localStorage.setItem(`category_${sessionId}`, JSON.stringify({
-      category: categoryData.category,
-      count: categoryData.count,
-      log_indices: categoryData.log_indices || []
-    }))
-    // Navigate to category details page
-    router.push(`/logs/category/${sessionId}?category=${encodeURIComponent(categoryData.category)}`)
+  const results = useMemo(() => data?.results ?? [], [data])
+  const totals = {
+    all: session?.total_logs ?? data?.total_logs ?? 0,
+    fp: session?.false_positives ?? 0,
+    tp: session?.true_positives ?? 0,
   }
+  const categories = (session?.categories ?? []).map((c) => c.category)
 
-  const addColumnFilter = () => {
-    setFilters(prev => ({
-      ...prev,
-      columns: [
-        ...(prev.columns || []),
-        { name: '', value: '', type: 'contains' }
-      ]
-    }))
-  }
-
-  const updateColumnFilter = (index: number, field: string, value: string) => {
-    setFilters(prev => ({
-      ...prev,
-      columns: (prev.columns || []).map((col, i) =>
-        i === index ? { ...col, [field]: value } : col
-      )
-    }))
-  }
-
-  const removeColumnFilter = (index: number) => {
-    setFilters(prev => ({
-      ...prev,
-      columns: (prev.columns || []).filter((_, i) => i !== index)
-    }))
-  }
-
-  const clearFilters = () => {
-    setFilters({ columns: [] })
-  }
-
-  const getCategoryColor = (index: number) => {
-    const colors = [
-      'bg-blue-100 border-blue-300 text-blue-800',
-      'bg-green-100 border-green-300 text-green-800',
-      'bg-purple-100 border-purple-300 text-purple-800',
-      'bg-orange-100 border-orange-300 text-orange-800',
-      'bg-pink-100 border-pink-300 text-pink-800',
-      'bg-indigo-100 border-indigo-300 text-indigo-800',
-    ]
-    return colors[index % colors.length]
-  }
-
-  if (isLoading) {
-    return (
-      <main className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center">
-        <Card className="p-8 shadow-xl border-0 bg-white/80 backdrop-blur-sm">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-lg text-slate-600">Loading log analysis...</p>
-          </div>
-        </Card>
-      </main>
-    )
+  if (isLoading) return <LoadingSpinner />
+  if (isError || !data) {
+    return <EmptyState title="Could not load this session" description="It may have been deleted, or the API is unavailable." />
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 p-4">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex items-center justify-between"
-        >
-          <div>
-            <Button
-              onClick={() => router.push('/logs')}
-              variant="outline"
-              className="mb-4 bg-white/80 backdrop-blur-sm border-slate-200 hover:bg-white"
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Sessions
-            </Button>
-            <h1 className="text-4xl font-bold text-slate-800 mb-2">
-              Log Analysis Results
-            </h1>
-            <p className="text-slate-600 text-lg">
-              AI-powered analysis and categorization of your log file
-            </p>
-          </div>
-          <Button
-            onClick={() => refetch()}
-            variant="outline"
-            className="bg-white/80 backdrop-blur-sm border-slate-200 hover:bg-white"
-          >
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh
-          </Button>
-        </motion.div>
-
-        {/* Filters Section */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05 }}
-        >
-          <Card className="shadow-xl border-0 bg-white/80 backdrop-blur-sm">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2 text-xl">
-                  <Filter className="h-6 w-6 text-blue-600" />
-                  Log Filters
-                </CardTitle>
-                <Button
-                  onClick={() => setShowFilters(!showFilters)}
-                  variant="outline"
-                  size="sm"
-                >
-                  {showFilters ? <X className="h-4 w-4" /> : <Filter className="h-4 w-4" />}
-                  {showFilters ? 'Hide' : 'Show'} Filters
-                </Button>
-              </div>
-            </CardHeader>
-            {showFilters && (
-              <CardContent className="space-y-4">
-                {/* Prediction + Time Filters */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">Prediction</label>
-                    <select
-                      className="flex h-9 w-full rounded-md border border-input bg-white px-3 py-1 text-sm"
-                      value={filters.prediction || ''}
-                      onChange={(e) => setFilters(prev => ({
-                        ...prev,
-                        prediction: (e.target.value || undefined) as 'false_positive' | 'true_positive' | undefined
-                      }))}
-                    >
-                      <option value="">All</option>
-                      <option value="false_positive">False Positive</option>
-                      <option value="true_positive">True Positive</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">Start Time</label>
-                    <Input
-                      type="datetime-local"
-                      value={filters.start_time || ''}
-                      onChange={(e) => setFilters(prev => ({ ...prev, start_time: e.target.value || undefined }))}
-                      className="bg-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">End Time</label>
-                    <Input
-                      type="datetime-local"
-                      value={filters.end_time || ''}
-                      onChange={(e) => setFilters(prev => ({ ...prev, end_time: e.target.value || undefined }))}
-                      className="bg-white"
-                    />
-                  </div>
-                </div>
-
-                {/* Column Filters */}
-                <div>
-                  <div className="flex items-center justify-between mb-4">
-                    <label className="text-sm font-medium">Column Filters</label>
-                    <Button onClick={addColumnFilter} variant="outline" size="sm">
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Filter
-                    </Button>
-                  </div>
-
-                  {filters.columns && filters.columns.length > 0 ? (
-                    <div className="space-y-3">
-                      {filters.columns.map((col, index) => (
-                        <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-3 p-3 border rounded-lg bg-white">
-                          <Input
-                            placeholder="Column name"
-                            value={col.name}
-                            onChange={(e) => updateColumnFilter(index, 'name', e.target.value)}
-                            className="bg-white"
-                          />
-                          <select
-                            className="flex h-9 w-full rounded-md border border-input bg-white px-3 py-1 text-sm"
-                            value={col.type}
-                            onChange={(e) => updateColumnFilter(index, 'type', e.target.value)}
-                          >
-                            <option value="exact">Exact</option>
-                            <option value="contains">Contains</option>
-                            <option value="greater_than">Greater Than</option>
-                            <option value="less_than">Less Than</option>
-                          </select>
-                          <Input
-                            placeholder="Value"
-                            value={col.value}
-                            onChange={(e) => updateColumnFilter(index, 'value', e.target.value)}
-                            className="bg-white"
-                          />
-                          <Button
-                            onClick={() => removeColumnFilter(index)}
-                            variant="outline"
-                            size="sm"
-                            className="bg-white border-red-200 text-red-600 hover:bg-red-50"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground text-center py-4">
-                      No column filters added yet
-                    </p>
-                  )}
-                </div>
-
-                <div className="flex gap-2 pt-4">
-                  <Button onClick={() => refetch()} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white">
-                    <Filter className="h-4 w-4 mr-2" />
-                    Apply Filters
-                  </Button>
-                  <Button onClick={clearFilters} variant="outline">
-                    <X className="h-4 w-4 mr-2" />
-                    Clear Filters
-                  </Button>
-                </div>
-              </CardContent>
-            )}
-          </Card>
-        </motion.div>
-
-        {/* Statistics */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-          className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4"
-        >
-          <Card className="bg-gradient-to-r from-blue-500 to-blue-600 text-white border-0 shadow-lg">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-blue-100 text-sm font-medium">Total Logs</p>
-                  <p className="text-3xl font-bold">{logsData?.total_logs.toLocaleString()}</p>
-                </div>
-                <FileText className="h-10 w-10 text-blue-200" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gradient-to-r from-green-500 to-green-600 text-white border-0 shadow-lg">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-green-100 text-sm font-medium">Filtered Count</p>
-                  <p className="text-3xl font-bold">{logsData?.filtered_logs.toLocaleString()}</p>
-                </div>
-                <BarChart3 className="h-10 w-10 text-green-200" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gradient-to-r from-purple-500 to-purple-600 text-white border-0 shadow-lg">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-purple-100 text-sm font-medium">Categories</p>
-                  <p className="text-3xl font-bold">{logsData?.categories.length}</p>
-                </div>
-                <BarChart3 className="h-10 w-10 text-purple-200" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gradient-to-r from-emerald-500 to-emerald-600 text-white border-0 shadow-lg">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-emerald-100 text-sm font-medium">False Positives</p>
-                  <p className="text-3xl font-bold">
-                    {logsData?.results.filter(r => r.prediction === 'false_positive').length ?? 0}
-                  </p>
-                </div>
-                <Hash className="h-10 w-10 text-emerald-200" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gradient-to-r from-red-500 to-red-600 text-white border-0 shadow-lg">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-red-100 text-sm font-medium">True Positives</p>
-                  <p className="text-3xl font-bold">
-                    {logsData?.results.filter(r => r.prediction === 'true_positive').length ?? 0}
-                  </p>
-                </div>
-                <Hash className="h-10 w-10 text-red-200" />
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        {/* Categories */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.25 }}
-        >
-          <Card className="shadow-xl border-0 bg-white/80 backdrop-blur-sm">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-xl">
-                <BarChart3 className="h-6 w-6 text-blue-600" />
-                Classification Results
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {logsData?.categories.map((category, index) => (
-                  <motion.div
-                    key={category.category}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.1 }}
-                    onClick={() => handleCategoryClick(category)}
-                    className={`p-4 rounded-lg border-2 cursor-pointer transition-all duration-200 hover:shadow-md hover:scale-[1.02] ${getCategoryColor(index)}`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-lg mb-1">
-                          {category.category}
-                        </h3>
-                        <p className="text-sm opacity-80">
-                          {category.count} logs ({(category.percentage ?? 0).toFixed(1)}%)
-                        </p>
-                      </div>
-                      <div className="flex items-center space-x-3">
-                        <div className="text-right">
-                          <div className="text-2xl font-bold">
-                            {category.count}
-                          </div>
-                          <div className="text-xs opacity-70">
-                            entries
-                          </div>
-                        </div>
-                        <ArrowRight className="h-5 w-5 opacity-60" />
-                      </div>
-                    </div>
-                    
-                    {/* Progress bar */}
-                    <div className="mt-3 w-full bg-white bg-opacity-30 rounded-full h-2">
-                      <div 
-                        className="bg-current h-2 rounded-full transition-all duration-500"
-                        style={{ 
-                          width: `${category.percentage ?? 0}%`,
-                          opacity: 0.7 
-                        }}
-                      />
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <Link href="/logs" className="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+            <ArrowLeft className="h-4 w-4" /> All sessions
+          </Link>
+          <h1 className="flex items-center gap-2 text-2xl font-bold">
+            <FileText className="h-6 w-6 text-muted-foreground" />
+            {session?.filename ?? 'Log session'}
+          </h1>
+          {session && <p className="text-sm text-muted-foreground">Analysed {formatDate(session.created_at)}</p>}
+        </div>
+        {isFetching && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-label="Updating" />}
       </div>
-    </main>
+
+      <SessionStats results={results} total={data.total_logs} />
+
+      <LogFilters
+        state={state} update={update} clear={clear} activeCount={activeCount}
+        totals={totals} categories={categories}
+      />
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <PredictionDonut results={results} onSelect={(p) => update({ prediction: state.prediction === p ? null : p })} />
+        <CategoryChart
+          results={results} active={state.category}
+          onSelect={(c) => update({ category: state.category === c ? null : c })}
+        />
+        <TimelineChart results={results} />
+        <TopRulesChart
+          results={results}
+          onSelect={(id) => update({ cols: [...state.cols, { name: 'rule_ids', type: 'contains', value: id }] })}
+        />
+      </div>
+
+      <LogsTable sessionId={sessionId} results={results} />
+    </div>
+  )
+}
+
+export default function LogSessionPage({ params }: { params: Promise<{ sessionId: string }> }) {
+  const { sessionId } = use(params)
+  return (
+    <Suspense fallback={<LoadingSpinner />}>
+      <SessionView sessionId={sessionId} />
+    </Suspense>
   )
 }

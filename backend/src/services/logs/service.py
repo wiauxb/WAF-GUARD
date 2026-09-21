@@ -2,10 +2,9 @@
 Log analysis and classification service.
 
 Two-step pipeline:
-  1. Local fine-tuned ModernBERT model -> false_positive / true_positive per log.
+  1. fp_classifier service (fine-tuned ModernBERT) -> false_positive / true_positive per log.
   2. True-positive entries only -> external attack-type model service (model_na).
 """
-import asyncio
 import tempfile
 import os
 import hashlib
@@ -27,6 +26,7 @@ from .schemas import (
     CategoryDetailsResponse,
     LogDetailResponse,
     LogEntryResponse,
+    ParsedLog,
     LogFilter,
     LogAnalysisSessionResponse,
 )
@@ -94,17 +94,11 @@ class LogAnalysisService:
 
         1. Validate file
         2. Create session
-        3. Step 1: local FP/TP classification (all entries)
+        3. Step 1: FP/TP classification via the fp_classifier service (all entries)
         4. Step 2: attack-type classification (true positives only)
         5. Store results in JSON file
         6. Return summary
         """
-        if self.classifier is None:
-            raise RuntimeError(
-                "FP/TP model is not loaded. Populate backend/src/storage/models/fp_model/ "
-                "and restart the backend."
-            )
-
         max_size = 500 * 1024 * 1024  # 500MB
         if file.size and file.size > max_size:
             raise ValueError("File too large (max 500MB)")
@@ -137,11 +131,10 @@ class LogAnalysisService:
                 tmp.write(file_content)
                 tmp_path = Path(tmp.name)
 
-            # Step 1: local FP/TP model, off the event loop
+            # Step 1: FP/TP model, through the fp_classifier service
             logger.info(f"Classifying (FP/TP) log file for session {session_id}")
-            loop = asyncio.get_event_loop()
-            raw_results: List[Dict[str, Any]] = await loop.run_in_executor(
-                None, self.classifier.predict, tmp_path, self.batch_size
+            raw_results: List[Dict[str, Any]] = await self.classifier.predict(
+                tmp_path, self.batch_size
             )
 
             entries: List[Dict[str, Any]] = []
@@ -157,7 +150,10 @@ class LogAnalysisService:
                 # Step 2: attack-type model, true positives only
                 logger.info(f"Sending {len(tp_texts)} true-positive logs to attack-type service")
                 attack_results = await get_attack_types_batch(
-                    tp_texts, self.http_client, self.model_service_url
+                    tp_texts,
+                    self.http_client,
+                    self.model_service_url,
+                    settings.LOG_ATTACK_BATCH_SIZE,
                 )
                 for idx, attack_type in zip(tp_indices, attack_results):
                     raw_results[idx]["_attack_type"] = attack_type.model_dump()
@@ -250,7 +246,21 @@ class LogAnalysisService:
         if filters.category:
             out = [
                 e for e in out
-                if e.attack_type and any(filters.category in lbl for lbl in e.attack_type.labels)
+                if e.attack_type and (
+                    filters.category == ", ".join(e.attack_type.labels)
+                    or any(filters.category in lbl for lbl in e.attack_type.labels)
+                )
+            ]
+
+        if filters.search:
+            needle = filters.search.lower()
+            fields = (
+                "transaction_id", "remote_address", "request_url", "host", "user_agent",
+                "rule_ids", "messages", "tags", "matched_data", "payload",
+            )
+            out = [
+                e for e in out
+                if any(needle in str(getattr(e.features, f, "")).lower() for f in fields)
             ]
 
         if filters.start_time or filters.end_time:
@@ -307,7 +317,8 @@ class LogAnalysisService:
             total_logs=original_total,
             filtered_logs=len(out),
             categories=categories_list,
-            results=out,
+            results=out if filters.include_parsed
+            else [e.model_copy(update={"parsed": ParsedLog()}) for e in out],
         )
 
     def get_category_details(
@@ -347,6 +358,13 @@ class LogAnalysisService:
     ) -> List[LogAnalysisSessionResponse]:
         """Get all analysis sessions for a user"""
         sessions = self.storage.get_user_sessions(user_id, limit, offset)
+
+        # Sessions written by the old single-step pipeline store `categories` as a dict;
+        # they cannot be read by this version, and one of them must not 500 the whole list.
+        legacy = [s["session_id"] for s in sessions if not isinstance(s.get("categories"), list)]
+        if legacy:
+            logger.warning(f"Skipping {len(legacy)} legacy-format log session(s): {legacy}")
+            sessions = [s for s in sessions if isinstance(s.get("categories"), list)]
 
         return [
             LogAnalysisSessionResponse(
