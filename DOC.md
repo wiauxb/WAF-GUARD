@@ -902,13 +902,24 @@ class MacroTraceResponse(BaseModel):
 >
 > Parsing ([parser.py](backend/src/services/logs/parser.py)) captures every `Message:` line
 > in section H (the old parser silently kept only the first) and also reads sections `I`
-> (request body) and `J` (upload info), present on the production WAF's audit logs. Feature
-> extraction ([features.py](backend/src/services/logs/features.py)) produces 26 structured
-> fields (`rule_ids`, `severities`, `max_severity`, `tags`, `matched_data`,
-> `matched_locations`, `has_bot_rule`, `has_access_denied`, ...); `processor.py::format_log_text`
+> (request body), `J` (upload info) and `Z` (WAF verdict metadata, e.g. `Categories:
+> not_browser,`), present on the production WAF's audit logs. Feature extraction
+> ([features.py](backend/src/services/logs/features.py)) produces structured fields
+> (`rule_ids`, `severities`, `max_severity`, `tags`, `matched_data`, `matched_locations`,
+> `has_bot_rule`, `has_access_denied`, `waf_categories`, ...); `processor.py::format_log_text`
 > turns them into the exact natural-language template the FP/TP model was fine-tuned on —
 > it must not drift from that template, or classification accuracy degrades silently with no
 > error.
+>
+> **Client policy override** ([browser_detection.py](backend/src/services/logs/browser_detection.py))
+> — applied in `fp_classifier.py` after the model's prediction: the WAF protects a web
+> application, not an API, so any request from a non-browser client is forced to
+> `true_positive` (`confidence=1.0`, `fp_probability`/`tp_probability` left as the model's raw
+> output) regardless of what the model said. Checked in order: the WAF's own `Z.Categories`
+> (`not_browser`), a non-browser WAF rule id, a non-browser WAF message, then the
+> `User-Agent` (empty, not `Mozilla/5.0`-prefixed, a known bot/tool token, or missing a
+> browser rendering-engine token). `LogEntryResponse.override_reason` names which check fired,
+> or is `None` when the model's own prediction stands.
 >
 > This resolves every drift a previous version of this doc flagged: `POST /sessions` (not
 > `GET`), `get_category_details` requiring `log_indices`, and the stored `categories` shape
@@ -974,7 +985,7 @@ class UserSessionRequest(BaseModel):
 #### Response Schemas
 ```python
 class LogFeatures(BaseModel):
-    """26 structured fields extracted from a parsed log entry."""
+    """Structured fields extracted from a parsed log entry."""
     transaction_id: str
     timestamp: str
     remote_address: str
@@ -999,10 +1010,11 @@ class LogFeatures(BaseModel):
     has_access_denied: bool
     action: str
     webapp_info: str
+    waf_categories: str      # "|"-joined, from Z.Categories (e.g. "not_browser")
     h_raw: str               # " || "-joined raw Message: lines
 
 class ParsedLog(BaseModel):
-    """Full parsed structure (sections A/B/C/F/H/I/J) for one audit log entry."""
+    """Full parsed structure (sections A/B/C/F/H/I/J/Z) for one audit log entry."""
     id: str
     A: ParsedSectionA   # Time, Transaction_id, Remote/Local address+port
     B: ParsedSectionB   # Http_request, Request_url, Request_protocol, + raw headers
@@ -1011,6 +1023,7 @@ class ParsedLog(BaseModel):
     H: ParsedSectionH   # Messages: List[str] (every Message: line), + raw metadata
     I: Dict[str, Any]   # request body (production WAF)
     J: Dict[str, Any]   # upload info (production WAF)
+    Z: Dict[str, Any]   # WAF verdict metadata, e.g. Categories (production WAF)
 
 class AttackTypeResult(BaseModel):
     """Passed through from model_na as-is. Only set on true-positive entries."""
@@ -1024,6 +1037,7 @@ class LogEntryResponse(BaseModel):
     confidence: float
     fp_probability: float
     tp_probability: float
+    override_reason: Optional[str]  # set when a non-browser-client policy rule forced true_positive
     attack_type: Optional[AttackTypeResult]  # None for false_positive entries
 
 class LogCategoryResponse(BaseModel):
@@ -1683,7 +1697,7 @@ class FilteredLogsResponse(BaseModel):
     results: List[LogEntryResponse]  # the full matching entries
 
 class ParsedLog(BaseModel):
-    """Full parsed structure for one audit log entry (sections A/B/C/F/H/I/J)"""
+    """Full parsed structure for one audit log entry (sections A/B/C/F/H/I/J/Z)"""
     id: str
     A: ParsedSectionA  # Time, Transaction_id, Remote/Local address+port
     B: ParsedSectionB  # Http_request, Request_url, Request_protocol, + raw headers
@@ -1692,9 +1706,10 @@ class ParsedLog(BaseModel):
     H: ParsedSectionH  # Messages: List[str] (every Message: line), + raw metadata
     I: Dict[str, Any]  # request body (production WAF)
     J: Dict[str, Any]  # upload info (production WAF)
+    Z: Dict[str, Any]  # WAF verdict metadata, e.g. Categories (production WAF)
 
 class LogFeatures(BaseModel):
-    """26 structured fields extracted from a parsed log entry"""
+    """Structured fields extracted from a parsed log entry"""
     transaction_id: str
     timestamp: str
     remote_address: str
@@ -1719,6 +1734,7 @@ class LogFeatures(BaseModel):
     has_access_denied: bool
     action: str
     webapp_info: str
+    waf_categories: str      # "|"-joined, from Z.Categories (e.g. "not_browser")
     h_raw: str
 
 class AttackTypeResult(BaseModel):
@@ -1734,6 +1750,7 @@ class LogEntryResponse(BaseModel):
     confidence: float
     fp_probability: float
     tp_probability: float
+    override_reason: Optional[str]  # set when a non-browser-client policy rule forced true_positive
     attack_type: Optional[AttackTypeResult]  # None for false_positive entries
 
 class LogAnalysisSessionResponse(BaseModel):

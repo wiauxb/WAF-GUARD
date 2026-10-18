@@ -43,16 +43,16 @@ The backend is one container: the API layer fronts the parser, config manager, a
 and log services, which share the PostgreSQL and Neo4j connections. Adminer is not shown — it is
 a stand-alone web client for PostgreSQL.
 
-| Service        | Container       | Port         | Role                                              |
-| -------------- | --------------- | ------------ | ------------------------------------------------- |
-| Frontend       | `react_na`    | 8002         | Next.js web interface                             |
-| API            | `backend_na`  | 8000         | FastAPI backend, OpenAPI docs at`/docs`         |
-| WAF            | `waf_na`      | 9090 → 8000 | Apache + ModSecurity, produces the config dump    |
-| Neo4j          | `neo4j_na`    | 7474, 7687   | directive graph, browser at 7474                  |
-| PostgreSQL     | `postgres_na` | 5432         | users, configurations, directives, symbol table   |
-| Adminer        | `adminer_na`  | 8080         | PostgreSQL web client                             |
-| Log classifier (attack type) | `model_na` | 8102 | ModernBERT model, step 2 of log classification |
-| Log classifier (FP/TP) | `fp_classifier_na` | 8103 | fine-tuned ModernBERT, step 1 of log classification |
+| Service                      | Container            | Port         | Role                                                |
+| ---------------------------- | -------------------- | ------------ | --------------------------------------------------- |
+| Frontend                     | `react_na`         | 8002         | Next.js web interface                               |
+| API                          | `backend_na`       | 8000         | FastAPI backend, OpenAPI docs at`/docs`           |
+| WAF                          | `waf_na`           | 9090 → 8000 | Apache + ModSecurity, produces the config dump      |
+| Neo4j                        | `neo4j_na`         | 7474, 7687   | directive graph, browser at 7474                    |
+| PostgreSQL                   | `postgres_na`      | 5432         | users, configurations, directives, symbol table     |
+| Adminer                      | `adminer_na`       | 8080         | PostgreSQL web client                               |
+| Log classifier (attack type) | `model_na`         | 8102         | ModernBERT model, step 2 of log classification      |
+| Log classifier (FP/TP)       | `fp_classifier_na` | 8103         | fine-tuned ModernBERT, step 1 of log classification |
 
 ## Installation
 

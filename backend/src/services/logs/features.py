@@ -39,6 +39,7 @@ def extract_features_from_entry(entry: Dict) -> Dict:
     c = entry.get("C", {})
     f = entry.get("F", {})
     h = entry.get("H", {})
+    z = entry.get("Z", {})
 
     messages_raw: List[str] = h.get("Messages", [])
     parsed_msgs = [parse_message_fields(m) for m in messages_raw]
@@ -58,6 +59,9 @@ def extract_features_from_entry(entry: Dict) -> Dict:
 
     action = h.get("Action", "")
     webapp_info = h.get("WebApp-Info", "")
+
+    # Z section categories set by the WAF (e.g. "not_browser, discovery,")
+    waf_categories = sorted({c.strip() for c in z.get("Categories", "").split(",") if c.strip()})
 
     return {
         "transaction_id": a.get("Transaction_id", ""),
@@ -84,5 +88,6 @@ def extract_features_from_entry(entry: Dict) -> Dict:
         "has_access_denied": has_access_denied,
         "action": action,
         "webapp_info": webapp_info,
+        "waf_categories": "|".join(waf_categories),
         "h_raw": " || ".join(messages_raw),
     }

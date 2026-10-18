@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronRight, SearchX } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronRight, Gavel, SearchX } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Pagination } from '@/components/ui/pagination'
@@ -112,7 +112,8 @@ export function LogsTable({ sessionId, results }: { sessionId: string; results: 
                   </TableCell>
 
                   <TableCell className="align-top">
-                    <span className={cn('inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium', style.badge)}>
+                    <span className={cn('inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium', style.badge)}>
+                      {r.override_reason && <Gavel className="h-3 w-3" aria-label="Policy override" />}
                       {PREDICTION_LABEL[r.prediction]}
                     </span>
                     <div className="mt-1.5 flex items-center gap-1.5" title={`Model confidence ${(r.confidence * 100).toFixed(1)}%`}>

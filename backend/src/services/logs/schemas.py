@@ -48,12 +48,13 @@ class ParsedLog(BaseModel):
     H: ParsedSectionH = ParsedSectionH()
     I: Dict[str, Any] = {}   # request body (production WAF)
     J: Dict[str, Any] = {}   # upload info (production WAF)
+    Z: Dict[str, Any] = {}   # WAF verdict metadata, e.g. Categories (production WAF)
 
 
-# ==================== Extracted features (26 fields) ====================
+# ==================== Extracted features ====================
 
 class LogFeatures(BaseModel):
-    """All 26 structured features extracted from a parsed log entry."""
+    """All structured features extracted from a parsed log entry."""
     transaction_id: str = ""
     timestamp: str = ""
     remote_address: str = ""
@@ -78,6 +79,7 @@ class LogFeatures(BaseModel):
     has_access_denied: bool = False
     action: str = ""
     webapp_info: str = ""
+    waf_categories: str = ""
     h_raw: str = ""
 
 
@@ -103,6 +105,8 @@ class LogEntryResponse(BaseModel):
     confidence: float
     fp_probability: float
     tp_probability: float
+    # Set when a deterministic client-policy rule forced the prediction (e.g. non-browser client)
+    override_reason: Optional[str] = None
     attack_type: Optional[AttackTypeResult] = None
 
     class Config:

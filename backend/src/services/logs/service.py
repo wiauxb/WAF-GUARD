@@ -166,6 +166,7 @@ class LogAnalysisService:
                         confidence=r["confidence"],
                         fp_probability=r["fp_probability"],
                         tp_probability=r["tp_probability"],
+                        override_reason=r.get("override_reason"),
                         attack_type=r.get("_attack_type"),
                     )
                     entries.append(entry.model_dump())
@@ -256,7 +257,7 @@ class LogAnalysisService:
             needle = filters.search.lower()
             fields = (
                 "transaction_id", "remote_address", "request_url", "host", "user_agent",
-                "rule_ids", "messages", "tags", "matched_data", "payload",
+                "rule_ids", "messages", "tags", "matched_data", "payload", "waf_categories",
             )
             out = [
                 e for e in out

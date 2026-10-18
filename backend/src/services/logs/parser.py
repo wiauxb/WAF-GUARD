@@ -145,6 +145,14 @@ def transform_entry(entry: Dict) -> Dict:
     # Section J: upload info (production WAF)
     result["J"] = {"upload_info": "\n".join(entry["J"])} if entry.get("J") else {}
 
+    # Section Z: WAF verdict metadata (production WAF, e.g. "Categories: not_browser,")
+    z_data: Dict = {}
+    for line in entry.get("Z", []):
+        if ':' in line:
+            key, value = line.split(':', 1)
+            z_data[key.strip()] = value.strip()
+    result["Z"] = z_data
+
     return result
 
 

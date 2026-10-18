@@ -244,6 +244,7 @@ export interface ParsedLog {
   H: ParsedSectionH
   I: { [key: string]: any }
   J: { [key: string]: any }
+  Z: { [key: string]: any }
 }
 
 export interface LogFeatures {
@@ -271,6 +272,7 @@ export interface LogFeatures {
   has_access_denied: boolean
   action: string
   webapp_info: string
+  waf_categories: string
   h_raw: string
 }
 
@@ -286,6 +288,8 @@ export interface LogEntryResponse {
   confidence: number
   fp_probability: number
   tp_probability: number
+  /** Set when a deterministic client-policy rule forced the prediction (e.g. non-browser client). */
+  override_reason?: string | null
   attack_type?: AttackTypeResult | null
 }
 

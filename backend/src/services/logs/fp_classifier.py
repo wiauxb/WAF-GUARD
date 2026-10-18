@@ -12,6 +12,7 @@ from typing import Dict, List
 
 import httpx
 
+from .browser_detection import non_browser_reason
 from .parser import parse_log_file, transform_entry
 from .features import extract_features_from_entry
 from .processor import format_log_text
@@ -76,10 +77,13 @@ class FPClassifier:
         """Parse a raw ModSecurity log file and return per-entry prediction dicts.
 
         Each dict contains:
-            _parsed   : full transform_entry() output (sections A/B/C/F/H/I/J)
-            _features : the 26 fields from extract_features_from_entry()
+            _parsed   : full transform_entry() output (sections A/B/C/F/H/I/J/Z)
+            _features : the fields from extract_features_from_entry()
             _text     : formatted NL text (used for the step-2 attack classification)
-            prediction, confidence, fp_probability, tp_probability
+            prediction, confidence, fp_probability, tp_probability, override_reason
+
+        Client policy: a non-browser client is always forced to true_positive
+        (override_reason set, confidence 1.0); fp/tp_probability stay the model's.
         """
         loop = asyncio.get_running_loop()
         transformed, features, texts = await loop.run_in_executor(None, self._prepare, log_file)
@@ -88,15 +92,21 @@ class FPClassifier:
 
         preds = await self._predict_texts(texts, batch_size)
 
-        return [
-            {
-                "_parsed": transformed[i],
-                "_features": features[i],
-                "_text": texts[i],
-                "prediction": p["prediction"],
-                "confidence": p["confidence"],
-                "fp_probability": p["fp_probability"],
-                "tp_probability": p["tp_probability"],
-            }
-            for i, p in enumerate(preds)
-        ]
+        results = []
+        for i, p in enumerate(preds):
+            reason = non_browser_reason(features[i])
+            override_reason = f"Non-browser client: {reason}" if reason else None
+
+            results.append(
+                {
+                    "_parsed": transformed[i],
+                    "_features": features[i],
+                    "_text": texts[i],
+                    "prediction": "true_positive" if override_reason else p["prediction"],
+                    "confidence": 1.0 if override_reason else p["confidence"],
+                    "fp_probability": p["fp_probability"],
+                    "tp_probability": p["tp_probability"],
+                    "override_reason": override_reason,
+                }
+            )
+        return results

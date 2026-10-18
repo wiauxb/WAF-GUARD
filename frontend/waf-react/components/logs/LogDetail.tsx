@@ -1,6 +1,6 @@
 'use client'
 
-import { AlertTriangle, ShieldAlert, ShieldCheck } from 'lucide-react'
+import { AlertTriangle, Gavel, ShieldAlert, ShieldCheck } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -25,15 +25,23 @@ function ProbBar({ label, value, className }: { label: string; value: number; cl
 
 export function VerdictBanner({ entry }: { entry: LogEntryResponse }) {
   const style = PREDICTION_STYLE[entry.prediction]
-  const Icon = entry.prediction === 'false_positive' ? ShieldCheck : ShieldAlert
+  const overridden = !!entry.override_reason
+  const Icon = overridden ? Gavel : entry.prediction === 'false_positive' ? ShieldCheck : ShieldAlert
   return (
     <div className={cn('flex flex-wrap items-start gap-4 rounded-lg border p-5', style.panel)}>
       <div className={cn('rounded-full p-3', style.badge)}><Icon className="h-6 w-6" /></div>
       <div className="min-w-[240px] flex-1">
-        <p className={cn('text-xl font-bold', style.text)}>{PREDICTION_LABEL[entry.prediction]}</p>
+        <div className="flex items-center gap-2">
+          <p className={cn('text-xl font-bold', style.text)}>{PREDICTION_LABEL[entry.prediction]}</p>
+          {overridden && <Badge variant="outline" className="border-amber-500/40 text-amber-700 dark:text-amber-400">Policy override</Badge>}
+        </div>
         <p className="text-sm text-muted-foreground">
-          {PREDICTION_HELP[entry.prediction]}. Model confidence{' '}
-          <span className={cn('font-semibold', style.text)}>{(entry.confidence * 100).toFixed(1)}%</span>.
+          {overridden ? (
+            <>Forced true positive by client policy: <span className="font-medium text-foreground">{entry.override_reason}</span>.</>
+          ) : (
+            <>{PREDICTION_HELP[entry.prediction]}. Model confidence{' '}
+              <span className={cn('font-semibold', style.text)}>{(entry.confidence * 100).toFixed(1)}%</span>.</>
+          )}
         </p>
         {entry.attack_type && (
           <p className="mt-2 text-sm">
@@ -43,6 +51,9 @@ export function VerdictBanner({ entry }: { entry: LogEntryResponse }) {
         )}
       </div>
       <div className="w-full max-w-sm space-y-2">
+        {overridden && (
+          <p className="text-xs text-muted-foreground">Model's own prediction, before the override:</p>
+        )}
         <ProbBar label="False positive" value={entry.fp_probability} className="bg-emerald-500" />
         <ProbBar label="True positive" value={entry.tp_probability} className="bg-red-500" />
       </div>
